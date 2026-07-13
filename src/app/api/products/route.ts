@@ -15,7 +15,10 @@ export async function GET(request: NextRequest) {
   if (!storeId) return NextResponse.json({ error: 'No store selected' }, { status: 400 })
 
   const where: any = { organisationId: auth.orgId, storeId }
-  if (category && category !== 'All') where.category = category
+  if (category && category !== 'All') {
+    const cat = await db.category.findFirst({ where: { name: category, organisationId: auth.orgId } })
+    if (cat) where.categoryId = cat.id
+  }
   if (search) where.OR = [
     { name: { contains: search } },
     { sku: { contains: search } },
@@ -27,7 +30,14 @@ export async function GET(request: NextRequest) {
     orderBy: { createdAt: 'desc' }
   })
 
-  return NextResponse.json(products)
+  const mapped = products.map(p => ({
+    ...p,
+    category: p.category?.name || 'Other',
+    supplier: p.supplier?.name || null,
+    stock: p.currentStock,
+  }))
+
+  return NextResponse.json(mapped)
 }
 
 export async function POST(request: NextRequest) {
@@ -51,7 +61,7 @@ export async function POST(request: NextRequest) {
   const product = await db.product.create({
     data: {
       name, sku: sku || generateId('sku').toUpperCase(), barcode: barcode || generateBarcode(),
-      category: category || 'Other', size: size || '750ml',
+      size: size || '750ml',
       openingStock: openingStock || 0, currentStock: openingStock || 0,
       reorderLevel: reorderLevel || 5, costPrice: costPrice || 0, sellPrice,
       organisationId: auth.orgId, storeId: sid, categoryId: catId, supplierId: supplierId || null,
@@ -62,7 +72,8 @@ export async function POST(request: NextRequest) {
   const { auditLog } = await import('@/lib/helpers')
   await auditLog({ action: 'product.created', entity: 'Product', entityId: product.id, afterValue: { name: product.name }, userId: auth.userId, organisationId: auth.orgId })
 
-  return NextResponse.json(product, { status: 201 })
+  const mapped = { ...product, category: product.category?.name || 'Other', supplier: product.supplier?.name || null, stock: product.currentStock }
+  return NextResponse.json(mapped, { status: 201 })
 }
 
 export async function PUT(request: NextRequest) {
@@ -84,6 +95,7 @@ export async function PUT(request: NextRequest) {
 
   const updateData: any = { ...data }
   delete updateData.id
+  delete updateData.category
   if (catId) updateData.categoryId = catId
 
   const product = await db.product.update({
@@ -94,7 +106,8 @@ export async function PUT(request: NextRequest) {
   const { auditLog } = await import('@/lib/helpers')
   await auditLog({ action: 'product.updated', entity: 'Product', entityId: id, before: { name: existing.name }, after: { name: product.name }, userId: auth.userId, organisationId: auth.orgId })
 
-  return NextResponse.json(product)
+  const mapped = { ...product, category: product.category?.name || 'Other', supplier: product.supplier?.name || null, stock: product.currentStock }
+  return NextResponse.json(mapped)
 }
 
 export async function DELETE(request: NextRequest) {

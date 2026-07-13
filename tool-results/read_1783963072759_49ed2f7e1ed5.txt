@@ -1,0 +1,2002 @@
+     1→'use client'
+     2→
+     3→import { useEffect, useState } from 'react'
+     4→import { useAppStore } from '@/lib/store'
+     5→import { api } from '@/lib/api'
+     6→import {
+     7→  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+     8→  ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, Legend
+     9→} from 'recharts'
+    10→
+    11→/* ═══════════════════════════════════════════════════════════════════════
+    12→   SHARED HELPERS & CONSTANTS
+    13→   ═══════════════════════════════════════════════════════════════════════ */
+    14→
+    15→const fmt = (n: number) => 'KSh ' + n.toLocaleString('en-KE')
+    16→
+    17→const cardStyle: React.CSSProperties = {
+    18→  backgroundColor: '#fff',
+    19→  borderRadius: '14px',
+    20→  boxShadow: '0 4px 12px rgba(31,17,41,.06)',
+    21→}
+    22→
+    23→const CHART_COLORS = ['#DC2626', '#F59E0B', '#3B82F6', '#10B981', '#8B5CF6', '#EC4899', '#14B8A6', '#F97316', '#6366F1', '#84CC16']
+    24→
+    25→const inputCls = 'w-full px-3 py-2 rounded-xl border text-sm outline-none transition-all duration-150 focus:ring-2 focus:ring-[#DC2626]/20 focus:border-[#DC2626]'
+    26→
+    27→const btnPrimary = 'inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-[.98] disabled:opacity-60 cursor-pointer'
+    28→const btnSecondary = 'inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border transition-all duration-150 hover:bg-[#FAF7F2] active:scale-[.98] disabled:opacity-60 cursor-pointer'
+    29→const btnDanger = 'inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#DC2626] border border-[#FECACA] bg-white transition-all duration-150 hover:bg-[#FEF2F2] active:scale-[.98] cursor-pointer'
+    30→
+    31→/* ── Spinner ── */
+    32→function Spinner() {
+    33→  return (
+    34→    <div className="flex items-center justify-center py-20">
+    35→      <svg className="animate-spin h-8 w-8" viewBox="0 0 24 24" fill="none" style={{ color: '#DC2626' }}>
+    36→        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+    37→        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+    38→      </svg>
+    39→    </div>
+    40→  )
+    41→}
+    42→
+    43→/* ── No Store Selected ── */
+    44→function NoStore() {
+    45→  return (
+    46→    <div className="flex flex-col items-center justify-center py-24 text-center">
+    47→      <svg className="w-16 h-16 mb-4" viewBox="0 0 24 24" fill="none" stroke="#8B7FA0" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    48→        <path d="M3 21h18M3 7v14M21 7v14M6 11h4v4H6zM10 3h4l6 4H4l6-4z" />
+    49→      </svg>
+    50→      <p className="text-lg font-semibold" style={{ color: '#1F1129' }}>No Store Selected</p>
+    51→      <p className="text-sm mt-1" style={{ color: '#8B7FA0' }}>Please select a store from the sidebar to view this page.</p>
+    52→    </div>
+    53→  )
+    54→}
+    55→
+    56→/* ── Reusable Modal ── */
+    57→function Modal({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title: string; children: React.ReactNode; wide?: boolean }) {
+    58→  if (!open) return null
+    59→  return (
+    60→    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    61→      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+    62→      <div className="relative bg-white rounded-[14px] shadow-xl w-full max-h-[90vh] overflow-y-auto" style={{ maxWidth: wide ? '720px' : '480px', boxShadow: '0 20px 60px rgba(31,17,41,.18)' }}>
+    63→        <div className="sticky top-0 bg-white border-b border-[#E8E0F0] px-6 py-4 flex items-center justify-between rounded-t-[14px] z-10">
+    64→          <h3 className="text-base font-bold" style={{ color: '#1F1129' }}>{title}</h3>
+    65→          <button onClick={onClose} className="p-1 rounded-lg hover:bg-[#F5F0EB] transition cursor-pointer" aria-label="Close">
+    66→            <svg className="w-5 h-5" viewBox="0 0 20 20" fill="#8B7FA0"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+    67→          </button>
+    68→        </div>
+    69→        <div className="p-6">{children}</div>
+    70→      </div>
+    71→    </div>
+    72→  )
+    73→}
+    74→
+    75→/* ── Confirm Dialog ── */
+    76→function ConfirmDialog({ open, title, message, onConfirm, onCancel }: { open: boolean; title: string; message: string; onConfirm: () => void; onCancel: () => void }) {
+    77→  if (!open) return null
+    78→  return (
+    79→    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+    80→      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel} />
+    81→      <div className="relative bg-white rounded-[14px] p-6 w-full max-w-sm" style={{ boxShadow: '0 20px 60px rgba(31,17,41,.18)' }}>
+    82→        <h3 className="text-base font-bold mb-2" style={{ color: '#1F1129' }}>{title}</h3>
+    83→        <p className="text-sm mb-5" style={{ color: '#6B5E7A' }}>{message}</p>
+    84→        <div className="flex gap-3 justify-end">
+    85→          <button onClick={onCancel} className={btnSecondary} style={{ borderColor: '#E8E0F0', color: '#6B5E7A' }}>Cancel</button>
+    86→          <button onClick={onConfirm} className={btnPrimary} style={{ backgroundColor: '#DC2626' }}>Confirm</button>
+    87→        </div>
+    88→      </div>
+    89→    </div>
+    90→  )
+    91→}
+    92→
+    93→/* ── Error Banner ── */
+    94→function ErrorBanner({ message }: { message: string }) {
+    95→  return (
+    96→    <div className="mb-4 px-4 py-2.5 rounded-xl text-sm font-medium" style={{ backgroundColor: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' }}>
+    97→      {message}
+    98→    </div>
+    99→  )
+   100→}
+   101→
+   102→/* ── Stat Card ── */
+   103→function StatCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
+   104→  return (
+   105→    <div style={cardStyle} className="p-5">
+   106→      <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: '#8B7FA0' }}>{label}</p>
+   107→      <p className="text-xl font-bold" style={{ color: color || '#1F1129' }}>{value}</p>
+   108→      {sub && <p className="text-xs mt-1" style={{ color: '#6B5E7A' }}>{sub}</p>}
+   109→    </div>
+   110→  )
+   111→}
+   112→
+   113→/* ── Status Badge ── */
+   114→function Badge({ children, variant }: { children: React.ReactNode; variant: 'amber' | 'blue' | 'green' | 'red' | 'gray' | 'purple' }) {
+   115→  const colors: Record<string, { bg: string; text: string }> = {
+   116→    amber: { bg: '#FEF3C7', text: '#92400E' },
+   117→    blue: { bg: '#DBEAFE', text: '#1E40AF' },
+   118→    green: { bg: '#D1FAE5', text: '#065F46' },
+   119→    red: { bg: '#FEE2E2', text: '#991B1B' },
+   120→    gray: { bg: '#F3F4F6', text: '#374151' },
+   121→    purple: { bg: '#EDE9FE', text: '#5B21B6' },
+   122→  }
+   123→  const c = colors[variant] || colors.gray
+   124→  return (
+   125→    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold" style={{ backgroundColor: c.bg, color: c.text }}>
+   126→      {children}
+   127→    </span>
+   128→  )
+   129→}
+   130→
+   131→/* ═══════════════════════════════════════════════════════════════════════
+   132→   1. STOCK TAKE PAGE
+   133→   ═══════════════════════════════════════════════════════════════════════ */
+   134→export function StockTakePage() {
+   135→  const { storeId, isManager, user } = useAppStore()
+   136→  const [loading, setLoading] = useState(true)
+   137→  const [error, setError] = useState('')
+   138→  const [stockTakes, setStockTakes] = useState<any[]>([])
+   139→  const [activeCount, setActiveCount] = useState<any>(null)
+   140→  const [counts, setCounts] = useState<Record<string, number>>({})
+   141→  const [search, setSearch] = useState('')
+   142→  const [expandedId, setExpandedId] = useState<string | null>(null)
+   143→  const [submitting, setSubmitting] = useState(false)
+   144→
+   145→  const fetchStockTakes = async () => {
+   146→    if (!storeId) return
+   147→    setLoading(true)
+   148→    setError('')
+   149→    try {
+   150→      const data = await api.getStockTakes('storeId=' + storeId)
+   151→      const list = Array.isArray(data) ? data : data.stockTakes || data.items || []
+   152→      setStockTakes(list)
+   153→      const active = list.find((st: any) => st.status === 'in_progress')
+   154→      if (active) {
+   155→        setActiveCount(active)
+   156→        const initCounts: Record<string, number> = {}
+   157→        ;(active.items || []).forEach((item: any) => {
+   158→          initCounts[item.productId] = item.countedQty ?? item.expectedQty ?? 0
+   159→        })
+   160→        setCounts(initCounts)
+   161→      }
+   162→    } catch (err: any) {
+   163→      setError(err.message || 'Failed to load stock takes')
+   164→    } finally {
+   165→      setLoading(false)
+   166→    }
+   167→  }
+   168→
+   169→  useEffect(() => { fetchStockTakes() }, [storeId])
+   170→
+   171→  const handleStart = async () => {
+   172→    if (!storeId) return
+   173→    setSubmitting(true)
+   174→    setError('')
+   175→    try {
+   176→      const data = await api.createStockTake(storeId)
+   177→      const newSt = data.stockTake || data
+   178→      setActiveCount(newSt)
+   179→      setCounts({})
+   180→      setStockTakes([newSt, ...stockTakes])
+   181→    } catch (err: any) {
+   182→      setError(err.message || 'Failed to start stock take')
+   183→    } finally {
+   184→      setSubmitting(false)
+   185→    }
+   186→  }
+   187→
+   188→  const handleSubmit = async () => {
+   189→    if (!activeCount) return
+   190→    setSubmitting(true)
+   191→    setError('')
+   192→    try {
+   193→      const items = (activeCount.items || []).map((item: any) => ({
+   194→        productId: item.productId,
+   195→        expectedQty: item.expectedQty,
+   196→        countedQty: counts[item.productId] ?? item.expectedQty ?? 0,
+   197→      }))
+   198→      await api.updateStockTake({ stockTakeId: activeCount.id, items, action: 'submit' })
+   199→      await fetchStockTakes()
+   200→      setActiveCount(null)
+   201→      setCounts({})
+   202→    } catch (err: any) {
+   203→      setError(err.message || 'Failed to submit stock take')
+   204→    } finally {
+   205→      setSubmitting(false)
+   206→    }
+   207→  }
+   208→
+   209→  const handleApprove = async (st: any) => {
+   210→    setSubmitting(true)
+   211→    setError('')
+   212→    try {
+   213→      await api.updateStockTake({ stockTakeId: st.id, items: st.items || [], action: 'approve' })
+   214→      await fetchStockTakes()
+   215→    } catch (err: any) {
+   216→      setError(err.message || 'Failed to approve stock take')
+   217→    } finally {
+   218→      setSubmitting(false)
+   219→    }
+   220→  }
+   221→
+   222→  if (!storeId) return <NoStore />
+   223→
+   224→  if (loading) return <Spinner />
+   225→
+   226→  const filteredItems = (activeCount?.items || []).filter((item: any) =>
+   227→    item.productName?.toLowerCase().includes(search.toLowerCase())
+   228→  )
+   229→
+   230→  const statusBadge = (status: string) => {
+   231→    if (status === 'in_progress') return <Badge variant="amber">In Progress</Badge>
+   232→    if (status === 'pending') return <Badge variant="blue">Pending</Badge>
+   233→    if (status === 'approved') return <Badge variant="green">Approved</Badge>
+   234→    return <Badge variant="gray">{status}</Badge>
+   235→  }
+   236→
+   237→  return (
+   238→    <div className="space-y-6">
+   239→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+   240→        <div>
+   241→          <h1 className="text-xl font-bold" style={{ color: '#1F1129' }}>Stock Counting</h1>
+   242→          <p className="text-sm mt-0.5" style={{ color: '#8B7FA0' }}>Conduct physical stock counts and reconcile with system records</p>
+   243→        </div>
+   244→        {!activeCount && (
+   245→          <button onClick={handleStart} disabled={submitting} className={btnPrimary} style={{ backgroundColor: '#DC2626' }}>
+   246→            <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>
+   247→            Start New Count
+   248→          </button>
+   249→        )}
+   250→      </div>
+   251→
+   252→      {error && <ErrorBanner message={error} />}
+   253→
+   254→      {/* ── Active Count View ── */}
+   255→      {activeCount && (
+   256→        <div style={cardStyle} className="p-5">
+   257→          <div className="flex items-center justify-between mb-4">
+   258→            <h2 className="text-base font-bold" style={{ color: '#1F1129' }}>Active Stock Count</h2>
+   259→            <Badge variant="amber">In Progress</Badge>
+   260→          </div>
+   261→
+   262→          <div className="mb-4">
+   263→            <input
+   264→              type="text"
+   265→              placeholder="Search products..."
+   266→              value={search}
+   267→              onChange={(e) => setSearch(e.target.value)}
+   268→              className={inputCls}
+   269→              style={{ borderColor: '#E8E0F0' }}
+   270→            />
+   271→          </div>
+   272→
+   273→          <div className="overflow-x-auto">
+   274→            <table className="w-full text-sm">
+   275→              <thead>
+   276→                <tr className="border-b border-[#E8E0F0]">
+   277→                  <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Product</th>
+   278→                  <th className="text-right py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Expected</th>
+   279→                  <th className="text-right py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Counted</th>
+   280→                </tr>
+   281→              </thead>
+   282→              <tbody>
+   283→                {filteredItems.map((item: any) => (
+   284→                  <tr key={item.productId} className="border-b border-[#F5F0EB] last:border-0">
+   285→                    <td className="py-2.5 px-3 font-medium" style={{ color: '#1F1129' }}>{item.productName || item.name || 'Unknown'}</td>
+   286→                    <td className="py-2.5 px-3 text-right" style={{ color: '#6B5E7A' }}>{item.expectedQty ?? 0}</td>
+   287→                    <td className="py-2.5 px-3 text-right">
+   288→                      <input
+   289→                        type="number"
+   290→                        min="0"
+   291→                        value={counts[item.productId] ?? ''}
+   292→                        onChange={(e) => setCounts({ ...counts, [item.productId]: parseInt(e.target.value) || 0 })}
+   293→                        className="w-20 text-right px-2 py-1 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#DC2626]/20 focus:border-[#DC2626]"
+   294→                        style={{ borderColor: '#E8E0F0' }}
+   295→                      />
+   296→                    </td>
+   297→                  </tr>
+   298→                ))}
+   299→                {filteredItems.length === 0 && (
+   300→                  <tr><td colSpan={3} className="py-8 text-center text-sm" style={{ color: '#8B7FA0' }}>No products found</td></tr>
+   301→                )}
+   302→              </tbody>
+   303→            </table>
+   304→          </div>
+   305→
+   306→          <div className="flex justify-end mt-4">
+   307→            <button onClick={handleSubmit} disabled={submitting || filteredItems.length === 0} className={btnPrimary} style={{ backgroundColor: '#F59E0B' }}>
+   308→              {submitting ? 'Submitting...' : 'Submit for Approval'}
+   309→            </button>
+   310→          </div>
+   311→        </div>
+   312→      )}
+   313→
+   314→      {/* ── Pending notice for staff ── */}
+   315→      {!activeCount && stockTakes.some((st: any) => st.status === 'pending') && !isManager && (
+   316→        <div style={cardStyle} className="p-5 text-center">
+   317→          <svg className="w-10 h-10 mx-auto mb-3" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+   318→            <circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" />
+   319→          </svg>
+   320→          <h3 className="text-base font-bold mb-1" style={{ color: '#1F1129' }}>Awaiting Manager Approval</h3>
+   321→          <p className="text-sm" style={{ color: '#8B7FA0' }}>Your stock count has been submitted and is waiting for a manager to review and approve it.</p>
+   322→        </div>
+   323→      )}
+   324→
+   325→      {/* ── History ── */}
+   326→      <div style={cardStyle} className="p-5">
+   327→        <h2 className="text-base font-bold mb-4" style={{ color: '#1F1129' }}>Stock Count History</h2>
+   328→        <div className="space-y-2">
+   329→          {stockTakes.map((st: any) => (
+   330→            <div key={st.id} className="rounded-xl border border-[#E8E0F0] overflow-hidden">
+   331→              <button
+   332→                onClick={() => setExpandedId(expandedId === st.id ? null : st.id)}
+   333→                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[#FAF7F2] transition cursor-pointer"
+   334→              >
+   335→                <div className="flex items-center gap-3">
+   336→                  {statusBadge(st.status)}
+   337→                  <span className="text-sm font-medium" style={{ color: '#1F1129' }}>
+   338→                    {st.createdAt ? new Date(st.createdAt).toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+   339→                  </span>
+   340→                  <span className="text-xs" style={{ color: '#8B7FA0' }}>
+   341→                    {(st.items || []).length} items
+   342→                  </span>
+   343→                </div>
+   344→                <svg className={`w-4 h-4 transition-transform ${expandedId === st.id ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="#8B7FA0"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+   345→              </button>
+   346→              {expandedId === st.id && (
+   347→                <div className="border-t border-[#E8E0F0] px-4 py-3">
+   348→                  <table className="w-full text-sm">
+   349→                    <thead>
+   350→                      <tr className="border-b border-[#F5F0EB]">
+   351→                        <th className="text-left py-2 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Product</th>
+   352→                        <th className="text-right py-2 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Expected</th>
+   353→                        <th className="text-right py-2 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Counted</th>
+   354→                        <th className="text-right py-2 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Variance</th>
+   355→                      </tr>
+   356→                    </thead>
+   357→                    <tbody>
+   358→                      {(st.items || []).map((item: any) => {
+   359→                        const variance = (item.countedQty ?? 0) - (item.expectedQty ?? 0)
+   360→                        return (
+   361→                          <tr key={item.productId} className="border-b border-[#F5F0EB] last:border-0">
+   362→                            <td className="py-2 font-medium" style={{ color: '#1F1129' }}>{item.productName || 'Unknown'}</td>
+   363→                            <td className="py-2 text-right" style={{ color: '#6B5E7A' }}>{item.expectedQty ?? 0}</td>
+   364→                            <td className="py-2 text-right" style={{ color: '#6B5E7A' }}>{item.countedQty ?? 0}</td>
+   365→                            <td className="py-2 text-right font-semibold" style={{ color: variance === 0 ? '#059669' : variance > 0 ? '#D97706' : '#DC2626' }}>
+   366→                              {variance > 0 ? '+' : ''}{variance}
+   367→                            </td>
+   368→                          </tr>
+   369→                        )
+   370→                      })}
+   371→                    </tbody>
+   372→                  </table>
+   373→                  {isManager && st.status === 'pending' && (
+   374→                    <div className="flex justify-end mt-3 pt-3 border-t border-[#E8E0F0]">
+   375→                      <button onClick={() => handleApprove(st)} disabled={submitting} className={btnPrimary} style={{ backgroundColor: '#059669' }}>
+   376→                        {submitting ? 'Approving...' : 'Approve Stock Take'}
+   377→                      </button>
+   378→                    </div>
+   379→                  )}
+   380→                </div>
+   381→              )}
+   382→            </div>
+   383→          ))}
+   384→          {stockTakes.length === 0 && !activeCount && (
+   385→            <p className="text-center text-sm py-8" style={{ color: '#8B7FA0' }}>No stock counts have been recorded yet.</p>
+   386→          )}
+   387→        </div>
+   388→      </div>
+   389→    </div>
+   390→  )
+   391→}
+   392→
+   393→/* ═══════════════════════════════════════════════════════════════════════
+   394→   2. RECONCILIATION PAGE
+   395→   ═══════════════════════════════════════════════════════════════════════ */
+   396→export function ReconciliationPage() {
+   397→  const { storeId } = useAppStore()
+   398→  const [loading, setLoading] = useState(true)
+   399→  const [error, setError] = useState('')
+   400→  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0])
+   401→  const [recon, setRecon] = useState<any>(null)
+   402→  const [items, setItems] = useState<any[]>([])
+   403→  const [saving, setSaving] = useState(false)
+   404→
+   405→  const fetchRecon = async () => {
+   406→    if (!storeId) return
+   407→    setLoading(true)
+   408→    setError('')
+   409→    try {
+   410→      const data = await api.getReconciliation('storeId=' + storeId + '&date=' + date)
+   411→      const r = data.reconciliation || data
+   412→      setRecon(r)
+   413→      setItems((r.items || []).map((item: any) => ({
+   414→        ...item,
+   415→        stockAdded: item.stockAdded ?? 0,
+   416→        actualClosing: item.actualClosing ?? (item.openingQty - item.salesToday + (item.stockAdded ?? 0)),
+   417→      })))
+   418→    } catch (err: any) {
+   419→      setError(err.message || 'Failed to load reconciliation data')
+   420→    } finally {
+   421→      setLoading(false)
+   422→    }
+   423→  }
+   424→
+   425→  useEffect(() => { fetchRecon() }, [storeId, date])
+   426→
+   427→  const handleSave = async () => {
+   428→    if (!recon) return
+   429→    setSaving(true)
+   430→    setError('')
+   431→    try {
+   432→      await api.updateReconciliation({ id: recon.id, items })
+   433→      setError('')
+   434→    } catch (err: any) {
+   435→      setError(err.message || 'Failed to save reconciliation')
+   436→    } finally {
+   437→      setSaving(false)
+   438→    }
+   439→  }
+   440→
+   441→  const updateItem = (idx: number, field: string, value: number) => {
+   442→    const updated = [...items]
+   443→    updated[idx] = { ...updated[idx], [field]: value }
+   444→    setItems(updated)
+   445→  }
+   446→
+   447→  if (!storeId) return <NoStore />
+   448→  if (loading) return <Spinner />
+   449→
+   450→  const totalVariance = items.reduce((sum, item) => {
+   451→    const expected = (item.openingQty || 0) - (item.salesToday || 0) + (item.stockAdded || 0)
+   452→    return sum + ((item.actualClosing || 0) - expected)
+   453→  }, 0)
+   454→
+   455→  const varianceColor = (v: number) => {
+   456→    if (v === 0) return '#059669'
+   457→    if (Math.abs(v) <= 2) return '#059669'
+   458→    if (Math.abs(v) <= 5) return '#D97706'
+   459→    return '#DC2626'
+   460→  }
+   461→
+   462→  return (
+   463→    <div className="space-y-6">
+   464→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+   465→        <div>
+   466→          <h1 className="text-xl font-bold" style={{ color: '#1F1129' }}>Daily Reconciliation</h1>
+   467→          <p className="text-sm mt-0.5" style={{ color: '#8B7FA0' }}>Track and reconcile daily stock movements against sales</p>
+   468→        </div>
+   469→        <div className="flex items-center gap-3">
+   470→          <input
+   471→            type="date"
+   472→            value={date}
+   473→            onChange={(e) => setDate(e.target.value)}
+   474→            className={inputCls}
+   475→            style={{ borderColor: '#E8E0F0' }}
+   476→          />
+   477→          <button onClick={handleSave} disabled={saving || items.length === 0} className={btnPrimary} style={{ backgroundColor: '#DC2626' }}>
+   478→            {saving ? 'Saving...' : 'Save'}
+   479→          </button>
+   480→        </div>
+   481→      </div>
+   482→
+   483→      {error && <ErrorBanner message={error} />}
+   484→
+   485→      <div style={cardStyle} className="p-5">
+   486→        <div className="overflow-x-auto">
+   487→          <table className="w-full text-sm">
+   488→            <thead>
+   489→              <tr className="border-b border-[#E8E0F0]">
+   490→                <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Product</th>
+   491→                <th className="text-right py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Opening</th>
+   492→                <th className="text-right py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Sales Today</th>
+   493→                <th className="text-right py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Stock Added</th>
+   494→                <th className="text-right py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Expected</th>
+   495→                <th className="text-right py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Actual</th>
+   496→                <th className="text-right py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Variance</th>
+   497→              </tr>
+   498→            </thead>
+   499→            <tbody>
+   500→              {items.map((item: any, idx: number) => {
+   501→                const expected = (item.openingQty || 0) - (item.salesToday || 0) + (item.stockAdded || 0)
+   502→                const variance = (item.actualClosing || 0) - expected
+   503→                return (
+   504→                  <tr key={item.productId || idx} className="border-b border-[#F5F0EB] last:border-0">
+   505→                    <td className="py-2.5 px-3 font-medium" style={{ color: '#1F1129' }}>{item.productName || 'Unknown'}</td>
+   506→                    <td className="py-2.5 px-3 text-right" style={{ color: '#6B5E7A' }}>{item.openingQty ?? 0}</td>
+   507→                    <td className="py-2.5 px-3 text-right" style={{ color: '#6B5E7A' }}>{item.salesToday ?? 0}</td>
+   508→                    <td className="py-2.5 px-3 text-right">
+   509→                      <input
+   510→                        type="number"
+   511→                        min="0"
+   512→                        value={item.stockAdded ?? 0}
+   513→                        onChange={(e) => updateItem(idx, 'stockAdded', parseInt(e.target.value) || 0)}
+   514→                        className="w-20 text-right px-2 py-1 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#DC2626]/20 focus:border-[#DC2626]"
+   515→                        style={{ borderColor: '#E8E0F0' }}
+   516→                      />
+   517→                    </td>
+   518→                    <td className="py-2.5 px-3 text-right" style={{ color: '#6B5E7A' }}>{expected}</td>
+   519→                    <td className="py-2.5 px-3 text-right">
+   520→                      <input
+   521→                        type="number"
+   522→                        min="0"
+   523→                        value={item.actualClosing ?? ''}
+   524→                        onChange={(e) => updateItem(idx, 'actualClosing', parseInt(e.target.value) || 0)}
+   525→                        className="w-20 text-right px-2 py-1 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-[#DC2626]/20 focus:border-[#DC2626]"
+   526→                        style={{ borderColor: '#E8E0F0' }}
+   527→                      />
+   528→                    </td>
+   529→                    <td className="py-2.5 px-3 text-right font-semibold" style={{ color: varianceColor(variance) }}>
+   530→                      {variance > 0 ? '+' : ''}{variance}
+   531→                    </td>
+   532→                  </tr>
+   533→                )
+   534→              })}
+   535→              {items.length === 0 && (
+   536→                <tr><td colSpan={7} className="py-8 text-center text-sm" style={{ color: '#8B7FA0' }}>No reconciliation data for this date</td></tr>
+   537→              )}
+   538→            </tbody>
+   539→          </table>
+   540→        </div>
+   541→        {items.length > 0 && (
+   542→          <div className="flex justify-between items-center mt-4 pt-4 border-t border-[#E8E0F0]">
+   543→            <span className="text-sm font-semibold" style={{ color: '#8B7FA0' }}>Total Variance</span>
+   544→            <span className="text-lg font-bold" style={{ color: varianceColor(totalVariance) }}>
+   545→              {totalVariance > 0 ? '+' : ''}{totalVariance}
+   546→            </span>
+   547→          </div>
+   548→        )}
+   549→      </div>
+   550→    </div>
+   551→  )
+   552→}
+   553→
+   554→/* ═══════════════════════════════════════════════════════════════════════
+   555→   3. SUPPLIERS PAGE (Manager Only)
+   556→   ═══════════════════════════════════════════════════════════════════════ */
+   557→export function SuppliersPage() {
+   558→  const { storeId } = useAppStore()
+   559→  const [loading, setLoading] = useState(true)
+   560→  const [error, setError] = useState('')
+   561→  const [suppliers, setSuppliers] = useState<any[]>([])
+   562→  const [modalOpen, setModalOpen] = useState(false)
+   563→  const [editing, setEditing] = useState<any>(null)
+   564→  const [confirmOpen, setConfirmOpen] = useState(false)
+   565→  const [deleteTarget, setDeleteTarget] = useState<any>(null)
+   566→  const [saving, setSaving] = useState(false)
+   567→
+   568→  const [form, setForm] = useState({ name: '', contactPerson: '', phone: '', email: '', productTypes: '' })
+   569→
+   570→  const fetchSuppliers = async () => {
+   571→    setLoading(true)
+   572→    setError('')
+   573→    try {
+   574→      const data = await api.getSuppliers()
+   575→      setSuppliers(Array.isArray(data) ? data : data.suppliers || [])
+   576→    } catch (err: any) {
+   577→      setError(err.message || 'Failed to load suppliers')
+   578→    } finally {
+   579→      setLoading(false)
+   580→    }
+   581→  }
+   582→
+   583→  useEffect(() => { fetchSuppliers() }, [])
+   584→
+   585→  const openAdd = () => {
+   586→    setEditing(null)
+   587→    setForm({ name: '', contactPerson: '', phone: '', email: '', productTypes: '' })
+   588→    setModalOpen(true)
+   589→  }
+   590→
+   591→  const openEdit = (s: any) => {
+   592→    setEditing(s)
+   593→    setForm({ name: s.name || '', contactPerson: s.contactPerson || '', phone: s.phone || '', email: s.email || '', productTypes: (s.productTypes || []).join(', ') })
+   594→    setModalOpen(true)
+   595→  }
+   596→
+   597→  const handleSave = async () => {
+   598→    if (!form.name.trim()) return
+   599→    setSaving(true)
+   600→    setError('')
+   601→    try {
+   602→      const payload = { ...form, productTypes: form.productTypes.split(',').map((s: string) => s.trim()).filter(Boolean) }
+   603→      if (editing) {
+   604→        await api.updateSupplier({ ...payload, id: editing.id })
+   605→      } else {
+   606→        await api.createSupplier(payload)
+   607→      }
+   608→      setModalOpen(false)
+   609→      await fetchSuppliers()
+   610→    } catch (err: any) {
+   611→      setError(err.message || 'Failed to save supplier')
+   612→    } finally {
+   613→      setSaving(false)
+   614→    }
+   615→  }
+   616→
+   617→  const handleDelete = async () => {
+   618→    if (!deleteTarget) return
+   619→    setSaving(true)
+   620→    setError('')
+   621→    try {
+   622→      await api.deleteSupplier(deleteTarget.id)
+   623→      setConfirmOpen(false)
+   624→      setDeleteTarget(null)
+   625→      await fetchSuppliers()
+   626→    } catch (err: any) {
+   627→      setError(err.message || 'Failed to delete supplier')
+   628→    } finally {
+   629→      setSaving(false)
+   630→    }
+   631→  }
+   632→
+   633→  if (loading) return <Spinner />
+   634→
+   635→  return (
+   636→    <div className="space-y-6">
+   637→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+   638→        <div>
+   639→          <h1 className="text-xl font-bold" style={{ color: '#1F1129' }}>Suppliers</h1>
+   640→          <p className="text-sm mt-0.5" style={{ color: '#8B7FA0' }}>Manage your supplier contacts and product sources</p>
+   641→        </div>
+   642→        <button onClick={openAdd} className={btnPrimary} style={{ backgroundColor: '#DC2626' }}>
+   643→          <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>
+   644→          Add Supplier
+   645→        </button>
+   646→      </div>
+   647→
+   648→      {error && <ErrorBanner message={error} />}
+   649→
+   650→      <div style={cardStyle} className="p-5">
+   651→        <div className="overflow-x-auto">
+   652→          <table className="w-full text-sm">
+   653→            <thead>
+   654→              <tr className="border-b border-[#E8E0F0]">
+   655→                <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Name</th>
+   656→                <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider hidden md:table-cell" style={{ color: '#8B7FA0' }}>Contact</th>
+   657→                <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider hidden lg:table-cell" style={{ color: '#8B7FA0' }}>Phone</th>
+   658→                <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider hidden lg:table-cell" style={{ color: '#8B7FA0' }}>Email</th>
+   659→                <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider hidden md:table-cell" style={{ color: '#8B7FA0' }}>Product Types</th>
+   660→                <th className="text-right py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Items</th>
+   661→                <th className="text-right py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Actions</th>
+   662→              </tr>
+   663→            </thead>
+   664→            <tbody>
+   665→              {suppliers.map((s: any) => (
+   666→                <tr key={s.id} className="border-b border-[#F5F0EB] last:border-0">
+   667→                  <td className="py-2.5 px-3 font-medium" style={{ color: '#1F1129' }}>{s.name}</td>
+   668→                  <td className="py-2.5 px-3 hidden md:table-cell" style={{ color: '#6B5E7A' }}>{s.contactPerson || '-'}</td>
+   669→                  <td className="py-2.5 px-3 hidden lg:table-cell" style={{ color: '#6B5E7A' }}>{s.phone || '-'}</td>
+   670→                  <td className="py-2.5 px-3 hidden lg:table-cell" style={{ color: '#6B5E7A' }}>{s.email || '-'}</td>
+   671→                  <td className="py-2.5 px-3 hidden md:table-cell">
+   672→                    <div className="flex flex-wrap gap-1">
+   673→                      {(s.productTypes || []).map((t: string, i: number) => (
+   674→                        <Badge key={i} variant="purple">{t}</Badge>
+   675→                      ))}
+   676→                    </div>
+   677→                  </td>
+   678→                  <td className="py-2.5 px-3 text-right" style={{ color: '#6B5E7A' }}>{s.itemsSupplied ?? 0}</td>
+   679→                  <td className="py-2.5 px-3 text-right">
+   680→                    <div className="flex items-center justify-end gap-2">
+   681→                      <button onClick={() => openEdit(s)} className={btnSecondary} style={{ borderColor: '#E8E0F0', color: '#6B5E7A', padding: '4px 10px', fontSize: '12px' }}>Edit</button>
+   682→                      <button onClick={() => { setDeleteTarget(s); setConfirmOpen(true) }} className={btnDanger}>Delete</button>
+   683→                    </div>
+   684→                  </td>
+   685→                </tr>
+   686→              ))}
+   687→              {suppliers.length === 0 && (
+   688→                <tr><td colSpan={7} className="py-8 text-center text-sm" style={{ color: '#8B7FA0' }}>No suppliers added yet</td></tr>
+   689→              )}
+   690→            </tbody>
+   691→          </table>
+   692→        </div>
+   693→      </div>
+   694→
+   695→      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Edit Supplier' : 'Add Supplier'}>
+   696→        <div className="space-y-4">
+   697→          <div>
+   698→            <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>Name</label>
+   699→            <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputCls} style={{ borderColor: '#E8E0F0' }} placeholder="Supplier name" />
+   700→          </div>
+   701→          <div>
+   702→            <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>Contact Person</label>
+   703→            <input type="text" value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} className={inputCls} style={{ borderColor: '#E8E0F0' }} placeholder="Contact person" />
+   704→          </div>
+   705→          <div>
+   706→            <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>Phone</label>
+   707→            <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={inputCls} style={{ borderColor: '#E8E0F0' }} placeholder="Phone number" />
+   708→          </div>
+   709→          <div>
+   710→            <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>Email</label>
+   711→            <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={inputCls} style={{ borderColor: '#E8E0F0' }} placeholder="Email address" />
+   712→          </div>
+   713→          <div>
+   714→            <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>Product Types</label>
+   715→            <input type="text" value={form.productTypes} onChange={(e) => setForm({ ...form, productTypes: e.target.value })} className={inputCls} style={{ borderColor: '#E8E0F0' }} placeholder="e.g. Wine, Spirits, Beer" />
+   716→            <p className="text-xs mt-1" style={{ color: '#8B7FA0' }}>Separate multiple types with commas</p>
+   717→          </div>
+   718→          <div className="flex justify-end gap-3 pt-2">
+   719→            <button onClick={() => setModalOpen(false)} className={btnSecondary} style={{ borderColor: '#E8E0F0', color: '#6B5E7A' }}>Cancel</button>
+   720→            <button onClick={handleSave} disabled={saving || !form.name.trim()} className={btnPrimary} style={{ backgroundColor: '#DC2626' }}>
+   721→              {saving ? 'Saving...' : editing ? 'Update' : 'Add Supplier'}
+   722→            </button>
+   723→          </div>
+   724→        </div>
+   725→      </Modal>
+   726→
+   727→      <ConfirmDialog open={confirmOpen} title="Delete Supplier" message={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`} onConfirm={handleDelete} onCancel={() => { setConfirmOpen(false); setDeleteTarget(null) }} />
+   728→    </div>
+   729→  )
+   730→}
+   731→
+   732→/* ═══════════════════════════════════════════════════════════════════════
+   733→   4. EXPENSES PAGE (Manager Only)
+   734→   ═══════════════════════════════════════════════════════════════════════ */
+   735→const EXPENSE_CATEGORIES = ['Rent', 'Utilities', 'Salaries', 'Inventory', 'Marketing', 'Maintenance', 'Other']
+   736→
+   737→export function ExpensesPage() {
+   738→  const { storeId } = useAppStore()
+   739→  const [loading, setLoading] = useState(true)
+   740→  const [error, setError] = useState('')
+   741→  const [expenses, setExpenses] = useState<any[]>([])
+   742→  const [modalOpen, setModalOpen] = useState(false)
+   743→  const [confirmOpen, setConfirmOpen] = useState(false)
+   744→  const [deleteTarget, setDeleteTarget] = useState<any>(null)
+   745→  const [saving, setSaving] = useState(false)
+   746→  const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], category: 'Rent', description: '', amount: '' })
+   747→
+   748→  const fetchExpenses = async () => {
+   749→    if (!storeId) return
+   750→    setLoading(true)
+   751→    setError('')
+   752→    try {
+   753→      const data = await api.getExpenses('storeId=' + storeId)
+   754→      setExpenses(Array.isArray(data) ? data : data.expenses || [])
+   755→    } catch (err: any) {
+   756→      setError(err.message || 'Failed to load expenses')
+   757→    } finally {
+   758→      setLoading(false)
+   759→    }
+   760→  }
+   761→
+   762→  useEffect(() => { fetchExpenses() }, [storeId])
+   763→
+   764→  const handleSave = async () => {
+   765→    if (!form.amount || !form.date) return
+   766→    setSaving(true)
+   767→    setError('')
+   768→    try {
+   769→      await api.createExpense({ ...form, amount: parseFloat(form.amount), storeId })
+   770→      setModalOpen(false)
+   771→      setForm({ date: new Date().toISOString().split('T')[0], category: 'Rent', description: '', amount: '' })
+   772→      await fetchExpenses()
+   773→    } catch (err: any) {
+   774→      setError(err.message || 'Failed to save expense')
+   775→    } finally {
+   776→      setSaving(false)
+   777→    }
+   778→  }
+   779→
+   780→  const handleDelete = async () => {
+   781→    if (!deleteTarget) return
+   782→    setSaving(true)
+   783→    setError('')
+   784→    try {
+   785→      await api.deleteExpense(deleteTarget.id)
+   786→      setConfirmOpen(false)
+   787→      setDeleteTarget(null)
+   788→      await fetchExpenses()
+   789→    } catch (err: any) {
+   790→      setError(err.message || 'Failed to delete expense')
+   791→    } finally {
+   792→      setSaving(false)
+   793→    }
+   794→  }
+   795→
+   796→  if (!storeId) return <NoStore />
+   797→  if (loading) return <Spinner />
+   798→
+   799→  const totalThisMonth = expenses
+   800→    .filter((e: any) => { const d = new Date(e.date); const now = new Date(); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() })
+   801→    .reduce((s, e) => s + (e.amount || 0), 0)
+   802→
+   803→  const dailyAverage = expenses.length > 0 ? totalThisMonth / new Date().getDate() : 0
+   804→
+   805→  const categoryTotals: Record<string, number> = {}
+   806→  expenses.forEach((e: any) => { categoryTotals[e.category || 'Other'] = (categoryTotals[e.category || 'Other'] || 0) + (e.amount || 0) })
+   807→  const highestCategory = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0]
+   808→  const maxCategoryAmount = Math.max(...Object.values(categoryTotals), 1)
+   809→
+   810→  return (
+   811→    <div className="space-y-6">
+   812→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+   813→        <div>
+   814→          <h1 className="text-xl font-bold" style={{ color: '#1F1129' }}>Expenses</h1>
+   815→          <p className="text-sm mt-0.5" style={{ color: '#8B7FA0' }}>Track and manage your business expenses</p>
+   816→        </div>
+   817→        <button onClick={() => { setForm({ date: new Date().toISOString().split('T')[0], category: 'Rent', description: '', amount: '' }); setModalOpen(true) }} className={btnPrimary} style={{ backgroundColor: '#DC2626' }}>
+   818→          <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>
+   819→          Add Expense
+   820→        </button>
+   821→      </div>
+   822→
+   823→      {error && <ErrorBanner message={error} />}
+   824→
+   825→      {/* ── Stat Cards ── */}
+   826→      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+   827→        <StatCard label="This Month Total" value={fmt(totalThisMonth)} />
+   828→        <StatCard label="Average Daily" value={fmt(dailyAverage)} />
+   829→        <StatCard label="Highest Category" value={highestCategory ? fmt(highestCategory[1]) : 'N/A'} sub={highestCategory ? highestCategory[0] : undefined} />
+   830→      </div>
+   831→
+   832→      {/* ── Category Bar Chart ── */}
+   833→      {Object.keys(categoryTotals).length > 0 && (
+   834→        <div style={cardStyle} className="p-5">
+   835→          <h2 className="text-base font-bold mb-4" style={{ color: '#1F1129' }}>Expenses by Category</h2>
+   836→          <div className="space-y-3">
+   837→            {Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]).map(([cat, amount], idx) => (
+   838→              <div key={cat}>
+   839→                <div className="flex justify-between text-sm mb-1">
+   840→                  <span className="font-medium" style={{ color: '#1F1129' }}>{cat}</span>
+   841→                  <span style={{ color: '#6B5E7A' }}>{fmt(amount)}</span>
+   842→                </div>
+   843→                <div className="w-full h-3 rounded-full" style={{ backgroundColor: '#F5F0EB' }}>
+   844→                  <div className="h-full rounded-full transition-all duration-500" style={{ width: `${(amount / maxCategoryAmount) * 100}%`, backgroundColor: CHART_COLORS[idx % CHART_COLORS.length] }} />
+   845→                </div>
+   846→              </div>
+   847→            ))}
+   848→          </div>
+   849→        </div>
+   850→      )}
+   851→
+   852→      {/* ── Expense Table ── */}
+   853→      <div style={cardStyle} className="p-5">
+   854→        <h2 className="text-base font-bold mb-4" style={{ color: '#1F1129' }}>Expense History</h2>
+   855→        <div className="overflow-x-auto">
+   856→          <table className="w-full text-sm">
+   857→            <thead>
+   858→              <tr className="border-b border-[#E8E0F0]">
+   859→                <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Date</th>
+   860→                <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Category</th>
+   861→                <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Description</th>
+   862→                <th className="text-right py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Amount</th>
+   863→                <th className="text-right py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Actions</th>
+   864→              </tr>
+   865→            </thead>
+   866→            <tbody>
+   867→              {expenses.map((e: any) => (
+   868→                <tr key={e.id} className="border-b border-[#F5F0EB] last:border-0">
+   869→                  <td className="py-2.5 px-3" style={{ color: '#6B5E7A' }}>{e.date ? new Date(e.date).toLocaleDateString('en-KE') : 'N/A'}</td>
+   870→                  <td className="py-2.5 px-3"><Badge variant="purple">{e.category || 'Other'}</Badge></td>
+   871→                  <td className="py-2.5 px-3" style={{ color: '#1F1129' }}>{e.description || '-'}</td>
+   872→                  <td className="py-2.5 px-3 text-right font-medium" style={{ color: '#1F1129' }}>{fmt(e.amount || 0)}</td>
+   873→                  <td className="py-2.5 px-3 text-right">
+   874→                    <button onClick={() => { setDeleteTarget(e); setConfirmOpen(true) }} className={btnDanger}>Delete</button>
+   875→                  </td>
+   876→                </tr>
+   877→              ))}
+   878→              {expenses.length === 0 && (
+   879→                <tr><td colSpan={5} className="py-8 text-center text-sm" style={{ color: '#8B7FA0' }}>No expenses recorded yet</td></tr>
+   880→              )}
+   881→            </tbody>
+   882→          </table>
+   883→        </div>
+   884→      </div>
+   885→
+   886→      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Add Expense">
+   887→        <div className="space-y-4">
+   888→          <div>
+   889→            <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>Date</label>
+   890→            <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className={inputCls} style={{ borderColor: '#E8E0F0' }} />
+   891→          </div>
+   892→          <div>
+   893→            <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>Category</label>
+   894→            <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className={inputCls} style={{ borderColor: '#E8E0F0' }}>
+   895→              {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+   896→            </select>
+   897→          </div>
+   898→          <div>
+   899→            <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>Description</label>
+   900→            <input type="text" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className={inputCls} style={{ borderColor: '#E8E0F0' }} placeholder="Brief description" />
+   901→          </div>
+   902→          <div>
+   903→            <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>Amount (KSh)</label>
+   904→            <input type="number" min="0" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className={inputCls} style={{ borderColor: '#E8E0F0' }} placeholder="0.00" />
+   905→          </div>
+   906→          <div className="flex justify-end gap-3 pt-2">
+   907→            <button onClick={() => setModalOpen(false)} className={btnSecondary} style={{ borderColor: '#E8E0F0', color: '#6B5E7A' }}>Cancel</button>
+   908→            <button onClick={handleSave} disabled={saving || !form.amount} className={btnPrimary} style={{ backgroundColor: '#DC2626' }}>
+   909→              {saving ? 'Saving...' : 'Add Expense'}
+   910→            </button>
+   911→          </div>
+   912→        </div>
+   913→      </Modal>
+   914→
+   915→      <ConfirmDialog open={confirmOpen} title="Delete Expense" message="Are you sure you want to delete this expense? This action cannot be undone." onConfirm={handleDelete} onCancel={() => { setConfirmOpen(false); setDeleteTarget(null) }} />
+   916→    </div>
+   917→  )
+   918→}
+   919→
+   920→/* ═══════════════════════════════════════════════════════════════════════
+   921→   5. ANALYTICS PAGE (Manager Only)
+   922→   ═══════════════════════════════════════════════════════════════════════ */
+   923→export function AnalyticsPage() {
+   924→  const { storeId } = useAppStore()
+   925→  const [loading, setLoading] = useState(true)
+   926→  const [error, setError] = useState('')
+   927→  const [period, setPeriod] = useState(30)
+   928→  const [data, setData] = useState<any>(null)
+   929→
+   930→  const fetchAnalytics = async () => {
+   931→    if (!storeId) return
+   932→    setLoading(true)
+   933→    setError('')
+   934→    try {
+   935→      const d = await api.getAnalytics('storeId=' + storeId + '&period=' + period)
+   936→      setData(d)
+   937→    } catch (err: any) {
+   938→      setError(err.message || 'Failed to load analytics')
+   939→    } finally {
+   940→      setLoading(false)
+   941→    }
+   942→  }
+   943→
+   944→  useEffect(() => { fetchAnalytics() }, [storeId, period])
+   945→
+   946→  if (!storeId) return <NoStore />
+   947→  if (loading) return <Spinner />
+   948→  if (error) return <div className="mt-4"><ErrorBanner message={error} /></div>
+   949→
+   950→  const trend = data?.trend || []
+   951→  const categoryData = data?.byCategory || []
+   952→  const topProducts = data?.topProducts || []
+   953→  const paymentData = data?.byPayment || []
+   954→  const summary = data?.summary || {}
+   955→
+   956→  return (
+   957→    <div className="space-y-6">
+   958→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+   959→        <div>
+   960→          <h1 className="text-xl font-bold" style={{ color: '#1F1129' }}>Sales Analytics</h1>
+   961→          <p className="text-sm mt-0.5" style={{ color: '#8B7FA0' }}>Comprehensive view of your sales performance</p>
+   962→        </div>
+   963→        <div className="flex rounded-xl p-1" style={{ backgroundColor: '#F5F0EB' }}>
+   964→          {[7, 30, 90].map((p) => (
+   965→            <button key={p} onClick={() => setPeriod(p)} className="px-4 py-1.5 text-sm font-semibold rounded-lg transition-all duration-200 cursor-pointer"
+   966→              style={{ backgroundColor: period === p ? '#fff' : 'transparent', color: period === p ? '#1F1129' : '#8B7FA0', boxShadow: period === p ? '0 1px 4px rgba(31,17,41,.08)' : 'none' }}>
+   967→              {p} Days
+   968→            </button>
+   969→          ))}
+   970→        </div>
+   971→      </div>
+   972→
+   973→      {error && <ErrorBanner message={error} />}
+   974→
+   975→      {/* ── Stat Cards ── */}
+   976→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+   977→        <StatCard label="Total Revenue" value={fmt(summary.totalRevenue || 0)} />
+   978→        <StatCard label="Avg Daily" value={fmt(summary.avgDaily || 0)} />
+   979→        <StatCard label="Total Transactions" value={String(summary.totalTransactions || 0)} />
+   980→        <StatCard label="Avg Transaction" value={fmt(summary.avgTransaction || 0)} />
+   981→      </div>
+   982→
+   983→      {/* ── Trend Line Chart ── */}
+   984→      {trend.length > 0 && (
+   985→        <div style={cardStyle} className="p-5">
+   986→          <h2 className="text-base font-bold mb-4" style={{ color: '#1F1129' }}>Revenue Trend</h2>
+   987→          <div style={{ width: '100%', height: 300 }}>
+   988→            <ResponsiveContainer>
+   989→              <LineChart data={trend}>
+   990→                <CartesianGrid strokeDasharray="3 3" stroke="#E8E0F0" />
+   991→                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#8B7FA0' }} />
+   992→                <YAxis tick={{ fontSize: 11, fill: '#8B7FA0' }} />
+   993→                <Tooltip contentStyle={{ borderRadius: '10px', border: '1px solid #E8E0F0', fontSize: '12px' }} />
+   994→                <Line type="monotone" dataKey="revenue" stroke="#DC2626" strokeWidth={2} dot={false} />
+   995→              </LineChart>
+   996→            </ResponsiveContainer>
+   997→          </div>
+   998→        </div>
+   999→      )}
+  1000→
+  1001→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  1002→        {/* ── Sales by Category Donut ── */}
+  1003→        {categoryData.length > 0 && (
+  1004→          <div style={cardStyle} className="p-5">
+  1005→            <h2 className="text-base font-bold mb-4" style={{ color: '#1F1129' }}>Sales by Category</h2>
+  1006→            <div style={{ width: '100%', height: 280 }}>
+  1007→              <ResponsiveContainer>
+  1008→                <PieChart>
+  1009→                  <Pie data={categoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} dataKey="revenue" nameKey="category" paddingAngle={2}>
+  1010→                    {categoryData.map((_: any, idx: number) => <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />)}
+  1011→                  </Pie>
+  1012→                  <Tooltip contentStyle={{ borderRadius: '10px', border: '1px solid #E8E0F0', fontSize: '12px' }} />
+  1013→                  <Legend />
+  1014→                </PieChart>
+  1015→              </ResponsiveContainer>
+  1016→            </div>
+  1017→          </div>
+  1018→        )}
+  1019→
+  1020→        {/* ── Top 10 Products Horizontal Bar ── */}
+  1021→        {topProducts.length > 0 && (
+  1022→          <div style={cardStyle} className="p-5">
+  1023→            <h2 className="text-base font-bold mb-4" style={{ color: '#1F1129' }}>Top 10 Products</h2>
+  1024→            <div style={{ width: '100%', height: 280 }}>
+  1025→              <ResponsiveContainer>
+  1026→                <BarChart data={topProducts} layout="vertical" margin={{ left: 80 }}>
+  1027→                  <CartesianGrid strokeDasharray="3 3" stroke="#E8E0F0" />
+  1028→                  <XAxis type="number" tick={{ fontSize: 11, fill: '#8B7FA0' }} />
+  1029→                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#6B5E7A' }} width={75} />
+  1030→                  <Tooltip contentStyle={{ borderRadius: '10px', border: '1px solid #E8E0F0', fontSize: '12px' }} />
+  1031→                  <Bar dataKey="revenue" fill="#DC2626" radius={[0, 6, 6, 0]} />
+  1032→                </BarChart>
+  1033→              </ResponsiveContainer>
+  1034→            </div>
+  1035→          </div>
+  1036→        )}
+  1037→      </div>
+  1038→
+  1039→      {/* ── Payment Methods Pie ── */}
+  1040→      {paymentData.length > 0 && (
+  1041→        <div style={cardStyle} className="p-5">
+  1042→          <h2 className="text-base font-bold mb-4" style={{ color: '#1F1129' }}>Payment Methods</h2>
+  1043→          <div style={{ width: '100%', height: 280 }}>
+  1044→            <ResponsiveContainer>
+  1045→              <PieChart>
+  1046→                <Pie data={paymentData} cx="50%" cy="50%" outerRadius={100} dataKey="count" nameKey="method">
+  1047→                  {paymentData.map((_: any, idx: number) => <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />)}
+  1048→                </Pie>
+  1049→                <Tooltip contentStyle={{ borderRadius: '10px', border: '1px solid #E8E0F0', fontSize: '12px' }} />
+  1050→                <Legend />
+  1051→              </PieChart>
+  1052→            </ResponsiveContainer>
+  1053→          </div>
+  1054→        </div>
+  1055→      )}
+  1056→
+  1057→      {trend.length === 0 && categoryData.length === 0 && (
+  1058→        <div style={cardStyle} className="p-12 text-center">
+  1059→          <p className="text-sm" style={{ color: '#8B7FA0' }}>No analytics data available for the selected period.</p>
+  1060→        </div>
+  1061→      )}
+  1062→    </div>
+  1063→  )
+  1064→}
+  1065→
+  1066→/* ═══════════════════════════════════════════════════════════════════════
+  1067→   6. PROFIT PAGE (Manager Only)
+  1068→   ═══════════════════════════════════════════════════════════════════════ */
+  1069→export function ProfitPage() {
+  1070→  const { storeId } = useAppStore()
+  1071→  const [loading, setLoading] = useState(true)
+  1072→  const [error, setError] = useState('')
+  1073→  const [period, setPeriod] = useState(30)
+  1074→  const [data, setData] = useState<any>(null)
+  1075→
+  1076→  const fetchProfit = async () => {
+  1077→    if (!storeId) return
+  1078→    setLoading(true)
+  1079→    setError('')
+  1080→    try {
+  1081→      const d = await api.getAnalytics('storeId=' + storeId + '&period=' + period)
+  1082→      setData(d)
+  1083→    } catch (err: any) {
+  1084→      setError(err.message || 'Failed to load profit data')
+  1085→    } finally {
+  1086→      setLoading(false)
+  1087→    }
+  1088→  }
+  1089→
+  1090→  useEffect(() => { fetchProfit() }, [storeId, period])
+  1091→
+  1092→  if (!storeId) return <NoStore />
+  1093→  if (loading) return <Spinner />
+  1094→
+  1095→  const profitSummary = data?.profitSummary || {}
+  1096→  const dailyProfit = data?.dailyProfit || []
+  1097→  const topByProfit = data?.topByProfit || []
+  1098→  const productPL = data?.productPL || []
+  1099→
+  1100→  return (
+  1101→    <div className="space-y-6">
+  1102→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+  1103→        <div>
+  1104→          <h1 className="text-xl font-bold" style={{ color: '#1F1129' }}>Profit Analytics</h1>
+  1105→          <p className="text-sm mt-0.5" style={{ color: '#8B7FA0' }}>Detailed profit and loss analysis</p>
+  1106→        </div>
+  1107→        <div className="flex rounded-xl p-1" style={{ backgroundColor: '#F5F0EB' }}>
+  1108→          {[7, 30, 90].map((p) => (
+  1109→            <button key={p} onClick={() => setPeriod(p)} className="px-4 py-1.5 text-sm font-semibold rounded-lg transition-all duration-200 cursor-pointer"
+  1110→              style={{ backgroundColor: period === p ? '#fff' : 'transparent', color: period === p ? '#1F1129' : '#8B7FA0', boxShadow: period === p ? '0 1px 4px rgba(31,17,41,.08)' : 'none' }}>
+  1111→              {p} Days
+  1112→            </button>
+  1113→          ))}
+  1114→        </div>
+  1115→      </div>
+  1116→
+  1117→      {error && <ErrorBanner message={error} />}
+  1118→
+  1119→      {/* ── Stat Cards ── */}
+  1120→      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+  1121→        <StatCard label="Gross Profit" value={fmt(profitSummary.grossProfit || 0)} color="#059669" />
+  1122→        <StatCard label="Revenue" value={fmt(profitSummary.revenue || 0)} />
+  1123→        <StatCard label="COGS" value={fmt(profitSummary.cogs || 0)} color="#DC2626" />
+  1124→        <StatCard label="Operating Expenses" value={fmt(profitSummary.operatingExpenses || 0)} color="#D97706" />
+  1125→        <StatCard label="Net Profit" value={fmt(profitSummary.netProfit || 0)} color={(profitSummary.netProfit || 0) >= 0 ? '#059669' : '#DC2626'} />
+  1126→      </div>
+  1127→
+  1128→      {/* ── Daily Profit Bar Chart ── */}
+  1129→      {dailyProfit.length > 0 && (
+  1130→        <div style={cardStyle} className="p-5">
+  1131→          <h2 className="text-base font-bold mb-4" style={{ color: '#1F1129' }}>Daily Profit</h2>
+  1132→          <div style={{ width: '100%', height: 300 }}>
+  1133→            <ResponsiveContainer>
+  1134→              <BarChart data={dailyProfit}>
+  1135→                <CartesianGrid strokeDasharray="3 3" stroke="#E8E0F0" />
+  1136→                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#8B7FA0' }} />
+  1137→                <YAxis tick={{ fontSize: 11, fill: '#8B7FA0' }} />
+  1138→                <Tooltip contentStyle={{ borderRadius: '10px', border: '1px solid #E8E0F0', fontSize: '12px' }} />
+  1139→                <Bar dataKey="profit" radius={[4, 4, 0, 0]}>
+  1140→                  {dailyProfit.map((entry: any, idx: number) => (
+  1141→                    <Cell key={idx} fill={(entry.profit || 0) >= 0 ? '#059669' : '#DC2626'} />
+  1142→                  ))}
+  1143→                </Bar>
+  1144→              </BarChart>
+  1145→            </ResponsiveContainer>
+  1146→          </div>
+  1147→        </div>
+  1148→      )}
+  1149→
+  1150→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  1151→        {/* ── Top 10 by Profit ── */}
+  1152→        {topByProfit.length > 0 && (
+  1153→          <div style={cardStyle} className="p-5">
+  1154→            <h2 className="text-base font-bold mb-4" style={{ color: '#1F1129' }}>Top 10 by Profit</h2>
+  1155→            <div style={{ width: '100%', height: 300 }}>
+  1156→              <ResponsiveContainer>
+  1157→                <BarChart data={topByProfit} layout="vertical" margin={{ left: 80 }}>
+  1158→                  <CartesianGrid strokeDasharray="3 3" stroke="#E8E0F0" />
+  1159→                  <XAxis type="number" tick={{ fontSize: 11, fill: '#8B7FA0' }} />
+  1160→                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#6B5E7A' }} width={75} />
+  1161→                  <Tooltip contentStyle={{ borderRadius: '10px', border: '1px solid #E8E0F0', fontSize: '12px' }} />
+  1162→                  <Bar dataKey="profit" radius={[0, 6, 6, 0]}>
+  1163→                    {topByProfit.map((entry: any, idx: number) => (
+  1164→                      <Cell key={idx} fill={(entry.profit || 0) >= 0 ? '#059669' : '#DC2626'} />
+  1165→                    ))}
+  1166→                  </Bar>
+  1167→                </BarChart>
+  1168→              </ResponsiveContainer>
+  1169→            </div>
+  1170→          </div>
+  1171→        )}
+  1172→
+  1173→        {/* ── Per-Product P&L Table ── */}
+  1174→        <div style={cardStyle} className="p-5">
+  1175→          <h2 className="text-base font-bold mb-4" style={{ color: '#1F1129' }}>Product Profit & Loss</h2>
+  1176→          <div className="overflow-x-auto max-h-[340px] overflow-y-auto">
+  1177→            <table className="w-full text-sm">
+  1178→              <thead className="sticky top-0 bg-white">
+  1179→                <tr className="border-b border-[#E8E0F0]">
+  1180→                  <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Product</th>
+  1181→                  <th className="text-right py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Revenue</th>
+  1182→                  <th className="text-right py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Cost</th>
+  1183→                  <th className="text-right py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Profit</th>
+  1184→                  <th className="text-right py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Margin</th>
+  1185→                </tr>
+  1186→              </thead>
+  1187→              <tbody>
+  1188→                {productPL.map((p: any, idx: number) => {
+  1189→                  const margin = p.revenue > 0 ? ((p.profit || 0) / p.revenue * 100) : 0
+  1190→                  return (
+  1191→                    <tr key={idx} className="border-b border-[#F5F0EB] last:border-0">
+  1192→                      <td className="py-2.5 px-3 font-medium" style={{ color: '#1F1129' }}>{p.name || 'Unknown'}</td>
+  1193→                      <td className="py-2.5 px-3 text-right" style={{ color: '#6B5E7A' }}>{fmt(p.revenue || 0)}</td>
+  1194→                      <td className="py-2.5 px-3 text-right" style={{ color: '#6B5E7A' }}>{fmt(p.cost || 0)}</td>
+  1195→                      <td className="py-2.5 px-3 text-right font-semibold" style={{ color: (p.profit || 0) >= 0 ? '#059669' : '#DC2626' }}>{fmt(p.profit || 0)}</td>
+  1196→                      <td className="py-2.5 px-3 text-right" style={{ color: margin >= 30 ? '#059669' : margin >= 15 ? '#D97706' : '#DC2626' }}>{margin.toFixed(1)}%</td>
+  1197→                    </tr>
+  1198→                  )
+  1199→                })}
+  1200→                {productPL.length === 0 && (
+  1201→                  <tr><td colSpan={5} className="py-8 text-center text-sm" style={{ color: '#8B7FA0' }}>No product data available</td></tr>
+  1202→                )}
+  1203→              </tbody>
+  1204→            </table>
+  1205→          </div>
+  1206→        </div>
+  1207→      </div>
+  1208→    </div>
+  1209→  )
+  1210→}
+  1211→
+  1212→/* ═══════════════════════════════════════════════════════════════════════
+  1213→   7. REPORTS PAGE (Manager Only)
+  1214→   ═══════════════════════════════════════════════════════════════════════ */
+  1215→const REPORT_TYPES = [
+  1216→  { type: 'sales', title: 'Sales Report', description: 'Comprehensive sales data with trends and breakdowns', color: '#DC2626', icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
+  1217→  { type: 'inventory', title: 'Inventory Report', description: 'Current stock levels, values, and product details', color: '#3B82F6', icon: 'M3 3h7v7H3V3zm11 0h7v7h-7V3zM3 14h7v7H3v-7zm14 3a3 3 0 11-6 0 3 3 0 016 0z' },
+  1218→  { type: 'profit_loss', title: 'Profit & Loss', description: 'Revenue, costs, and net profit analysis', color: '#059669', icon: 'M12 2a10 10 0 100 20 10 10 0 000-20zm1 14.59l-3.3-3.3-1.4 1.42L12 20.4l5.71-5.71-1.42-1.4L13 16.59V6h-2v10.59z' },
+  1219→  { type: 'expenses', title: 'Expense Report', description: 'All expenses categorized with totals', color: '#D97706', icon: 'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zm-1 2l5 5h-5V4zM6 13h12M6 17h12M6 9h3' },
+  1220→  { type: 'reconciliation', title: 'Daily Reconciliation', description: 'Stock reconciliation with variance analysis', color: '#8B5CF6', icon: 'M12 3v18M3 7l4-4 4 4M21 17l-4 4-4-4M7 8a4 4 0 018 0M17 16a4 4 0 01-8 0' },
+  1221→  { type: 'stock_audit', title: 'Stock Count Audit', description: 'Historical stock take records and adjustments', color: '#EC4899', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4' },
+  1222→]
+  1223→
+  1224→export function ReportsPage() {
+  1225→  const { storeId } = useAppStore()
+  1226→  const [loading, setLoading] = useState(false)
+  1227→  const [error, setError] = useState('')
+  1228→  const [activeReport, setActiveReport] = useState<string | null>(null)
+  1229→  const [reportData, setReportData] = useState<any>(null)
+  1230→  const [modalOpen, setModalOpen] = useState(false)
+  1231→
+  1232→  const generateReport = async (type: string) => {
+  1233→    if (!storeId) return
+  1234→    setLoading(true)
+  1235→    setError('')
+  1236→    setActiveReport(type)
+  1237→    try {
+  1238→      const d = await api.getReport(type, 'storeId=' + storeId)
+  1239→      setReportData(d)
+  1240→      setModalOpen(true)
+  1241→    } catch (err: any) {
+  1242→      setError(err.message || 'Failed to generate report')
+  1243→    } finally {
+  1244→      setLoading(false)
+  1245→    }
+  1246→  }
+  1247→
+  1248→  const handlePrint = () => {
+  1249→    if (!reportData || !activeReport) return
+  1250→    const reportConfig = REPORT_TYPES.find((r) => r.type === activeReport)
+  1251→    const title = reportConfig?.title || 'Report'
+  1252→    const items = reportData.items || reportData.rows || []
+  1253→    const summary = reportData.summary || {}
+  1254→    const columns = reportData.columns || (items.length > 0 ? Object.keys(items[0]) : [])
+  1255→
+  1256→    const summaryHtml = Object.entries(summary).map(([key, val]: [string, any]) =>
+  1257→      `<div style="flex:1;min-width:120px;padding:8px 12px;background:#FAF7F2;border-radius:8px;">
+  1258→        <div style="font-size:11px;color:#8B7FA0;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">${key.replace(/([A-Z])/g, ' $1').trim()}</div>
+  1259→        <div style="font-size:18px;font-weight:700;color:#1F1129;margin-top:4px;">${typeof val === 'number' ? 'KSh ' + val.toLocaleString('en-KE') : val}</div>
+  1260→      </div>`
+  1261→    ).join('')
+  1262→
+  1263→    const tableRows = items.map((row: any) => {
+  1264→      const cells = columns.map((col: string) =>
+  1265→        `<td style="padding:10px 12px;border-bottom:1px solid #E8E0F0;color:#1F1129;font-size:13px;">${row[col] ?? '-'}</td>`
+  1266→      ).join('')
+  1267→      return `<tr>${cells}</tr>`
+  1268→    }).join('')
+  1269→
+  1270→    const headerCells = columns.map((col: string) =>
+  1271→      `<th style="padding:10px 12px;border-bottom:2px solid #E8E0F0;text-align:left;font-size:11px;color:#8B7FA0;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">${col.replace(/([A-Z])/g, ' $1').trim()}</th>`
+  1272→    ).join('')
+  1273→
+  1274→    const html = `<!DOCTYPE html>
+  1275→<html><head><title>${title}</title>
+  1276→<style>
+  1277→  *{margin:0;padding:0;box-sizing:border-box}
+  1278→  body{font-family:system-ui,-apple-system,sans-serif;background:#FAF7F2;padding:32px;color:#1F1129}
+  1279→  @media print{body{padding:16px}}
+  1280→  .header{margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #DC2626}
+  1281→  .header h1{font-size:24px;font-weight:700}
+  1282→  .header p{font-size:13px;color:#8B7FA0;margin-top:4px}
+  1283→  .summary{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px}
+  1284→  table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(31,17,41,.06)}
+  1285→  th,td{text-align:left}
+  1286→  tr:nth-child(even){background:#FAF7F2}
+  1287→  .footer{margin-top:24px;text-align:center;font-size:11px;color:#8B7FA0}
+  1288→</style>
+  1289→</head><body>
+  1290→<div class="header">
+  1291→  <h1>VinoCellar Pro - ${title}</h1>
+  1292→  <p>Generated: ${new Date().toLocaleString('en-KE')} | Store: ${storeId}</p>
+  1293→</div>
+  1294→${summaryHtml ? `<div class="summary">${summaryHtml}</div>` : ''}
+  1295→<table><thead><tr>${headerCells}</tr></thead><tbody>${tableRows}</tbody></table>
+  1296→<div class="footer">VinoCellar Pro - Wine & Spirits Inventory Management</div>
+  1297→</body></html>`
+  1298→
+  1299→    const win = window.open('', '_blank')
+  1300→    if (win) {
+  1301→      win.document.write(html)
+  1302→      win.document.close()
+  1303→      setTimeout(() => { win.print() }, 500)
+  1304→    }
+  1305→  }
+  1306→
+  1307→  if (!storeId) return <NoStore />
+  1308→
+  1309→  return (
+  1310→    <div className="space-y-6">
+  1311→      <div>
+  1312→        <h1 className="text-xl font-bold" style={{ color: '#1F1129' }}>PDF Reports</h1>
+  1313→        <p className="text-sm mt-0.5" style={{ color: '#8B7FA0' }}>Generate and export business reports for analysis and record-keeping</p>
+  1314→      </div>
+  1315→
+  1316→      {error && <ErrorBanner message={error} />}
+  1317→
+  1318→      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  1319→        {REPORT_TYPES.map((r) => (
+  1320→          <div key={r.type} style={cardStyle} className="p-5 flex flex-col">
+  1321→            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ backgroundColor: r.color + '15' }}>
+  1322→              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke={r.color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d={r.icon} /></svg>
+  1323→            </div>
+  1324→            <h3 className="text-base font-bold mb-1" style={{ color: '#1F1129' }}>{r.title}</h3>
+  1325→            <p className="text-sm flex-1 mb-4" style={{ color: '#8B7FA0' }}>{r.description}</p>
+  1326→            <button
+  1327→              onClick={() => generateReport(r.type)}
+  1328→              disabled={loading}
+  1329→              className="w-full py-2 rounded-xl text-sm font-semibold text-white transition-all duration-150 hover:opacity-90 active:scale-[.98] disabled:opacity-60 cursor-pointer"
+  1330→              style={{ backgroundColor: r.color }}
+  1331→            >
+  1332→              {loading && activeReport === r.type ? 'Generating...' : 'Generate'}
+  1333→            </button>
+  1334→          </div>
+  1335→        ))}
+  1336→      </div>
+  1337→
+  1338→      {/* ── Report Modal ── */}
+  1339→      <Modal open={modalOpen} onClose={() => { setModalOpen(false); setReportData(null) }} title={REPORT_TYPES.find((r) => r.type === activeReport)?.title || 'Report'} wide>
+  1340→        {reportData && (
+  1341→          <div className="space-y-4">
+  1342→            {/* Summary Box */}
+  1343→            {reportData.summary && Object.keys(reportData.summary).length > 0 && (
+  1344→              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 rounded-xl" style={{ backgroundColor: '#FAF7F2' }}>
+  1345→                {Object.entries(reportData.summary).map(([key, val]: [string, any]) => (
+  1346→                  <div key={key}>
+  1347→                    <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>{key.replace(/([A-Z])/g, ' $1').trim()}</p>
+  1348→                    <p className="text-lg font-bold" style={{ color: '#1F1129' }}>{typeof val === 'number' ? fmt(val) : val}</p>
+  1349→                  </div>
+  1350→                ))}
+  1351→              </div>
+  1352→            )}
+  1353→
+  1354→            {/* Report Table */}
+  1355→            {(reportData.items || reportData.rows || []).length > 0 && (
+  1356→              <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+  1357→                <table className="w-full text-sm">
+  1358→                  <thead className="sticky top-0 bg-white">
+  1359→                    <tr className="border-b border-[#E8E0F0]">
+  1360→                      {(reportData.columns || Object.keys((reportData.items || reportData.rows || [])[0] || {})).map((col: string) => (
+  1361→                        <th key={col} className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>
+  1362→                          {col.replace(/([A-Z])/g, ' $1').trim()}
+  1363→                        </th>
+  1364→                      ))}
+  1365→                    </tr>
+  1366→                  </thead>
+  1367→                  <tbody>
+  1368→                    {(reportData.items || reportData.rows || []).map((row: any, idx: number) => (
+  1369→                      <tr key={idx} className="border-b border-[#F5F0EB] last:border-0">
+  1370→                        {(reportData.columns || Object.keys(row)).map((col: string) => (
+  1371→                          <td key={col} className="py-2.5 px-3" style={{ color: '#1F1129' }}>
+  1372→                            {typeof row[col] === 'number' && col.toLowerCase().includes('amount') || col.toLowerCase().includes('revenue') || col.toLowerCase().includes('cost') || col.toLowerCase().includes('profit') || col.toLowerCase().includes('price')
+  1373→                              ? fmt(row[col])
+  1374→                              : row[col] ?? '-'}
+  1375→                          </td>
+  1376→                        ))}
+  1377→                      </tr>
+  1378→                    ))}
+  1379→                  </tbody>
+  1380→                </table>
+  1381→              </div>
+  1382→            )}
+  1383→
+  1384→            <div className="flex justify-end gap-3 pt-2 border-t border-[#E8E0F0]">
+  1385→              <button onClick={() => { setModalOpen(false); setReportData(null) }} className={btnSecondary} style={{ borderColor: '#E8E0F0', color: '#6B5E7A' }}>Close</button>
+  1386→              <button onClick={handlePrint} className={btnPrimary} style={{ backgroundColor: '#DC2626' }}>
+  1387→                <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5 4v3H4a2 2 0 00-2 2v3a2 2 0 002 2h1v2a2 2 0 002 2h6a2 2 0 002-2v-2h1a2 2 0 002-2V9a2 2 0 00-2-2h-1V4a2 2 0 00-2-2H7a2 2 0 00-2 2zm8 0H7v3h6V4zm0 8H7v4h6v-4z" clipRule="evenodd" /></svg>
+  1388→                Print / Export PDF
+  1389→              </button>
+  1390→            </div>
+  1391→          </div>
+  1392→        )}
+  1393→      </Modal>
+  1394→    </div>
+  1395→  )
+  1396→}
+  1397→
+  1398→/* ═══════════════════════════════════════════════════════════════════════
+  1399→   8. STAFF PAGE (Manager Only)
+  1400→   ═══════════════════════════════════════════════════════════════════════ */
+  1401→export function StaffPage() {
+  1402→  const { storeId, user, stores } = useAppStore()
+  1403→  const [loading, setLoading] = useState(true)
+  1404→  const [error, setError] = useState('')
+  1405→  const [staff, setStaff] = useState<any[]>([])
+  1406→  const [modalOpen, setModalOpen] = useState(false)
+  1407→  const [editing, setEditing] = useState<any>(null)
+  1408→  const [confirmOpen, setConfirmOpen] = useState(false)
+  1409→  const [deleteTarget, setDeleteTarget] = useState<any>(null)
+  1410→  const [saving, setSaving] = useState(false)
+  1411→  const [visiblePins, setVisiblePins] = useState<Record<string, boolean>>({})
+  1412→
+  1413→  const [form, setForm] = useState({ name: '', email: '', password: '', pin: '', role: 'staff', storeId: '' })
+  1414→
+  1415→  const fetchStaff = async () => {
+  1416→    setLoading(true)
+  1417→    setError('')
+  1418→    try {
+  1419→      const data = await api.getStaff()
+  1420→      setStaff(Array.isArray(data) ? data : data.staff || [])
+  1421→    } catch (err: any) {
+  1422→      setError(err.message || 'Failed to load staff')
+  1423→    } finally {
+  1424→      setLoading(false)
+  1425→    }
+  1426→  }
+  1427→
+  1428→  useEffect(() => { fetchStaff() }, [])
+  1429→
+  1430→  const openAdd = () => {
+  1431→    setEditing(null)
+  1432→    setForm({ name: '', email: '', password: '', pin: '', role: 'staff', storeId: storeId || '' })
+  1433→    setModalOpen(true)
+  1434→  }
+  1435→
+  1436→  const openEdit = (s: any) => {
+  1437→    setEditing(s)
+  1438→    setForm({ name: s.name || '', email: s.email || '', password: '', pin: s.pin || '', role: s.role || 'staff', storeId: s.storeId || '' })
+  1439→    setModalOpen(true)
+  1440→  }
+  1441→
+  1442→  const handleSave = async () => {
+  1443→    if (!form.name.trim() || !form.email.trim()) return
+  1444→    setSaving(true)
+  1445→    setError('')
+  1446→    try {
+  1447→      const payload: any = { name: form.name.trim(), email: form.email.trim(), role: form.role, storeId: form.storeId }
+  1448→      if (form.pin) payload.pin = form.pin
+  1449→      if (form.password) payload.password = form.password
+  1450→      if (editing) {
+  1451→        await api.updateStaff({ ...payload, id: editing.id })
+  1452→      } else {
+  1453→        if (!form.password || !form.pin) {
+  1454→          setError('Password and PIN are required for new staff')
+  1455→          setSaving(false)
+  1456→          return
+  1457→        }
+  1458→        await api.createStaff(payload)
+  1459→      }
+  1460→      setModalOpen(false)
+  1461→      await fetchStaff()
+  1462→    } catch (err: any) {
+  1463→      setError(err.message || 'Failed to save staff member')
+  1464→    } finally {
+  1465→      setSaving(false)
+  1466→    }
+  1467→  }
+  1468→
+  1469→  const handleDelete = async () => {
+  1470→    if (!deleteTarget) return
+  1471→    setSaving(true)
+  1472→    setError('')
+  1473→    try {
+  1474→      await api.deleteStaff(deleteTarget.id)
+  1475→      setConfirmOpen(false)
+  1476→      setDeleteTarget(null)
+  1477→      await fetchStaff()
+  1478→    } catch (err: any) {
+  1479→      setError(err.message || 'Failed to delete staff member')
+  1480→    } finally {
+  1481→      setSaving(false)
+  1482→    }
+  1483→  }
+  1484→
+  1485→  if (loading) return <Spinner />
+  1486→
+  1487→  return (
+  1488→    <div className="space-y-6">
+  1489→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+  1490→        <div>
+  1491→          <h1 className="text-xl font-bold" style={{ color: '#1F1129' }}>Staff Management</h1>
+  1492→          <p className="text-sm mt-0.5" style={{ color: '#8B7FA0' }}>Manage staff accounts, roles, and access</p>
+  1493→        </div>
+  1494→        <button onClick={openAdd} className={btnPrimary} style={{ backgroundColor: '#DC2626' }}>
+  1495→          <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>
+  1496→          Add Staff
+  1497→        </button>
+  1498→      </div>
+  1499→
+  1500→      {error && <ErrorBanner message={error} />}
+  1501→
+  1502→      <div style={cardStyle} className="p-5">
+  1503→        <div className="overflow-x-auto">
+  1504→          <table className="w-full text-sm">
+  1505→            <thead>
+  1506→              <tr className="border-b border-[#E8E0F0]">
+  1507→                <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Name</th>
+  1508→                <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider hidden md:table-cell" style={{ color: '#8B7FA0' }}>Email</th>
+  1509→                <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Role</th>
+  1510→                <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider hidden lg:table-cell" style={{ color: '#8B7FA0' }}>PIN</th>
+  1511→                <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider hidden lg:table-cell" style={{ color: '#8B7FA0' }}>Store</th>
+  1512→                <th className="text-right py-2.5 px-3 text-xs font-semibold uppercase tracking-wider hidden md:table-cell" style={{ color: '#8B7FA0' }}>Sales</th>
+  1513→                <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider hidden lg:table-cell" style={{ color: '#8B7FA0' }}>Status</th>
+  1514→                <th className="text-right py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Actions</th>
+  1515→              </tr>
+  1516→            </thead>
+  1517→            <tbody>
+  1518→              {staff.map((s: any) => (
+  1519→                <tr key={s.id} className="border-b border-[#F5F0EB] last:border-0">
+  1520→                  <td className="py-2.5 px-3 font-medium" style={{ color: '#1F1129' }}>{s.name}</td>
+  1521→                  <td className="py-2.5 px-3 hidden md:table-cell" style={{ color: '#6B5E7A' }}>{s.email}</td>
+  1522→                  <td className="py-2.5 px-3">
+  1523→                    <Badge variant={s.role === 'manager' ? 'amber' : 'blue'}>{s.role}</Badge>
+  1524→                  </td>
+  1525→                  <td className="py-2.5 px-3 hidden lg:table-cell">
+  1526→                    <div className="flex items-center gap-2">
+  1527→                      <span className="font-mono text-sm" style={{ color: '#6B5E7A' }}>
+  1528→                        {visiblePins[s.id] ? (s.pin || '----') : '****'}
+  1529→                      </span>
+  1530→                      <button onClick={() => setVisiblePins({ ...visiblePins, [s.id]: !visiblePins[s.id] })} className="p-0.5 hover:bg-[#F5F0EB] rounded cursor-pointer" aria-label="Toggle PIN visibility">
+  1531→                        {visiblePins[s.id] ? (
+  1532→                          <svg className="w-4 h-4" viewBox="0 0 20 20" fill="#8B7FA0"><path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" /><path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z" /></svg>
+  1533→                        ) : (
+  1534→                          <svg className="w-4 h-4" viewBox="0 0 20 20" fill="#8B7FA0"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z" /><path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" /></svg>
+  1535→                        )}
+  1536→                      </button>
+  1537→                    </div>
+  1538→                  </td>
+  1539→                  <td className="py-2.5 px-3 hidden lg:table-cell" style={{ color: '#6B5E7A' }}>{s.storeName || s.storeId || '-'}</td>
+  1540→                  <td className="py-2.5 px-3 text-right hidden md:table-cell" style={{ color: '#6B5E7A' }}>{s.salesCount ?? 0}</td>
+  1541→                  <td className="py-2.5 px-3 hidden lg:table-cell">
+  1542→                    <Badge variant={s.isActive !== false ? 'green' : 'red'}>{s.isActive !== false ? 'Active' : 'Inactive'}</Badge>
+  1543→                  </td>
+  1544→                  <td className="py-2.5 px-3 text-right">
+  1545→                    <div className="flex items-center justify-end gap-2">
+  1546→                      <button onClick={() => openEdit(s)} className={btnSecondary} style={{ borderColor: '#E8E0F0', color: '#6B5E7A', padding: '4px 10px', fontSize: '12px' }}>Edit</button>
+  1547→                      {s.id !== user?.id && (
+  1548→                        <button onClick={() => { setDeleteTarget(s); setConfirmOpen(true) }} className={btnDanger}>Delete</button>
+  1549→                      )}
+  1550→                    </div>
+  1551→                  </td>
+  1552→                </tr>
+  1553→              ))}
+  1554→              {staff.length === 0 && (
+  1555→                <tr><td colSpan={8} className="py-8 text-center text-sm" style={{ color: '#8B7FA0' }}>No staff members added yet</td></tr>
+  1556→              )}
+  1557→            </tbody>
+  1558→          </table>
+  1559→        </div>
+  1560→      </div>
+  1561→
+  1562→      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Edit Staff Member' : 'Add Staff Member'}>
+  1563→        <div className="space-y-4">
+  1564→          <div>
+  1565→            <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>Name</label>
+  1566→            <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputCls} style={{ borderColor: '#E8E0F0' }} placeholder="Full name" />
+  1567→          </div>
+  1568→          <div>
+  1569→            <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>Email</label>
+  1570→            <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={inputCls} style={{ borderColor: '#E8E0F0' }} placeholder="Email address" />
+  1571→          </div>
+  1572→          <div>
+  1573→            <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>Password {editing && <span style={{ color: '#8B7FA0', fontWeight: 400 }}>(leave blank to keep current)</span>}</label>
+  1574→            <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className={inputCls} style={{ borderColor: '#E8E0F0' }} placeholder={editing ? 'Leave blank to keep current' : 'Password'} />
+  1575→          </div>
+  1576→          <div>
+  1577→            <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>PIN (4 digits)</label>
+  1578→            <input type="text" inputMode="numeric" maxLength={4} value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, '').slice(0, 4) })} className={inputCls} style={{ borderColor: '#E8E0F0', letterSpacing: '0.35em' }} placeholder="4-digit PIN" />
+  1579→          </div>
+  1580→          <div>
+  1581→            <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>Role</label>
+  1582→            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className={inputCls} style={{ borderColor: '#E8E0F0' }}>
+  1583→              <option value="staff">Staff</option>
+  1584→              <option value="manager">Manager</option>
+  1585→            </select>
+  1586→          </div>
+  1587→          <div>
+  1588→            <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>Store</label>
+  1589→            <select value={form.storeId} onChange={(e) => setForm({ ...form, storeId: e.target.value })} className={inputCls} style={{ borderColor: '#E8E0F0' }}>
+  1590→              <option value="">Select store</option>
+  1591→              {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+  1592→            </select>
+  1593→          </div>
+  1594→          <div className="flex justify-end gap-3 pt-2">
+  1595→            <button onClick={() => setModalOpen(false)} className={btnSecondary} style={{ borderColor: '#E8E0F0', color: '#6B5E7A' }}>Cancel</button>
+  1596→            <button onClick={handleSave} disabled={saving || !form.name.trim() || !form.email.trim()} className={btnPrimary} style={{ backgroundColor: '#DC2626' }}>
+  1597→              {saving ? 'Saving...' : editing ? 'Update' : 'Add Staff'}
+  1598→            </button>
+  1599→          </div>
+  1600→        </div>
+  1601→      </Modal>
+  1602→
+  1603→      <ConfirmDialog open={confirmOpen} title="Delete Staff Member" message={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`} onConfirm={handleDelete} onCancel={() => { setConfirmOpen(false); setDeleteTarget(null) }} />
+  1604→    </div>
+  1605→  )
+  1606→}
+  1607→
+  1608→/* ═══════════════════════════════════════════════════════════════════════
+  1609→   9. STORES PAGE (Manager Only)
+  1610→   ═══════════════════════════════════════════════════════════════════════ */
+  1611→export function StoresPage() {
+  1612→  const { storeId, setStoreId } = useAppStore()
+  1613→  const [loading, setLoading] = useState(true)
+  1614→  const [error, setError] = useState('')
+  1615→  const [stores, setStores] = useState<any[]>([])
+  1616→  const [modalOpen, setModalOpen] = useState(false)
+  1617→  const [editing, setEditing] = useState<any>(null)
+  1618→  const [saving, setSaving] = useState(false)
+  1619→  const [form, setForm] = useState({ name: '', location: '' })
+  1620→
+  1621→  const fetchStores = async () => {
+  1622→    setLoading(true)
+  1623→    setError('')
+  1624→    try {
+  1625→      const data = await api.getStores()
+  1626→      setStores(Array.isArray(data) ? data : data.stores || [])
+  1627→    } catch (err: any) {
+  1628→      setError(err.message || 'Failed to load stores')
+  1629→    } finally {
+  1630→      setLoading(false)
+  1631→    }
+  1632→  }
+  1633→
+  1634→  useEffect(() => { fetchStores() }, [])
+  1635→
+  1636→  const openAdd = () => {
+  1637→    setEditing(null)
+  1638→    setForm({ name: '', location: '' })
+  1639→    setModalOpen(true)
+  1640→  }
+  1641→
+  1642→  const openEdit = (s: any) => {
+  1643→    setEditing(s)
+  1644→    setForm({ name: s.name || '', location: s.location || '' })
+  1645→    setModalOpen(true)
+  1646→  }
+  1647→
+  1648→  const handleSave = async () => {
+  1649→    if (!form.name.trim()) return
+  1650→    setSaving(true)
+  1651→    setError('')
+  1652→    try {
+  1653→      if (editing) {
+  1654→        await api.updateStore({ ...form, id: editing.id })
+  1655→      } else {
+  1656→        await api.createStore(form)
+  1657→      }
+  1658→      setModalOpen(false)
+  1659→      await fetchStores()
+  1660→    } catch (err: any) {
+  1661→      setError(err.message || 'Failed to save store')
+  1662→    } finally {
+  1663→      setSaving(false)
+  1664→    }
+  1665→  }
+  1666→
+  1667→  const handleSwitch = async (s: any) => {
+  1668→    if (s.id === storeId) return
+  1669→    try {
+  1670→      await api.switchStore(s.id)
+  1671→      setStoreId(s.id)
+  1672→    } catch (err: any) {
+  1673→      setError(err.message || 'Failed to switch store')
+  1674→    }
+  1675→  }
+  1676→
+  1677→  if (loading) return <Spinner />
+  1678→
+  1679→  return (
+  1680→    <div className="space-y-6">
+  1681→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+  1682→        <div>
+  1683→          <h1 className="text-xl font-bold" style={{ color: '#1F1129' }}>Multi-Store</h1>
+  1684→          <p className="text-sm mt-0.5" style={{ color: '#8B7FA0' }}>Manage multiple store locations</p>
+  1685→        </div>
+  1686→        <button onClick={openAdd} className={btnPrimary} style={{ backgroundColor: '#DC2626' }}>
+  1687→          <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>
+  1688→          Add Store
+  1689→        </button>
+  1690→      </div>
+  1691→
+  1692→      {error && <ErrorBanner message={error} />}
+  1693→
+  1694→      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+  1695→        {stores.map((s: any) => {
+  1696→          const isActive = s.id === storeId
+  1697→          return (
+  1698→            <div
+  1699→              key={s.id}
+  1700→              className="p-5 cursor-pointer transition-all duration-200 hover:shadow-lg relative"
+  1701→              style={{
+  1702→                ...cardStyle,
+  1703→                borderColor: isActive ? '#059669' : 'transparent',
+  1704→                borderWidth: '2px',
+  1705→                borderStyle: 'solid',
+  1706→              }}
+  1707→              onClick={() => handleSwitch(s)}
+  1708→            >
+  1709→              {isActive && (
+  1710→                <div className="absolute top-3 right-3">
+  1711→                  <Badge variant="green">Active</Badge>
+  1712→                </div>
+  1713→              )}
+  1714→              <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ backgroundColor: isActive ? '#05966915' : '#F5F0EB' }}>
+  1715→                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke={isActive ? '#059669' : '#8B7FA0'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  1716→                  <path d="M3 21h18M3 7v14M21 7v14M6 11h4v4H6zM10 3h4l6 4H4l6-4z" />
+  1717→                </svg>
+  1718→              </div>
+  1719→              <h3 className="text-base font-bold mb-1" style={{ color: '#1F1129' }}>{s.name}</h3>
+  1720→              <p className="text-sm mb-3" style={{ color: '#8B7FA0' }}>{s.location || 'No location set'}</p>
+  1721→              <div className="grid grid-cols-3 gap-2 pt-3 border-t border-[#E8E0F0]">
+  1722→                <div className="text-center">
+  1723→                  <p className="text-lg font-bold" style={{ color: '#1F1129' }}>{s.productCount ?? 0}</p>
+  1724→                  <p className="text-xs" style={{ color: '#8B7FA0' }}>Products</p>
+  1725→                </div>
+  1726→                <div className="text-center">
+  1727→                  <p className="text-lg font-bold" style={{ color: '#1F1129' }}>{s.stockValue ? fmt(s.stockValue) : '0'}</p>
+  1728→                  <p className="text-xs" style={{ color: '#8B7FA0' }}>Stock Value</p>
+  1729→                </div>
+  1730→                <div className="text-center">
+  1731→                  <p className="text-lg font-bold" style={{ color: '#1F1129' }}>{s.salesCount ?? 0}</p>
+  1732→                  <p className="text-xs" style={{ color: '#8B7FA0' }}>Sales</p>
+  1733→                </div>
+  1734→              </div>
+  1735→              <div className="flex justify-end mt-3" onClick={(e) => e.stopPropagation()}>
+  1736→                <button onClick={() => openEdit(s)} className={btnSecondary} style={{ borderColor: '#E8E0F0', color: '#6B5E7A', padding: '4px 12px', fontSize: '12px' }}>Edit</button>
+  1737→              </div>
+  1738→            </div>
+  1739→          )
+  1740→        })}
+  1741→        {stores.length === 0 && (
+  1742→          <div className="col-span-full" style={cardStyle}>
+  1743→            <div className="p-12 text-center">
+  1744→              <p className="text-sm" style={{ color: '#8B7FA0' }}>No stores configured. Click "Add Store" to create your first store location.</p>
+  1745→            </div>
+  1746→          </div>
+  1747→        )}
+  1748→      </div>
+  1749→
+  1750→      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Edit Store' : 'Add Store'}>
+  1751→        <div className="space-y-4">
+  1752→          <div>
+  1753→            <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>Store Name</label>
+  1754→            <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputCls} style={{ borderColor: '#E8E0F0' }} placeholder="e.g. Downtown Branch" />
+  1755→          </div>
+  1756→          <div>
+  1757→            <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>Location</label>
+  1758→            <input type="text" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} className={inputCls} style={{ borderColor: '#E8E0F0' }} placeholder="e.g. Nairobi CBD" />
+  1759→          </div>
+  1760→          <div className="flex justify-end gap-3 pt-2">
+  1761→            <button onClick={() => setModalOpen(false)} className={btnSecondary} style={{ borderColor: '#E8E0F0', color: '#6B5E7A' }}>Cancel</button>
+  1762→            <button onClick={handleSave} disabled={saving || !form.name.trim()} className={btnPrimary} style={{ backgroundColor: '#DC2626' }}>
+  1763→              {saving ? 'Saving...' : editing ? 'Update' : 'Add Store'}
+  1764→            </button>
+  1765→          </div>
+  1766→        </div>
+  1767→      </Modal>
+  1768→    </div>
+  1769→  )
+  1770→}
+  1771→
+  1772→/* ═══════════════════════════════════════════════════════════════════════
+  1773→   10. SETTINGS PAGE (Manager Only)
+  1774→   ═══════════════════════════════════════════════════════════════════════ */
+  1775→export function SettingsPage() {
+  1776→  const { org } = useAppStore()
+  1777→  const [loading, setLoading] = useState(true)
+  1778→  const [error, setError] = useState('')
+  1779→  const [settings, setSettings] = useState<any>(null)
+  1780→  const [auditLogs, setAuditLogs] = useState<any[]>([])
+  1781→
+  1782→  const fetchData = async () => {
+  1783→    setLoading(true)
+  1784→    setError('')
+  1785→    try {
+  1786→      const [s, logs] = await Promise.all([api.getSettings(), api.getAuditLogs()])
+  1787→      setSettings(s)
+  1788→      setAuditLogs(Array.isArray(logs) ? logs.slice(0, 20) : (logs.auditLogs || logs.items || []).slice(0, 20))
+  1789→    } catch (err: any) {
+  1790→      setError(err.message || 'Failed to load settings')
+  1791→    } finally {
+  1792→      setLoading(false)
+  1793→    }
+  1794→  }
+  1795→
+  1796→  useEffect(() => { fetchData() }, [])
+  1797→
+  1798→  if (loading) return <Spinner />
+  1799→
+  1800→  const orgData = settings?.org || org || {}
+  1801→  const dataSummary = settings?.dataSummary || {}
+  1802→
+  1803→  return (
+  1804→    <div className="space-y-6">
+  1805→      <div>
+  1806→        <h1 className="text-xl font-bold" style={{ color: '#1F1129' }}>Settings</h1>
+  1807→        <p className="text-sm mt-0.5" style={{ color: '#8B7FA0' }}>Organisation settings and system configuration</p>
+  1808→      </div>
+  1809→
+  1810→      {error && <ErrorBanner message={error} />}
+  1811→
+  1812→      {/* ── Organisation Info ── */}
+  1813→      <div style={cardStyle} className="p-5">
+  1814→        <h2 className="text-base font-bold mb-4" style={{ color: '#1F1129' }}>Organisation Information</h2>
+  1815→        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  1816→          <div>
+  1817→            <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: '#8B7FA0' }}>Business Name</p>
+  1818→            <p className="text-sm font-medium" style={{ color: '#1F1129' }}>{orgData.name || 'Not set'}</p>
+  1819→          </div>
+  1820→          <div>
+  1821→            <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: '#8B7FA0' }}>Plan</p>
+  1822→            <Badge variant="purple">{orgData.plan || 'Trial'}</Badge>
+  1823→          </div>
+  1824→          <div>
+  1825→            <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: '#8B7FA0' }}>Status</p>
+  1826→            <Badge variant={orgData.isActive !== false ? 'green' : 'red'}>{orgData.isActive !== false ? 'Active' : 'Inactive'}</Badge>
+  1827→          </div>
+  1828→          <div>
+  1829→            <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: '#8B7FA0' }}>Trial Ends</p>
+  1830→            <p className="text-sm font-medium" style={{ color: '#1F1129' }}>{orgData.trialEndsAt ? new Date(orgData.trialEndsAt).toLocaleDateString('en-KE', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A'}</p>
+  1831→          </div>
+  1832→        </div>
+  1833→      </div>
+  1834→
+  1835→      {/* ── Data Summary ── */}
+  1836→      <div style={cardStyle} className="p-5">
+  1837→        <h2 className="text-base font-bold mb-4" style={{ color: '#1F1129' }}>Data Summary</h2>
+  1838→        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+  1839→          <StatCard label="Total Products" value={String(dataSummary.totalProducts || 0)} />
+  1840→          <StatCard label="Total Sales" value={String(dataSummary.totalSales || 0)} />
+  1841→          <StatCard label="Total Staff" value={String(dataSummary.totalStaff || 0)} />
+  1842→        </div>
+  1843→      </div>
+  1844→
+  1845→      {/* ── Subscription Readiness ── */}
+  1846→      <div style={cardStyle} className="p-5">
+  1847→        <h2 className="text-base font-bold mb-4" style={{ color: '#1F1129' }}>Subscription Readiness</h2>
+  1848→        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+  1849→          <div className="p-4 rounded-xl" style={{ backgroundColor: '#FAF7F2', border: '1px solid #E8E0F0' }}>
+  1850→            <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: '#8B7FA0' }}>Current Plan</p>
+  1851→            <p className="text-base font-bold" style={{ color: '#1F1129' }}>{orgData.plan || 'Trial'}</p>
+  1852→          </div>
+  1853→          <div className="p-4 rounded-xl" style={{ backgroundColor: '#FAF7F2', border: '1px solid #E8E0F0' }}>
+  1854→            <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: '#8B7FA0' }}>Trial Period</p>
+  1855→            <p className="text-base font-bold" style={{ color: '#1F1129' }}>14 Days</p>
+  1856→          </div>
+  1857→          <div className="p-4 rounded-xl" style={{ backgroundColor: '#FAF7F2', border: '1px solid #E8E0F0' }}>
+  1858→            <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: '#8B7FA0' }}>Active Status</p>
+  1859→            <p className="text-base font-bold" style={{ color: orgData.isActive !== false ? '#059669' : '#DC2626' }}>{orgData.isActive !== false ? 'Yes' : 'No'}</p>
+  1860→          </div>
+  1861→          <div className="p-4 rounded-xl" style={{ backgroundColor: '#FAF7F2', border: '1px solid #E8E0F0' }}>
+  1862→            <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: '#8B7FA0' }}>Renewal Date</p>
+  1863→            <p className="text-base font-bold" style={{ color: '#1F1129' }}>{orgData.trialEndsAt ? new Date(orgData.trialEndsAt).toLocaleDateString('en-KE') : 'N/A'}</p>
+  1864→          </div>
+  1865→        </div>
+  1866→      </div>
+  1867→
+  1868→      {/* ── Audit Log ── */}
+  1869→      <div style={cardStyle} className="p-5">
+  1870→        <h2 className="text-base font-bold mb-4" style={{ color: '#1F1129' }}>Audit Log</h2>
+  1871→        <div className="overflow-x-auto">
+  1872→          <table className="w-full text-sm">
+  1873→            <thead>
+  1874→              <tr className="border-b border-[#E8E0F0]">
+  1875→                <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>User</th>
+  1876→                <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Action</th>
+  1877→                <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider hidden md:table-cell" style={{ color: '#8B7FA0' }}>Entity</th>
+  1878→                <th className="text-left py-2.5 px-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#8B7FA0' }}>Date/Time</th>
+  1879→              </tr>
+  1880→            </thead>
+  1881→            <tbody>
+  1882→              {auditLogs.map((log: any, idx: number) => (
+  1883→                <tr key={idx} className="border-b border-[#F5F0EB] last:border-0">
+  1884→                  <td className="py-2.5 px-3 font-medium" style={{ color: '#1F1129' }}>{log.userName || log.user || '-'}</td>
+  1885→                  <td className="py-2.5 px-3">
+  1886→                    <Badge variant={log.action?.includes('delete') ? 'red' : log.action?.includes('create') ? 'green' : 'blue'}>
+  1887→                      {log.action || '-'}
+  1888→                    </Badge>
+  1889→                  </td>
+  1890→                  <td className="py-2.5 px-3 hidden md:table-cell" style={{ color: '#6B5E7A' }}>{log.entity || log.entityType || '-'}</td>
+  1891→                  <td className="py-2.5 px-3 text-sm" style={{ color: '#8B7FA0' }}>{log.createdAt ? new Date(log.createdAt).toLocaleString('en-KE') : '-'}</td>
+  1892→                </tr>
+  1893→              ))}
+  1894→              {auditLogs.length === 0 && (
+  1895→                <tr><td colSpan={4} className="py-8 text-center text-sm" style={{ color: '#8B7FA0' }}>No audit logs found</td></tr>
+  1896→              )}
+  1897→            </tbody>
+  1898→          </table>
+  1899→        </div>
+  1900→      </div>
+  1901→    </div>
+  1902→  )
+  1903→}
+  1904→
+  1905→/* ═══════════════════════════════════════════════════════════════════════
+  1906→   11. SUPER ADMIN PAGE (super_admin only)
+  1907→   ═══════════════════════════════════════════════════════════════════════ */
+  1908→export function SuperAdminPage() {
+  1909→  const [loading, setLoading] = useState(true)
+  1910→  const [error, setError] = useState('')
+  1911→  const [data, setData] = useState<any>(null)
+  1912→
+  1913→  useEffect(() => {
+  1914→    const fetch = async () => {
+  1915→      setLoading(true)
+  1916→      setError('')
+  1917→      try {
+  1918→        const d = await api.getSuperAdmin()
+  1919→        setData(d)
+  1920→      } catch (err: any) {
+  1921→        setError(err.message || 'Failed to load admin data')
+  1922→      } finally {
+  1923→        setLoading(false)
+  1924→      }
+  1925→    }
+  1926→    fetch()
+  1927→  }, [])
+  1928→
+  1929→  if (loading) return (
+  1930→    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#0F0A1A' }}>
+  1931→      <svg className="animate-spin h-8 w-8" viewBox="0 0 24 24" fill="none" style={{ color: '#F59E0B' }}>
+  1932→        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+  1933→        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+  1934→      </svg>
+  1935→    </div>
+  1936→  )
+  1937→
+  1938→  const summary = data?.summary || {}
+  1939→  const organisations = data?.organisations || data?.recentOrgs || []
+  1940→
+  1941→  const saCard: React.CSSProperties = {
+  1942→    backgroundColor: '#1A1225',
+  1943→    borderRadius: '14px',
+  1944→    border: '1px solid rgba(255,255,255,0.06)',
+  1945→    boxShadow: '0 4px 12px rgba(0,0,0,.3)',
+  1946→  }
+  1947→
+  1948→  const saTableCard: React.CSSProperties = {
+  1949→    backgroundColor: '#1A1225',
+  1950→    borderRadius: '14px',
+  1951→    border: '1px solid rgba(255,255,255,0.06)',
+  1952→    boxShadow: '0 4px 12px rgba(0,0,0,.3)',
+  1953→  }
+  1954→
+  1955→  return (
+  1956→    <div className="min-h-screen p-6" style={{ backgroundColor: '#0F0A1A' }}>
+  1957→      <div className="max-w-7xl mx-auto space-y-6">
+  1958→        <div>
+  1959→          <h1 className="text-xl font-bold text-white">Super Admin Dashboard</h1>
+  1960→          <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>System-wide management and monitoring</p>
+  1961→        </div>
+  1962→
+  1963→        {error && (
+  1964→          <div className="px-4 py-2.5 rounded-xl text-sm font-medium" style={{ backgroundColor: 'rgba(220,38,38,0.15)', color: '#FCA5A5', border: '1px solid rgba(220,38,38,0.3)' }}>
+  1965→            {error}
+  1966→          </div>
+  1967→        )}
+  1968→
+  1969→        {/* ── Stat Cards ── */}
+  1970→        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+  1971→          <div style={saCard} className="p-4">
+  1972→            <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Total Orgs</p>
+  1973→            <p className="text-2xl font-bold text-white">{summary.totalOrganisations ?? 0}</p>
+  1974→          </div>
+  1975→          <div style={saCard} className="p-4">
+  1976→            <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Active Subs</p>
+  1977→            <p className="text-2xl font-bold" style={{ color: '#10B981' }}>{summary.activeSubscriptions ?? 0}</p>
+  1978→          </div>
+  1979→          <div style={saCard} className="p-4">
+  1980→            <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Trial Accounts</p>
+  1981→            <p className="text-2xl font-bold" style={{ color: '#F59E0B' }}>{summary.trialAccounts ?? 0}</p>
+  1982→          </div>
+  1983→          <div style={saCard} className="p-4">
+  1984→            <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Total Users</p>
+  1985→            <p className="text-2xl font-bold text-white">{summary.totalUsers ?? 0}</p>
+  1986→          </div>
+  1987→          <div style={saCard} className="p-4">
+  1988→            <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Total Products</p>
+  1989→            <p className="text-2xl font-bold text-white">{summary.totalProducts ?? 0}</p>
+  1990→          </div>
+  1991→          <div style={saCard} className="p-4">
+  1992→            <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Total Sales</p>
+  1993→            <p className="text-2xl font-bold text-white">{summary.totalSales ?? 0}</p>
+  1994→          </div>
+  1995→        </div>
+  1996→
+  1997→        {/* ── Organisations Table ── */}
+  1998→        <div style={saTableCard} className="p-5">
+  1999→          <h2 className="text-base font-bold text-white mb-4">Recent Organisations</h2>
+  2000→          <div className="overflow-x-auto">
+
+[showing lines 1-2000 of 2044; use offset=2001 with limit to continue reading]

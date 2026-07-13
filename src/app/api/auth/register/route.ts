@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       await db.product.create({
         data: {
           name: p.name, sku: generateId('sku').toUpperCase(), barcode: generateBarcode(),
-          category: p.category, size: p.size, openingStock: p.stock, currentStock: p.stock,
+          size: p.size, openingStock: p.stock, currentStock: p.stock,
           reorderLevel: p.reorder, costPrice: p.cost, sellPrice: p.sell,
           organisationId: org.id, storeId: store.id, categoryId: catMap[p.category] || null,
         }

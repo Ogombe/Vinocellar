@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     if (pin) {
       user = await db.user.findUnique({ where: { pin }, include: { organisation: true, store: true } })
       if (!user || !user.isActive) return NextResponse.json({ error: 'Invalid PIN' }, { status: 401 })
-      if (user.role !== 'manager') return NextResponse.json({ error: 'PIN login is for managers only' }, { status: 403 })
+      if (user.role !== 'manager' && user.role !== 'super_admin') return NextResponse.json({ error: 'PIN login is for managers only' }, { status: 403 })
     } else {
       user = await db.user.findFirst({ where: { email: email.toLowerCase() }, include: { organisation: true, store: true } })
       if (!user || !user.isActive) return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       if (!valid) return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
     }
 
-    if (!user.organisation.isActive) return NextResponse.json({ error: 'Organisation is inactive' }, { status: 403 })
+    if (!user.organisation.isActive && user.role !== 'super_admin') return NextResponse.json({ error: 'Organisation is inactive' }, { status: 403 })
     await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
 
     const token = createToken({ userId: user.id, organisationId: user.organisationId, role: user.role, name: user.name })

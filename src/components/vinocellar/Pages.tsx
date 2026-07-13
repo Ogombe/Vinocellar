@@ -155,7 +155,7 @@ export function StockTakePage() {
         setActiveCount(active)
         const initCounts: Record<string, number> = {}
         ;(active.items || []).forEach((item: any) => {
-          initCounts[item.productId] = item.countedQty ?? item.expectedQty ?? 0
+          initCounts[item.productId] = item.counted ?? item.expected ?? 0
         })
         setCounts(initCounts)
       }
@@ -191,9 +191,9 @@ export function StockTakePage() {
     setError('')
     try {
       const items = (activeCount.items || []).map((item: any) => ({
+        id: item.id,
         productId: item.productId,
-        expectedQty: item.expectedQty,
-        countedQty: counts[item.productId] ?? item.expectedQty ?? 0,
+        counted: counts[item.productId] ?? item.expected ?? 0,
       }))
       await api.updateStockTake({ stockTakeId: activeCount.id, items, action: 'submit' })
       await fetchStockTakes()
@@ -224,7 +224,7 @@ export function StockTakePage() {
   if (loading) return <Spinner />
 
   const filteredItems = (activeCount?.items || []).filter((item: any) =>
-    item.productName?.toLowerCase().includes(search.toLowerCase())
+    (item.product?.name || item.productName || '').toLowerCase().includes(search.toLowerCase())
   )
 
   const statusBadge = (status: string) => {
@@ -282,8 +282,8 @@ export function StockTakePage() {
               <tbody>
                 {filteredItems.map((item: any) => (
                   <tr key={item.productId} className="border-b border-[#F5F0EB] last:border-0">
-                    <td className="py-2.5 px-3 font-medium" style={{ color: '#1F1129' }}>{item.productName || item.name || 'Unknown'}</td>
-                    <td className="py-2.5 px-3 text-right" style={{ color: '#6B5E7A' }}>{item.expectedQty ?? 0}</td>
+                    <td className="py-2.5 px-3 font-medium" style={{ color: '#1F1129' }}>{item.product?.name || item.productName || item.name || 'Unknown'}</td>
+                    <td className="py-2.5 px-3 text-right" style={{ color: '#6B5E7A' }}>{item.expected ?? 0}</td>
                     <td className="py-2.5 px-3 text-right">
                       <input
                         type="number"
@@ -565,7 +565,7 @@ export function SuppliersPage() {
   const [deleteTarget, setDeleteTarget] = useState<any>(null)
   const [saving, setSaving] = useState(false)
 
-  const [form, setForm] = useState({ name: '', contactPerson: '', phone: '', email: '', productTypes: '' })
+  const [form, setForm] = useState({ name: '', contact: '', phone: '', email: '', productTypes: '' })
 
   const fetchSuppliers = async () => {
     setLoading(true)
@@ -584,13 +584,13 @@ export function SuppliersPage() {
 
   const openAdd = () => {
     setEditing(null)
-    setForm({ name: '', contactPerson: '', phone: '', email: '', productTypes: '' })
+    setForm({ name: '', contact: '', phone: '', email: '', productTypes: '' })
     setModalOpen(true)
   }
 
   const openEdit = (s: any) => {
     setEditing(s)
-    setForm({ name: s.name || '', contactPerson: s.contactPerson || '', phone: s.phone || '', email: s.email || '', productTypes: (s.productTypes || []).join(', ') })
+    setForm({ name: s.name || '', contact: s.contact || '', phone: s.phone || '', email: s.email || '', productTypes: typeof s.productTypes === 'string' ? s.productTypes : (s.productTypes || []).join(', ') })
     setModalOpen(true)
   }
 
@@ -599,7 +599,7 @@ export function SuppliersPage() {
     setSaving(true)
     setError('')
     try {
-      const payload = { ...form, productTypes: form.productTypes.split(',').map((s: string) => s.trim()).filter(Boolean) }
+      const payload = { ...form, productTypes: form.productTypes }
       if (editing) {
         await api.updateSupplier({ ...payload, id: editing.id })
       } else {
@@ -665,17 +665,17 @@ export function SuppliersPage() {
               {suppliers.map((s: any) => (
                 <tr key={s.id} className="border-b border-[#F5F0EB] last:border-0">
                   <td className="py-2.5 px-3 font-medium" style={{ color: '#1F1129' }}>{s.name}</td>
-                  <td className="py-2.5 px-3 hidden md:table-cell" style={{ color: '#6B5E7A' }}>{s.contactPerson || '-'}</td>
+                  <td className="py-2.5 px-3 hidden md:table-cell" style={{ color: '#6B5E7A' }}>{s.contact || '-'}</td>
                   <td className="py-2.5 px-3 hidden lg:table-cell" style={{ color: '#6B5E7A' }}>{s.phone || '-'}</td>
                   <td className="py-2.5 px-3 hidden lg:table-cell" style={{ color: '#6B5E7A' }}>{s.email || '-'}</td>
                   <td className="py-2.5 px-3 hidden md:table-cell">
                     <div className="flex flex-wrap gap-1">
-                      {(s.productTypes || []).map((t: string, i: number) => (
+                      {(typeof s.productTypes === 'string' ? s.productTypes.split(',').map((t: string) => t.trim()) : (s.productTypes || [])).map((t: string, i: number) => (
                         <Badge key={i} variant="purple">{t}</Badge>
                       ))}
                     </div>
                   </td>
-                  <td className="py-2.5 px-3 text-right" style={{ color: '#6B5E7A' }}>{s.itemsSupplied ?? 0}</td>
+                  <td className="py-2.5 px-3 text-right" style={{ color: '#6B5E7A' }}>{s._count?.products ?? 0}</td>
                   <td className="py-2.5 px-3 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button onClick={() => openEdit(s)} className={btnSecondary} style={{ borderColor: '#E8E0F0', color: '#6B5E7A', padding: '4px 10px', fontSize: '12px' }}>Edit</button>
@@ -700,7 +700,7 @@ export function SuppliersPage() {
           </div>
           <div>
             <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>Contact Person</label>
-            <input type="text" value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} className={inputCls} style={{ borderColor: '#E8E0F0' }} placeholder="Contact person" />
+            <input type="text" value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} className={inputCls} style={{ borderColor: '#E8E0F0' }} placeholder="Contact person" />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>Phone</label>
@@ -1936,7 +1936,11 @@ export function SuperAdminPage() {
   )
 
   const summary = data?.summary || {}
-  const organisations = data?.organisations || data?.recentOrgs || []
+  const organisations = (data?.organisations || data?.recentOrgs || []).map((org: any) => ({
+    ...org,
+    userCount: org._count?.users ?? org.userCount ?? 0,
+    productCount: org._count?.products ?? org.productCount ?? 0,
+  }))
 
   const saCard: React.CSSProperties = {
     backgroundColor: '#1A1225',

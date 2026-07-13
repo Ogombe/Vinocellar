@@ -1,4 +1,4 @@
-import { createHash, randomBytes, createHmac, timingSafeEqual, scrypt } from 'crypto'
+import { createHash, randomBytes, randomUUID, createHmac, timingSafeEqual, scrypt } from 'crypto'
 
 const HMAC_SECRET = process.env.HMAC_SECRET || 'vinocellar-pro-secret-key-2024'
 

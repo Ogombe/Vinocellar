@@ -1,0 +1,715 @@
+     1→'use client'
+     2→import { useEffect, useState } from 'react'
+     3→import { useAppStore } from '@/lib/store'
+     4→import { api } from '@/lib/api'
+     5→import {
+     6→  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+     7→  Tooltip, ResponsiveContainer, Area, AreaChart
+     8→} from 'recharts'
+     9→
+    10→/* ------------------------------------------------------------------ */
+    11→/*  Types                                                              */
+    12→/* ------------------------------------------------------------------ */
+    13→interface DashboardData {
+    14→  todaySales: number
+    15→  todaySalesCount: number
+    16→  weeklySales: number
+    17→  monthlySales: number
+    18→  inventoryValue: number
+    19→  totalProducts: number
+    20→  lowStock: number
+    21→  outOfStock: number
+    22→  healthScore: number
+    23→  weeklyRevenueTrend: { day: string; revenue: number }[]
+    24→  topSellers: { name: string; revenue: number }[]
+    25→  fastMovers: { name: string; unitsSold: number; revenue: number }[]
+    26→  slowMovers: { name: string; unitsSold: number; revenue: number }[]
+    27→  recentActivity: { user: string; action: string; time: string }[]
+    28→  lowStockProducts: { name: string; stock: number }[]
+    29→  outOfStockProducts: { name: string }[]
+    30→  highestMarginProduct: { name: string; margin: number } | null
+    31→  deadStock: { name: string; daysSinceSale: number }[]
+    32→  yesterdayRevenue: number
+    33→}
+    34→
+    35→/* ------------------------------------------------------------------ */
+    36→/*  Helpers                                                            */
+    37→/* ------------------------------------------------------------------ */
+    38→const fmt = (n: number) => 'KSh ' + n.toLocaleString('en-KE')
+    39→
+    40→const scoreLabel = (s: number): string => {
+    41→  if (s >= 80) return 'Excellent'
+    42→  if (s >= 60) return 'Good'
+    43→  if (s >= 40) return 'Fair'
+    44→  if (s >= 20) return 'Poor'
+    45→  return 'Critical'
+    46→}
+    47→
+    48→/* ------------------------------------------------------------------ */
+    49→/*  Gradient variants                                                  */
+    50→/* ------------------------------------------------------------------ */
+    51→const gradients: Record<string, { from: string; to: string; icon: string }> = {
+    52→  crimson:  { from: '#DC2626', to: '#991B1B', icon: 'sales' },
+    53→  amber:    { from: '#F59E0B', to: '#D97706', icon: 'chart' },
+    54→  emerald:  { from: '#10B981', to: '#059669', icon: 'calendar' },
+    55→  blue:     { from: '#3B82F6', to: '#2563EB', icon: 'wallet' },
+    56→  purple:   { from: '#8B5CF6', to: '#6D28D9', icon: 'box' },
+    57→  teal:     { from: '#14B8A6', to: '#0D9488', icon: 'health' },
+    58→  pink:     { from: '#EC4899', to: '#DB2777', icon: 'trend' },
+    59→  orange:   { from: '#F97316', to: '#EA580C', icon: 'alert' },
+    60→}
+    61→
+    62→/* ------------------------------------------------------------------ */
+    63→/*  Watermark icons (SVG, no emoji)                                    */
+    64→/* ------------------------------------------------------------------ */
+    65→function WatermarkIcon({ type }: { type: string }) {
+    66→  const cls = 'absolute -right-2 -bottom-2 opacity-10 pointer-events-none'
+    67→  const size = 80
+    68→  switch (type) {
+    69→    case 'sales':
+    70→      return (
+    71→        <svg className={cls} width={size} height={size} viewBox="0 0 24 24" fill="white">
+    72→          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.41 16.09V20h-2.67v-1.93c-1.71-.36-3.16-1.46-3.27-3.4h1.96c.1 1.05.82 1.87 2.65 1.87 1.96 0 2.4-.98 2.4-1.59 0-.83-.44-1.61-2.67-2.14-2.48-.6-4.18-1.62-4.18-3.67 0-1.72 1.39-2.84 3.11-3.21V4h2.67v1.95c1.86.45 2.79 1.86 2.85 3.39H14.3c-.05-1.11-.64-1.87-2.22-1.87-1.5 0-2.4.68-2.4 1.64 0 .84.65 1.39 2.67 1.94s4.18 1.36 4.18 3.85c0 1.89-1.44 2.98-3.12 3.19z"/>
+    73→        </svg>
+    74→      )
+    75→    case 'chart':
+    76→      return (
+    77→        <svg className={cls} width={size} height={size} viewBox="0 0 24 24" fill="white">
+    78→          <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+    79→        </svg>
+    80→      )
+    81→    case 'calendar':
+    82→      return (
+    83→        <svg className={cls} width={size} height={size} viewBox="0 0 24 24" fill="white">
+    84→          <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM5 8V6h14v2H5zm2 4h10v2H7v-2zm0 4h7v2H7v-2z"/>
+    85→        </svg>
+    86→      )
+    87→    case 'wallet':
+    88→      return (
+    89→        <svg className={cls} width={size} height={size} viewBox="0 0 24 24" fill="white">
+    90→          <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+    91→        </svg>
+    92→      )
+    93→    case 'box':
+    94→      return (
+    95→        <svg className={cls} width={size} height={size} viewBox="0 0 24 24" fill="white">
+    96→          <path d="M20 2H4c-1 0-2 .9-2 2v3.01c0 .72.43 1.34 1 1.69V20c0 1.1 1.1 2 2 2h14c.9 0 2-.9 2-2V8.7c.57-.35 1-.97 1-1.69V5c0-1.1-1-3-2-3zm-5 12H9v-2h6v2zm5-7H4V5h16v2z"/>
+    97→        </svg>
+    98→      )
+    99→    case 'health':
+   100→      return (
+   101→        <svg className={cls} width={size} height={size} viewBox="0 0 24 24" fill="white">
+   102→          <path d="M19.5 9.5c-1.03 0-1.9.62-2.29 1.5h-2.92c-.39-.88-1.26-1.5-2.29-1.5s-1.9.62-2.29 1.5H6.79c-.39-.88-1.26-1.5-2.29-1.5C3.12 9.5 2 10.62 2 12s1.12 2.5 2.5 2.5c1.03 0 1.9-.62 2.29-1.5h2.92c.39.88 1.26 1.5 2.29 1.5s1.9-.62 2.29-1.5h2.92c.39.88 1.26 1.5 2.29 1.5 1.38 0 2.5-1.12 2.5-2.5s-1.12-2.5-2.5-2.5z"/>
+   103→        </svg>
+   104→      )
+   105→    case 'alert':
+   106→      return (
+   107→        <svg className={cls} width={size} height={size} viewBox="0 0 24 24" fill="white">
+   108→          <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+   109→        </svg>
+   110→      )
+   111→    default:
+   112→      return (
+   113→        <svg className={cls} width={size} height={size} viewBox="0 0 24 24" fill="white">
+   114→          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+   115→        </svg>
+   116→      )
+   117→  }
+   118→}
+   119→
+   120→/* ------------------------------------------------------------------ */
+   121→/*  Health Score Ring                                                  */
+   122→/* ------------------------------------------------------------------ */
+   123→function HealthScoreRing({ score }: { score: number }) {
+   124→  const radius = 38
+   125→  const circumference = 2 * Math.PI * radius
+   126→  const offset = circumference - (score / 100) * circumference
+   127→  const label = scoreLabel(score)
+   128→  const color = score >= 60 ? '#10B981' : score >= 40 ? '#F59E0B' : '#DC2626'
+   129→
+   130→  return (
+   131→    <div className="flex items-center justify-center">
+   132→      <svg width="100" height="100" viewBox="0 0 100 100">
+   133→        <defs>
+   134→          <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+   135→            <stop offset="0%" stopColor="#10B981" />
+   136→            <stop offset="100%" stopColor="#F59E0B" />
+   137→          </linearGradient>
+   138→        </defs>
+   139→        <circle
+   140→          cx="50" cy="50" r={radius}
+   141→          fill="none" stroke="#E5E7EB" strokeWidth="8"
+   142→        />
+   143→        <circle
+   144→          cx="50" cy="50" r={radius}
+   145→          fill="none"
+   146→          stroke="url(#scoreGrad)"
+   147→          strokeWidth="8"
+   148→          strokeLinecap="round"
+   149→          strokeDasharray={circumference}
+   150→          strokeDashoffset={offset}
+   151→          transform="rotate(-90 50 50)"
+   152→          style={{ transition: 'stroke-dashoffset 1s ease' }}
+   153→        />
+   154→        <text
+   155→          x="50" y="46" textAnchor="middle" dominantBaseline="central"
+   156→          fill={color}
+   157→          fontSize="22" fontWeight="700" fontFamily="system-ui, sans-serif"
+   158→        >
+   159→          {score}
+   160→        </text>
+   161→        <text
+   162→          x="50" y="64" textAnchor="middle" dominantBaseline="central"
+   163→          fill="#9CA3AF"
+   164→          fontSize="9" fontWeight="500" fontFamily="system-ui, sans-serif"
+   165→        >
+   166→          {label}
+   167→        </text>
+   168→      </svg>
+   169→    </div>
+   170→  )
+   171→}
+   172→
+   173→/* ------------------------------------------------------------------ */
+   174→/*  Skeleton loaders                                                   */
+   175→/* ------------------------------------------------------------------ */
+   176→function StatCardSkeleton() {
+   177→  return (
+   178→    <div className="rounded-[14px] p-5 animate-pulse" style={{ background: '#E5E7EB' }}>
+   179→      <div className="h-4 w-24 rounded bg-gray-300 mb-3" />
+   180→      <div className="h-7 w-32 rounded bg-gray-300 mb-2" />
+   181→      <div className="h-3 w-20 rounded bg-gray-300" />
+   182→    </div>
+   183→  )
+   184→}
+   185→
+   186→function ChartSkeleton() {
+   187→  return (
+   188→    <div className="bg-white rounded-[14px] p-5 shadow-[0_4px_12px_rgba(31,17,41,.06)] animate-pulse">
+   189→      <div className="h-5 w-40 rounded bg-gray-200 mb-4" />
+   190→      <div className="h-64 rounded bg-gray-100" />
+   191→    </div>
+   192→  )
+   193→}
+   194→
+   195→/* ------------------------------------------------------------------ */
+   196→/*  Stat Card                                                          */
+   197→/* ------------------------------------------------------------------ */
+   198→function StatCard({
+   199→  gradient, label, value, sub, children
+   200→}: {
+   201→  gradient: string
+   202→  label: string
+   203→  value: string
+   204→  sub?: string
+   205→  children?: React.ReactNode
+   206→}) {
+   207→  const g = gradients[gradient]
+   208→  return (
+   209→    <div
+   210→      className="relative overflow-hidden rounded-[14px] p-5 text-white shadow-[0_4px_12px_rgba(31,17,41,.06)]"
+   211→      style={{ background: `linear-gradient(135deg, ${g.from}, ${g.to})` }}
+   212→    >
+   213→      <WatermarkIcon type={g.icon} />
+   214→      <p className="text-sm font-medium opacity-90 mb-1">{label}</p>
+   215→      <p className="text-2xl font-bold tracking-tight leading-tight">{value}</p>
+   216→      {sub && <p className="text-xs opacity-80 mt-1">{sub}</p>}
+   217→      {children}
+   218→    </div>
+   219→  )
+   220→}
+   221→
+   222→/* ------------------------------------------------------------------ */
+   223→/*  Time ago helper                                                    */
+   224→/* ------------------------------------------------------------------ */
+   225→function timeAgo(t: string): string {
+   226→  const diff = Date.now() - new Date(t).getTime()
+   227→  const mins = Math.floor(diff / 60000)
+   228→  if (mins < 1) return 'just now'
+   229→  if (mins < 60) return `${mins}m ago`
+   230→  const hrs = Math.floor(mins / 60)
+   231→  if (hrs < 24) return `${hrs}h ago`
+   232→  const days = Math.floor(hrs / 24)
+   233→  return `${days}d ago`
+   234→}
+   235→
+   236→/* ------------------------------------------------------------------ */
+   237→/*  Main Dashboard Page                                                */
+   238→/* ------------------------------------------------------------------ */
+   239→export function DashboardPage() {
+   240→  const storeId = useAppStore(s => s.storeId)
+   241→  const isManager = useAppStore(s => s.isManager)
+   242→  const [data, setData] = useState<DashboardData | null>(null)
+   243→  const [loading, setLoading] = useState(true)
+   244→
+   245→  useEffect(() => {
+   246→    let cancelled = false
+   247→    api
+   248→      .getDashboard(storeId ? 'storeId=' + storeId : '')
+   249→      .then((res) => {
+   250→        if (!cancelled) setData(res)
+   251→      })
+   252→      .catch(() => {
+   253→        if (!cancelled) setData(null)
+   254→      })
+   255→      .finally(() => {
+   256→        if (!cancelled) setLoading(false)
+   257→      })
+   258→    return () => { cancelled = true }
+   259→  }, [storeId])
+   260→
+   261→  /* ---- Staff view (simplified) ---- */
+   262→  if (!isManager) {
+   263→    return (
+   264→      <div className="p-4 md:p-6 space-y-6" style={{ background: '#FAF7F2', minHeight: '100vh' }}>
+   265→        <div>
+   266→          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+   267→          <p className="text-sm text-gray-500 mt-1">Your store at a glance</p>
+   268→        </div>
+   269→
+   270→        {loading ? (
+   271→          <div className="grid grid-cols-2 gap-4">
+   272→            <StatCardSkeleton />
+   273→            <StatCardSkeleton />
+   274→            <StatCardSkeleton />
+   275→          </div>
+   276→        ) : data ? (
+   277→          <>
+   278→            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+   279→              <StatCard gradient="crimson" label="Today's Sales" value={fmt(data.todaySales)} sub={`${data.todaySalesCount || 0} sales`} />
+   280→              <StatCard gradient="orange" label="Low Stock" value={String(data.lowStock)} sub="items below threshold" />
+   281→              <StatCard gradient="crimson" label="Out of Stock" value={String(data.outOfStock)} sub="need restocking" />
+   282→            </div>
+   283→
+   284→            {/* Staff activity list */}
+   285→            <div className="bg-white rounded-[14px] p-5 shadow-[0_4px_12px_rgba(31,17,41,.06)]">
+   286→              <h2 className="text-base font-semibold text-gray-900 mb-4">Recent Activity</h2>
+   287→              {data.recentActivity && data.recentActivity.length > 0 ? (
+   288→                <ul className="divide-y divide-gray-100">
+   289→                  {data.recentActivity.slice(0, 8).map((a, i) => (
+   290→                    <li key={i} className="flex items-center justify-between py-3">
+   291→                      <div className="flex items-center gap-3">
+   292→                        <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-semibold text-gray-600">
+   293→                          {a.user?.charAt(0)?.toUpperCase() || 'U'}
+   294→                        </div>
+   295→                        <div>
+   296→                          <p className="text-sm font-medium text-gray-800">{a.user}</p>
+   297→                          <p className="text-xs text-gray-500">{a.action}</p>
+   298→                        </div>
+   299→                      </div>
+   300→                      <span className="text-xs text-gray-400 whitespace-nowrap">{timeAgo(a.time)}</span>
+   301→                    </li>
+   302→                  ))}
+   303→                </ul>
+   304→              ) : (
+   305→                <p className="text-sm text-gray-400">No recent activity</p>
+   306→              )}
+   307→            </div>
+   308→          </>
+   309→        ) : (
+   310→          <div className="bg-white rounded-[14px] p-10 text-center shadow-[0_4px_12px_rgba(31,17,41,.06)]">
+   311→            <p className="text-gray-400">Unable to load dashboard data.</p>
+   312→          </div>
+   313→        )}
+   314→      </div>
+   315→    )
+   316→  }
+   317→
+   318→  /* ---- Manager view (full) ---- */
+   319→  const insights: { title: string; items: string[] }[] = []
+   320→
+   321→  if (data) {
+   322→    // Low stock alerts
+   323→    if (data.lowStockProducts && data.lowStockProducts.length > 0) {
+   324→      insights.push({
+   325→        title: 'Low Stock Alerts',
+   326→        items: data.lowStockProducts.slice(0, 3).map(
+   327→          (p) => `${p.name} has only ${p.stock} units remaining. Reorder soon to avoid stockouts.`
+   328→        ),
+   329→      })
+   330→    }
+   331→
+   332→    // Day-over-day revenue
+   333→    if (data.yesterdayRevenue != null) {
+   334→      const diff = data.todaySales - data.yesterdayRevenue
+   335→      const pct = data.yesterdayRevenue > 0 ? ((diff / data.yesterdayRevenue) * 100).toFixed(1) : 'N/A'
+   336→      if (diff >= 0) {
+   337→        insights.push({
+   338→          title: 'Revenue Trend',
+   339→          items: [`Today's revenue is up ${pct}% compared to yesterday (${fmt(data.yesterdayRevenue)}). Sales momentum is strong.`],
+   340→        })
+   341→      } else {
+   342→        insights.push({
+   343→          title: 'Revenue Trend',
+   344→          items: [`Today's revenue is down ${Math.abs(Number(pct))}% compared to yesterday (${fmt(data.yesterdayRevenue)}). Consider running promotions.`],
+   345→        })
+   346→      }
+   347→    }
+   348→
+   349→    // Highest margin
+   350→    if (data.highestMarginProduct) {
+   351→      insights.push({
+   352→        title: 'Top Margin Product',
+   353→        items: [`${data.highestMarginProduct.name} has the highest margin at ${data.highestMarginProduct.margin}%. Prioritize its placement.`],
+   354→      })
+   355→    }
+   356→
+   357→    // Dead stock
+   358→    if (data.deadStock && data.deadStock.length > 0) {
+   359→      insights.push({
+   360→        title: 'Dead Stock Detected',
+   361→        items: data.deadStock.slice(0, 3).map(
+   362→          (p) => `${p.name} has not sold in ${p.daysSinceSale} days. Consider discounting or removing.`
+   363→        ),
+   364→      })
+   365→    }
+   366→
+   367→    // Health score
+   368→    insights.push({
+   369→      title: 'Inventory Health',
+   370→      items: [
+   371→        data.healthScore >= 80
+   372→          ? 'Your inventory health is excellent. Keep up the great management.'
+   373→          : data.healthScore >= 60
+   374→          ? 'Inventory health is good but has room for improvement. Focus on reducing dead stock.'
+   375→          : data.healthScore >= 40
+   376→          ? 'Inventory health is fair. Address low stock and dead stock items urgently.'
+   377→          : data.healthScore >= 20
+   378→          ? 'Inventory health is poor. Significant restocking and dead stock clearance needed.'
+   379→          : 'Inventory health is critical. Immediate intervention required to prevent revenue loss.',
+   380→      ],
+   381→    })
+   382→  }
+   383→
+   384→  return (
+   385→    <div className="p-4 md:p-6 space-y-6" style={{ background: '#FAF7F2', minHeight: '100vh' }}>
+   386→      {/* Header */}
+   387→      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+   388→        <div>
+   389→          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+   390→          <p className="text-sm text-gray-500 mt-1">Business performance overview</p>
+   391→        </div>
+   392→        <div className="flex items-center gap-2 text-xs text-gray-400">
+   393→          <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+   394→          Live data
+   395→        </div>
+   396→      </div>
+   397→
+   398→      {/* Row 1: Main KPIs */}
+   399→      {loading ? (
+   400→        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+   401→          <StatCardSkeleton />
+   402→          <StatCardSkeleton />
+   403→          <StatCardSkeleton />
+   404→          <StatCardSkeleton />
+   405→        </div>
+   406→      ) : data ? (
+   407→        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+   408→          <StatCard
+   409→            gradient="crimson"
+   410→            label="Today's Sales"
+   411→            value={fmt(data.todaySales)}
+   412→            sub={`${data.todaySalesCount || 0} sales today`}
+   413→          />
+   414→          <StatCard
+   415→            gradient="amber"
+   416→            label="Weekly Sales"
+   417→            value={fmt(data.weeklySales)}
+   418→          />
+   419→          <StatCard
+   420→            gradient="emerald"
+   421→            label="Monthly Sales"
+   422→            value={fmt(data.monthlySales)}
+   423→          />
+   424→          <StatCard
+   425→            gradient="blue"
+   426→            label="Inventory Value"
+   427→            value={fmt(data.inventoryValue)}
+   428→          />
+   429→        </div>
+   430→      ) : null}
+   431→
+   432→      {/* Row 2: Inventory KPIs */}
+   433→      {loading ? (
+   434→        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+   435→          <StatCardSkeleton />
+   436→          <StatCardSkeleton />
+   437→          <StatCardSkeleton />
+   438→          <StatCardSkeleton />
+   439→        </div>
+   440→      ) : data ? (
+   441→        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+   442→          <StatCard
+   443→            gradient="purple"
+   444→            label="Total Products"
+   445→            value={String(data.totalProducts)}
+   446→            sub="active SKUs"
+   447→          />
+   448→          <StatCard
+   449→            gradient="orange"
+   450→            label="Low Stock"
+   451→            value={String(data.lowStock)}
+   452→            sub="items below threshold"
+   453→          />
+   454→          <StatCard
+   455→            gradient="crimson"
+   456→            label="Out of Stock"
+   457→            value={String(data.outOfStock)}
+   458→            sub="need restocking"
+   459→          />
+   460→          <StatCard
+   461→            gradient="teal"
+   462→            label="Health Score"
+   463→            value=""
+   464→          >
+   465→            <div className="mt-2">
+   466→              <HealthScoreRing score={data.healthScore} />
+   467→            </div>
+   468→          </StatCard>
+   469→        </div>
+   470→      ) : null}
+   471→
+   472→      {/* Row 3: Charts */}
+   473→      {loading ? (
+   474→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   475→          <ChartSkeleton />
+   476→          <ChartSkeleton />
+   477→        </div>
+   478→      ) : data ? (
+   479→        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   480→          {/* Weekly Revenue Trend */}
+   481→          <div className="bg-white rounded-[14px] p-5 shadow-[0_4px_12px_rgba(31,17,41,.06)]">
+   482→            <h2 className="text-base font-semibold text-gray-900 mb-1">Weekly Revenue Trend</h2>
+   483→            <p className="text-xs text-gray-400 mb-4">Last 7 days performance</p>
+   484→            {data.weeklyRevenueTrend && data.weeklyRevenueTrend.length > 0 ? (
+   485→              <ResponsiveContainer width="100%" height={260}>
+   486→                <AreaChart data={data.weeklyRevenueTrend} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+   487→                  <defs>
+   488→                    <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
+   489→                      <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.3} />
+   490→                      <stop offset="95%" stopColor="#F59E0B" stopOpacity={0} />
+   491→                    </linearGradient>
+   492→                  </defs>
+   493→                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+   494→                  <XAxis dataKey="day" tick={{ fontSize: 12, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+   495→                  <YAxis tick={{ fontSize: 12, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
+   496→                  <Tooltip
+   497→                    contentStyle={{
+   498→                      background: '#fff',
+   499→                      border: '1px solid #E5E7EB',
+   500→                      borderRadius: '10px',
+   501→                      fontSize: '13px',
+   502→                      boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+   503→                    }}
+   504→                    formatter={(value: number) => [fmt(value), 'Revenue']}
+   505→                  />
+   506→                  <Area
+   507→                    type="monotone"
+   508→                    dataKey="revenue"
+   509→                    stroke="#F59E0B"
+   510→                    strokeWidth={2.5}
+   511→                    fill="url(#areaFill)"
+   512→                    dot={{ r: 4, fill: '#F59E0B', stroke: '#fff', strokeWidth: 2 }}
+   513→                    activeDot={{ r: 6, fill: '#F59E0B', stroke: '#fff', strokeWidth: 2 }}
+   514→                  />
+   515→                </AreaChart>
+   516→              </ResponsiveContainer>
+   517→            ) : (
+   518→              <div className="h-64 flex items-center justify-center text-gray-400 text-sm">No trend data available</div>
+   519→            )}
+   520→          </div>
+   521→
+   522→          {/* Top Sellers */}
+   523→          <div className="bg-white rounded-[14px] p-5 shadow-[0_4px_12px_rgba(31,17,41,.06)]">
+   524→            <h2 className="text-base font-semibold text-gray-900 mb-1">Top Sellers</h2>
+   525→            <p className="text-xs text-gray-400 mb-4">By revenue (top 5)</p>
+   526→            {data.topSellers && data.topSellers.length > 0 ? (
+   527→              <ResponsiveContainer width="100%" height={260}>
+   528→                <BarChart
+   529→                  data={data.topSellers}
+   530→                  layout="vertical"
+   531→                  margin={{ top: 0, right: 20, left: 10, bottom: 0 }}
+   532→                >
+   533→                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" horizontal={false} />
+   534→                  <XAxis type="number" tick={{ fontSize: 11, fill: '#9CA3AF' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
+   535→                  <YAxis
+   536→                    type="category"
+   537→                    dataKey="name"
+   538→                    tick={{ fontSize: 11, fill: '#6B7280' }}
+   539→                    axisLine={false}
+   540→                    tickLine={false}
+   541→                    width={110}
+   542→                  />
+   543→                  <Tooltip
+   544→                    contentStyle={{
+   545→                      background: '#fff',
+   546→                      border: '1px solid #E5E7EB',
+   547→                      borderRadius: '10px',
+   548→                      fontSize: '13px',
+   549→                      boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+   550→                    }}
+   551→                    formatter={(value: number) => [fmt(value), 'Revenue']}
+   552→                  />
+   553→                  <Bar
+   554→                    dataKey="revenue"
+   555→                    fill="#DC2626"
+   556→                    radius={[0, 6, 6, 0]}
+   557→                    barSize={22}
+   558→                  />
+   559→                </BarChart>
+   560→              </ResponsiveContainer>
+   561→            ) : (
+   562→              <div className="h-64 flex items-center justify-center text-gray-400 text-sm">No sales data available</div>
+   563→            )}
+   564→          </div>
+   565→        </div>
+   566→      ) : null}
+   567→
+   568→      {/* Row 4: AI Business Insights */}
+   569→      {!loading && data && (
+   570→        <div
+   571→          className="rounded-[14px] p-5 md:p-6"
+   572→          style={{ background: '#1F1129' }}
+   573→        >
+   574→          <div className="flex items-center gap-3 mb-5">
+   575→            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(245,158,11,0.15)' }}>
+   576→              <svg width="18" height="18" viewBox="0 0 24 24" fill="#F59E0B">
+   577→                <path d="M9.5 2a2.5 2.5 0 012.5 2.5V7h-5V4.5A2.5 2.5 0 019.5 2zM19 8h-1V6.5A2.5 2.5 0 0015.5 4h-2.16A4.48 4.48 0 009.5 1 4.48 4.48 0 006.16 4H4.5A2.5 2.5 0 002 6.5V8H1a1 1 0 00-1 1v1a5 5 0 005 5h1v6a1 1 0 001 1h1a1 1 0 001-1v-6h2v6a1 1 0 001 1h1a1 1 0 001-1v-6h1a5 5 0 005-5V9a1 1 0 00-1-1z"/>
+   578→              </svg>
+   579→            </div>
+   580→            <div>
+   581→              <h2 className="text-base font-semibold" style={{ color: '#F59E0B' }}>AI Business Insights</h2>
+   582→              <p className="text-xs" style={{ color: 'rgba(245,158,11,0.6)' }}>Automated analysis of your store data</p>
+   583→            </div>
+   584→          </div>
+   585→
+   586→          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+   587→            {insights.map((section, si) => (
+   588→              <div
+   589→                key={si}
+   590→                className="rounded-xl p-4"
+   591→                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(245,158,11,0.12)' }}
+   592→              >
+   593→                <h3 className="text-sm font-semibold mb-3" style={{ color: '#F59E0B' }}>{section.title}</h3>
+   594→                <ul className="space-y-2">
+   595→                  {section.items.map((item, ii) => (
+   596→                    <li key={ii} className="flex gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.8)' }}>
+   597→                      <span className="mt-1.5 shrink-0 w-1.5 h-1.5 rounded-full" style={{ background: '#F59E0B' }} />
+   598→                      <span>{item}</span>
+   599→                    </li>
+   600→                  ))}
+   601→                </ul>
+   602→              </div>
+   603→            ))}
+   604→          </div>
+   605→        </div>
+   606→      )}
+   607→
+   608→      {/* Row 5: Fast Movers, Slow Movers, Recent Activity */}
+   609→      {loading ? (
+   610→        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+   611→          <ChartSkeleton />
+   612→          <ChartSkeleton />
+   613→          <ChartSkeleton />
+   614→        </div>
+   615→      ) : data ? (
+   616→        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+   617→          {/* Fast Movers */}
+   618→          <div className="bg-white rounded-[14px] p-5 shadow-[0_4px_12px_rgba(31,17,41,.06)]">
+   619→            <div className="flex items-center gap-2 mb-4">
+   620→              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+   621→              <h2 className="text-base font-semibold text-gray-900">Fast Movers</h2>
+   622→            </div>
+   623→            {data.fastMovers && data.fastMovers.length > 0 ? (
+   624→              <ul className="divide-y divide-gray-100">
+   625→                {data.fastMovers.slice(0, 5).map((item, i) => (
+   626→                  <li key={i} className="flex items-center justify-between py-3">
+   627→                    <div className="flex items-center gap-3">
+   628→                      <span
+   629→                        className="w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold text-white"
+   630→                        style={{
+   631→                          background: i === 0 ? '#10B981' : i === 1 ? '#3B82F6' : i === 2 ? '#F59E0B' : '#D1D5DB',
+   632→                          color: i >= 3 ? '#6B7280' : '#fff',
+   633→                        }}
+   634→                      >
+   635→                        {i + 1}
+   636→                      </span>
+   637→                      <div>
+   638→                        <p className="text-sm font-medium text-gray-800 truncate max-w-[140px]">{item.name}</p>
+   639→                        <p className="text-xs text-gray-400">{item.unitsSold} units sold</p>
+   640→                      </div>
+   641→                    </div>
+   642→                    <span className="text-sm font-semibold text-gray-700 whitespace-nowrap">{fmt(item.revenue)}</span>
+   643→                  </li>
+   644→                ))}
+   645→              </ul>
+   646→            ) : (
+   647→              <p className="text-sm text-gray-400 py-4">No data available</p>
+   648→            )}
+   649→          </div>
+   650→
+   651→          {/* Slow Movers */}
+   652→          <div className="bg-white rounded-[14px] p-5 shadow-[0_4px_12px_rgba(31,17,41,.06)]">
+   653→            <div className="flex items-center gap-2 mb-4">
+   654→              <span className="inline-block w-2 h-2 rounded-full bg-orange-500" />
+   655→              <h2 className="text-base font-semibold text-gray-900">Slow Movers</h2>
+   656→            </div>
+   657→            {data.slowMovers && data.slowMovers.length > 0 ? (
+   658→              <ul className="divide-y divide-gray-100">
+   659→                {data.slowMovers.slice(0, 5).map((item, i) => (
+   660→                  <li key={i} className="flex items-center justify-between py-3">
+   661→                    <div>
+   662→                      <p className="text-sm font-medium text-gray-800 truncate max-w-[180px]">{item.name}</p>
+   663→                      <p className="text-xs text-gray-400">{item.unitsSold} units sold</p>
+   664→                    </div>
+   665→                    <span className="text-sm font-semibold text-gray-700 whitespace-nowrap">{fmt(item.revenue)}</span>
+   666→                  </li>
+   667→                ))}
+   668→              </ul>
+   669→            ) : (
+   670→              <p className="text-sm text-gray-400 py-4">No data available</p>
+   671→            )}
+   672→          </div>
+   673→
+   674→          {/* Recent Activity */}
+   675→          <div className="bg-white rounded-[14px] p-5 shadow-[0_4px_12px_rgba(31,17,41,.06)]">
+   676→            <div className="flex items-center gap-2 mb-4">
+   677→              <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
+   678→              <h2 className="text-base font-semibold text-gray-900">Recent Activity</h2>
+   679→            </div>
+   680→            {data.recentActivity && data.recentActivity.length > 0 ? (
+   681→              <ul className="divide-y divide-gray-100">
+   682→                {data.recentActivity.slice(0, 8).map((a, i) => (
+   683→                  <li key={i} className="flex items-center justify-between py-2.5">
+   684→                    <div className="flex items-center gap-3">
+   685→                      <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-xs font-semibold text-gray-500 shrink-0">
+   686→                        {a.user?.charAt(0)?.toUpperCase() || 'U'}
+   687→                      </div>
+   688→                      <div className="min-w-0">
+   689→                        <p className="text-sm font-medium text-gray-800 truncate">{a.user}</p>
+   690→                        <p className="text-xs text-gray-400 truncate">{a.action}</p>
+   691→                      </div>
+   692→                    </div>
+   693→                    <span className="text-xs text-gray-400 whitespace-nowrap ml-2">{timeAgo(a.time)}</span>
+   694→                  </li>
+   695→                ))}
+   696→              </ul>
+   697→            ) : (
+   698→              <p className="text-sm text-gray-400 py-4">No recent activity</p>
+   699→            )}
+   700→          </div>
+   701→        </div>
+   702→      ) : null}
+   703→
+   704→      {/* Empty state when no data and not loading */}
+   705→      {!loading && !data && (
+   706→        <div className="bg-white rounded-[14px] p-10 text-center shadow-[0_4px_12px_rgba(31,17,41,.06)]">
+   707→          <svg className="mx-auto mb-3 text-gray-300" width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
+   708→            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+   709→          </svg>
+   710→          <p className="text-gray-400">Unable to load dashboard data. Please try again later.</p>
+   711→        </div>
+   712→      )}
+   713→    </div>
+   714→  )
+   715→}

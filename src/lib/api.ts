@@ -17,7 +17,7 @@ export const api = {
   register: (data: any) => request('/api/auth/register', { method: 'POST', body: JSON.stringify(data) }),
   login: (data: any) => request('/api/auth/login', { method: 'POST', body: JSON.stringify(data) }),
   logout: () => request('/api/auth/logout', { method: 'POST' }),
-  me: () => request('/api/auth/logout'),
+  me: () => request('/api/auth/me'),
   switchStore: (storeId: string) => request('/api/auth/switch-store', { method: 'POST', body: JSON.stringify({ storeId }) }),
 
   // Products
@@ -80,6 +80,10 @@ export const api = {
 
   // Categories
   getCategories: () => request('/api/categories'),
+
+  // Purchases / Stock Receive
+  receiveStock: (data: any) => request('/api/purchases', { method: 'POST', body: JSON.stringify(data) }),
+  getStockReceives: (params?: string) => request(`/api/purchases${params ? '?' + params : ''}`),
 
   // Super Admin
   getSuperAdmin: () => request('/api/super-admin'),

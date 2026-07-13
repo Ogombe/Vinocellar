@@ -53,8 +53,8 @@ export const useAppStore = create<AppState>((set) => ({
   setAuth: (user, org, stores, storeId) => set({
     user, org, stores, storeId,
     isAuthenticated: true,
-    isManager: user.role === 'manager',
-    currentPage: user.role === 'manager' ? 'dashboard' : 'inventory'
+    isManager: user.role === 'manager' || user.role === 'super_admin',
+    currentPage: user.role === 'super_admin' ? 'superadmin' : user.role === 'manager' ? 'dashboard' : 'inventory'
   }),
   clearAuth: () => set({
     user: null, org: null, stores: [], storeId: null,

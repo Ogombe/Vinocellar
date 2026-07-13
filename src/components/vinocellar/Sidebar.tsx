@@ -68,6 +68,7 @@ interface MenuSection {
   title: string
   items: MenuItem[]
   managerOnly?: boolean
+  superAdminOnly?: boolean
 }
 
 const sections: MenuSection[] = [
@@ -107,6 +108,11 @@ const sections: MenuSection[] = [
     title: 'SYSTEM',
     managerOnly: true,
     items: [{ id: 'settings', label: 'Settings', icon: 'settings' }],
+  },
+  {
+    title: 'PLATFORM',
+    superAdminOnly: true,
+    items: [{ id: 'superadmin', label: 'Super Admin', icon: 'settings' }],
   },
 ]
 
@@ -212,6 +218,7 @@ export function Sidebar() {
         <nav className="flex-1 overflow-y-auto py-3 px-3 scrollbar-thin">
           {sections.map((section) => {
             if (section.managerOnly && !isManager) return null
+            if (section.superAdminOnly && user?.role !== 'super_admin') return null
             const visibleItems = section.items.filter(
               (item) => !item.managerOnly || isManager,
             )

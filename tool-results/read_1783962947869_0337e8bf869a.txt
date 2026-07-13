@@ -1,0 +1,502 @@
+   200→   200→.btn-danger:hover{background:#FECACA}
+   201→   201→.btn-sm{padding:6px 11px;font-size:12px;border-radius:8px}
+   202→   202→.btn-block{width:100%;justify-content:center}
+   203→   203→
+   204→   204→/* CARDS */
+   205→   205→.card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;margin-bottom:16px}
+   206→   206→.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px}
+   207→   207→.card-header h3{font-size:15px;font-weight:700;color:var(--sidebar)}
+   208→   208→.card-header .sub{font-size:11px;color:var(--text-muted);font-weight:500}
+   209→   209→
+   210→   210→/* STAT CARDS */
+   211→   211→.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:18px}
+   212→   212→.stat-card{
+   213→   213→  border-radius:var(--radius);padding:18px;color:#fff;position:relative;overflow:hidden;
+   214→   214→  box-shadow:0 6px 16px rgba(0,0,0,.10);transition:transform .2s;
+   215→   215→}
+   216→   216→.stat-card:hover{transform:translateY(-2px)}
+   217→   217→.stat-card .label{font-size:11px;text-transform:uppercase;letter-spacing:1px;opacity:.9;font-weight:600}
+   218→   218→.stat-card .value{font-size:26px;font-weight:800;margin-top:6px}
+   219→   219→.stat-card .delta{font-size:11px;margin-top:4px;opacity:.9}
+   220→   220→.stat-card .icon{position:absolute;right:-6px;bottom:-6px;font-size:54px;opacity:.18}
+   221→   221→.stat-crimson{background:linear-gradient(135deg,#EF4444,#DC2626)}
+   222→   222→.stat-amber{background:linear-gradient(135deg,#FBBF24,#F59E0B)}
+   223→   223→.stat-emerald{background:linear-gradient(135deg,#34D399,#10B981)}
+   224→   224→.stat-blue{background:linear-gradient(135deg,#60A5FA,#3B82F6)}
+   225→   225→.stat-purple{background:linear-gradient(135deg,#A78BFA,#8B5CF6)}
+   226→   226→.stat-teal{background:linear-gradient(135deg,#2DD4BF,#14B8A6)}
+   227→   227→.stat-pink{background:linear-gradient(135deg,#F472B6,#EC4899)}
+   228→   228→.stat-orange{background:linear-gradient(135deg,#FB923C,#F97316)}
+   229→   229→
+   230→   230→/* TABLES */
+   231→   231→.table-wrap{overflow-x:auto;border-radius:var(--radius-sm)}
+   232→   232→table{width:100%;border-collapse:collapse;font-size:13px}
+   233→   233→thead th{
+   234→   234→  text-align:left;padding:11px 12px;background:var(--bg-alt);color:var(--text-muted);
+   235→   235→  font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;
+   236→   236→  border-bottom:2px solid var(--border);white-space:nowrap;
+   237→   237→}
+   238→   238→tbody td{padding:11px 12px;border-bottom:1px solid var(--border-light);vertical-align:middle}
+   239→   239→tbody tr{transition:background .12s}
+   240→   240→tbody tr:hover{background:#FFF8EC}
+   241→   241→tbody tr:last-child td{border-bottom:none}
+   242→   242→.row-actions{display:flex;gap:4px}
+   243→   243→.row-actions button{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-muted)}
+   244→   244→.row-actions button:hover{background:var(--bg-alt);color:var(--crimson)}
+   245→   245→.row-actions button.delete:hover{background:#FEE2E2;color:var(--crimson)}
+   246→   246→
+   247→   247→/* BADGES */
+   248→   248→.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.3px}
+   249→   249→.badge-wine{background:#FEE2E2;color:#991B1B}
+   250→   250→.badge-gold{background:#FEF3C7;color:#92400E}
+   251→   251→.badge-green{background:#D1FAE5;color:#065F46}
+   252→   252→.badge-red{background:#FEE2E2;color:#991B1B}
+   253→   253→.badge-blue{background:#DBEAFE;color:#1E40AF}
+   254→   254→.badge-purple{background:#EDE9FE;color:#5B21B6}
+   255→   255→.badge-teal{background:#CCFBF1;color:#115E59}
+   256→   256→.badge-gray{background:#F3F4F6;color:#4B5563}
+   257→   257→
+   258→   258→/* FORMS */
+   259→   259→.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+   260→   260→.form-group{margin-bottom:12px}
+   261→   261→.form-group label{display:block;font-size:12px;font-weight:600;color:var(--text);margin-bottom:5px}
+   262→   262→.form-control{
+   263→   263→  width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;
+   264→   264→  background:#fff;color:var(--text);transition:all .15s;font-size:13px;
+   265→   265→}
+   266→   266→.form-control:focus{outline:none;border-color:var(--crimson);box-shadow:0 0 0 3px rgba(220,38,38,.12)}
+   267→   267→textarea.form-control{resize:vertical;min-height:70px}
+   268→   268→.form-row{display:flex;gap:10px;flex-wrap:wrap}
+   269→   269→.form-row .form-group{flex:1;min-width:140px}
+   270→   270→
+   271→   271→/* SEARCH */
+   272→   272→.search-bar{position:relative;flex:1;min-width:200px;max-width:380px}
+   273→   273→.search-bar i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-light);font-size:13px}
+   274→   274→.search-bar input{width:100%;padding:9px 12px 9px 36px;border:1.5px solid var(--border);border-radius:10px;font-size:13px}
+   275→   275→.search-bar input:focus{outline:none;border-color:var(--crimson)}
+   276→   276→
+   277→   277→/* FILTER CHIPS */
+   278→   278→.filter-chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+   279→   279→.chip{
+   280→   280→  padding:6px 13px;border-radius:20px;background:var(--bg-alt);font-size:12px;font-weight:600;
+   281→   281→  color:var(--text-muted);transition:all .15s;
+   282→   282→}
+   283→   283→.chip:hover{background:#E5DDD0}
+   284→   284→.chip.active{background:var(--crimson);color:#fff}
+   285→   285→
+   286→   286→/* MODAL */
+   287→   287→.modal-backdrop{
+   288→   288→  position:fixed;inset:0;background:rgba(31,17,41,.55);z-index:200;
+   289→   289→  display:none;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);
+   290→   290→}
+   291→   291→.modal-backdrop.show{display:flex;animation:fadeIn .2s}
+   292→   292→.modal{
+   293→   293→  background:#fff;border-radius:var(--radius-lg);width:100%;max-width:520px;max-height:90vh;
+   294→   294→  overflow-y:auto;box-shadow:var(--shadow-lg);animation:popIn .25s;
+   295→   295→}
+   296→   296→.modal.lg{max-width:780px}
+   297→   297→.modal-header{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#fff;z-index:1;border-radius:var(--radius-lg) var(--radius-lg) 0 0}
+   298→   298→.modal-header h3{font-size:17px;font-weight:700;color:var(--sidebar)}
+   299→   299→.modal-close{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}
+   300→   300→.modal-close:hover{background:var(--bg-alt);color:var(--crimson)}
+   301→   301→.modal-body{padding:20px 22px}
+   302→   302→.modal-footer{padding:14px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;position:sticky;bottom:0;background:#fff;border-radius:0 0 var(--radius-lg) var(--radius-lg)}
+   303→   303→
+   304→   304→/* TOAST */
+   305→   305→#toastContainer{position:fixed;top:20px;right:20px;z-index:1000;display:flex;flex-direction:column;gap:8px;max-width:340px}
+   306→   306→.toast{
+   307→   307→  background:#fff;border-radius:10px;padding:12px 16px;box-shadow:var(--shadow-md);
+   308→   308→  display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;
+   309→   309→  border-left:4px solid var(--text-muted);animation:slideIn .3s;min-width:240px;
+   310→   310→}
+   311→   311→@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:none;opacity:1}}
+   312→   312→.toast.success{border-left-color:var(--emerald);background:#ECFDF5}
+   313→   313→.toast.error{border-left-color:var(--crimson);background:#FEF2F2}
+   314→   314→.toast.warn{border-left-color:var(--amber);background:#FFFBEB}
+   315→   315→.toast.info{border-left-color:var(--blue);background:#EFF6FF}
+   316→   316→.toast i{font-size:16px}
+   317→   317→.toast.success i{color:var(--emerald)}
+   318→   318→.toast.error i{color:var(--crimson)}
+   319→   319→.toast.warn i{color:var(--amber)}
+   320→   320→.toast.info i{color:var(--blue)}
+   321→   321→
+   322→   322→/* AI INSIGHTS */
+   323→   323→.ai-panel{background:linear-gradient(135deg,#1F1129 0%,#3D1A4D 100%);border-radius:var(--radius);padding:18px;color:#fff;margin-bottom:16px;position:relative;overflow:hidden}
+   324→   324→.ai-panel::before{content:'';position:absolute;top:-30px;right:-30px;width:140px;height:140px;border-radius:50%;background:radial-gradient(circle,rgba(245,158,11,.25),transparent 70%)}
+   325→   325→.ai-header{display:flex;align-items:center;gap:10px;margin-bottom:14px;position:relative}
+   326→   326→.ai-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--amber),var(--crimson));display:flex;align-items:center;justify-content:center;font-size:16px}
+   327→   327→.ai-header h3{font-size:15px;font-weight:700;color:#fff}
+   328→   328→.ai-header .sub{font-size:11px;color:var(--amber)}
+   329→   329→.ai-insight{display:flex;gap:10px;padding:10px 12px;background:rgba(255,255,255,.06);border-radius:10px;margin-bottom:8px;font-size:12.5px;line-height:1.5}
+   330→   330→.ai-insight:last-child{margin-bottom:0}
+   331→   331→.ai-insight i{font-size:14px;margin-top:1px;flex-shrink:0}
+   332→   332→.ai-insight.warn i{color:var(--amber)}
+   333→   333→.ai-insight.danger i{color:#F87171}
+   334→   334→.ai-insight.success i{color:var(--emerald)}
+   335→   335→.ai-insight.info i{color:#60A5FA}
+   336→   336→
+   337→   337→/* HEALTH SCORE */
+   338→   338→.health-score{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+   339→   339→.health-ring{position:relative;width:120px;height:120px;flex-shrink:0}
+   340→   340→.health-ring svg{transform:rotate(-90deg)}
+   341→   341→.health-ring .ring-bg{stroke:var(--bg-alt);fill:none;stroke-width:10}
+   342→   342→.health-ring .ring-fg{stroke:url(#healthGrad);fill:none;stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset 1s ease}
+   343→   343→.health-ring .score-text{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+   344→   344→.health-ring .score-num{font-size:28px;font-weight:800;color:var(--sidebar);line-height:1}
+   345→   345→.health-ring .score-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-top:3px}
+   346→   346→.health-details{flex:1;min-width:200px}
+   347→   347→.health-details .h-row{display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-bottom:1px dashed var(--border-light)}
+   348→   348→.health-details .h-row:last-child{border:none}
+   349→   349→.health-details .h-row span:first-child{color:var(--text-muted)}
+   350→   350→.health-details .h-row span:last-child{font-weight:700}
+   351→   351→
+   352→   352→/* STOCK TAKE */
+   353→   353→.stocktake-item{display:grid;grid-template-columns:1fr auto auto auto;gap:10px;align-items:center;padding:12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;background:#fff}
+   354→   354→.stocktake-item .st-name{font-weight:600;font-size:13px}
+   355→   355→.stocktake-item .st-meta{font-size:11px;color:var(--text-muted)}
+   356→   356→.stocktake-input{width:80px;padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;text-align:center;font-weight:700;font-size:14px}
+   357→   357→.stocktake-input:focus{outline:none;border-color:var(--crimson)}
+   358→   358→.st-variance{font-size:13px;font-weight:700;min-width:60px;text-align:right}
+   359→   359→.st-variance.zero{color:var(--emerald)}
+   360→   360→.st-variance.pos{color:var(--amber)}
+   361→   361→.st-variance.neg{color:var(--crimson)}
+   362→   362→
+   363→   363→/* POS */
+   364→   364→.pos-grid{display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start}
+   365→   365→.pos-products{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;align-content:start}
+   366→   366→.pos-product{background:#fff;border:2px solid var(--border);border-radius:12px;padding:12px;cursor:pointer;text-align:center;transition:all .15s}
+   367→   367→.pos-product:hover{border-color:var(--crimson);transform:translateY(-2px);box-shadow:var(--shadow)}
+   368→   368→.pos-product:active{transform:scale(.97)}
+   369→   369→.pos-product.out{opacity:.5;cursor:not-allowed}
+   370→   370→.pos-product .pp-icon{font-size:30px;margin-bottom:6px}
+   371→   371→.pos-product .pp-name{font-size:12px;font-weight:600;line-height:1.3;margin-bottom:4px;height:32px;overflow:hidden}
+   372→   372→.pos-product .pp-price{font-size:14px;font-weight:800;color:var(--crimson)}
+   373→   373→.pos-product .pp-stock{font-size:10px;color:var(--text-muted);margin-top:2px}
+   374→   374→.cart{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);display:flex;flex-direction:column;position:sticky;top:14px;max-height:calc(100vh - 110px)}
+   375→   375→.cart-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+   376→   376→.cart-header h3{font-size:14px;font-weight:700;color:var(--sidebar)}
+   377→   377→.cart-items{flex:1;overflow-y:auto;padding:8px;min-height:120px}
+   378→   378→.cart-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border-light)}
+   379→   379→.cart-item .ci-name{flex:1;font-size:12px;font-weight:600;line-height:1.3}
+   380→   380→.cart-item .ci-price{font-size:12px;font-weight:700;color:var(--crimson)}
+   381→   381→.qty-ctrl{display:flex;align-items:center;gap:6px}
+   382→   382→.qty-ctrl button{width:24px;height:24px;border-radius:6px;background:var(--bg-alt);font-weight:700;font-size:12px}
+   383→   383→.qty-ctrl button:hover{background:var(--crimson);color:#fff}
+   384→   384→.qty-ctrl span{min-width:22px;text-align:center;font-weight:700;font-size:13px}
+   385→   385→.cart-footer{padding:14px 16px;border-top:1px solid var(--border);flex-shrink:0;background:#fff;border-radius:0 0 var(--radius) var(--radius)}
+   386→   386→.cart-total{display:flex;justify-content:space-between;font-size:18px;font-weight:800;margin-bottom:12px;color:var(--sidebar)}
+   387→   387→.pos-checkout-bar{display:none}
+   388→   388→
+   389→   389→/* SCANNER */
+   390→   390→.scanner-overlay{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:300;display:none;align-items:center;justify-content:center;flex-direction:column;padding:20px}
+   391→   391→.scanner-overlay.show{display:flex}
+   392→   392→.scanner-overlay video{max-width:100%;max-height:70vh;border-radius:12px}
+   393→   393→.scanner-box{width:80%;max-width:400px;height:200px;border:3px solid var(--amber);border-radius:12px;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);box-shadow:0 0 0 9999px rgba(0,0,0,.4)}
+   394→   394→.scanner-overlay .scan-hint{color:#fff;font-size:14px;margin-top:16px;text-align:center}
+   395→   395→.scanner-overlay .scan-close{position:absolute;top:20px;right:20px;color:#fff;font-size:24px;background:rgba(255,255,255,.15);width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+   396→   396→
+   397→   397→/* BOTTOM NAV (mobile) */
+   398→   398→.bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--border);z-index:60;padding:6px 4px;box-shadow:0 -4px 12px rgba(0,0,0,.06)}
+   399→   399→.bottom-nav-items{display:flex;justify-content:space-around}
+   400→   400→.bottom-nav-item{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;color:var(--text-muted);font-size:10px;font-weight:600;border-radius:8px}
+   401→   401→.bottom-nav-item i{font-size:17px}
+   402→   402→.bottom-nav-item.active{color:var(--crimson)}
+   403→   403→.bottom-nav-item.more{position:relative}
+   404→   404→.more-menu{position:absolute;bottom:60px;left:10px;right:10px;background:#fff;border-radius:14px;box-shadow:var(--shadow-lg);padding:8px;display:none;grid-template-columns:repeat(4,1fr);gap:4px}
+   405→   405→.more-menu.show{display:grid}
+   406→   406→.more-menu button{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 6px;font-size:10px;color:var(--text-muted);border-radius:8px}
+   407→   407→.more-menu button:hover{background:var(--bg-alt);color:var(--crimson)}
+   408→   408→.more-menu button i{font-size:16px}
+   409→   409→
+   410→   410→/* BACKDROP for drawer */
+   411→   411→.drawer-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:40}
+   412→   412→.drawer-backdrop.show{display:block}
+   413→   413→
+   414→   414→/* RESPONSIVE */
+   415→   415→@media(max-width:1024px){
+   416→   416→  :root{--sidebar-w:0px}
+   417→   417→  .sidebar{transform:translateX(-100%);width:260px}
+   418→   418→  .sidebar.open{transform:translateX(0)}
+   419→   419→  .main{margin-left:0}
+   420→   420→  .menu-toggle{display:flex}
+   421→   421→  .pos-grid{grid-template-columns:1fr}
+   422→   422→  .cart{position:relative;top:auto;max-height:none}
+   423→   423→  .cart-items{max-height:280px}
+   424→   424→}
+   425→   425→@media(max-width:768px){
+   426→   426→  .content{padding:14px;padding-bottom:90px}
+   427→   427→  .topbar{padding:0 12px;gap:8px}
+   428→   428→  .topbar-title{font-size:16px}
+   429→   429→  .store-selector{padding:5px 8px;font-size:11px}
+   430→   430→  .stat-grid{grid-template-columns:repeat(2,1fr);gap:10px}
+   431→   431→  .stat-card{padding:14px}
+   432→   432→  .stat-card .value{font-size:22px}
+   433→   433→  .stat-card .icon{font-size:42px}
+   434→   434→  .bottom-nav{display:block}
+   435→   435→  .page-header h2{font-size:19px}
+   436→   436→  .pos-products{grid-template-columns:repeat(2,1fr)}
+   437→   437→  .stocktake-item{grid-template-columns:1fr;gap:6px}
+   438→   438→  .stocktake-item .st-variance{text-align:left}
+   439→   439→  .modal{max-width:calc(100vw - 24px)}
+   440→   440→  .form-grid{grid-template-columns:1fr}
+   441→   441→  .search-bar{max-width:none}
+   442→   442→  .offline-pill{display:none}
+   443→   443→  .ai-panel{padding:14px}
+   444→   444→  .health-score{flex-direction:column;align-items:flex-start}
+   445→   445→  .health-ring{width:100px;height:100px}
+   446→   446→}
+   447→   447→@media(max-width:480px){
+   448→   448→  .stat-grid{grid-template-columns:1fr}
+   449→   449→  .pos-products{grid-template-columns:repeat(2,1fr)}
+   450→   450→  .topbar-actions .icon-btn:not(.essential){display:none}
+   451→   451→}
+   452→   452→
+   453→   453→/* utility */
+   454→   454→.empty-state{text-align:center;padding:50px 20px;color:var(--text-muted)}
+   455→   455→.empty-state i{font-size:42px;margin-bottom:12px;opacity:.4}
+   456→   456→.empty-state h3{font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px}
+   457→   457→.flex{display:flex}
+   458→   458→.flex-1{flex:1}
+   459→   459→.gap-8{gap:8px}
+   460→   460→.gap-12{gap:12px}
+   461→   461→.items-center{align-items:center}
+   462→   462→.justify-between{justify-content:space-between}
+   463→   463→.flex-wrap{flex-wrap:wrap}
+   464→   464→.text-crimson{color:var(--crimson)}
+   465→   465→.text-emerald{color:var(--emerald)}
+   466→   466→.text-amber{color:var(--amber)}
+   467→   467→.text-muted{color:var(--text-muted)}
+   468→   468→.text-right{text-align:right}
+   469→   469→.text-center{text-align:center}
+   470→   470→.fw-700{font-weight:700}
+   471→   471→.fw-800{font-weight:800}
+   472→   472→.mt-8{margin-top:8px}
+   473→   473→.mt-12{margin-top:12px}
+   474→   474→.mt-16{margin-top:16px}
+   475→   475→.mb-8{margin-bottom:8px}
+   476→   476→.mb-12{margin-bottom:12px}
+   477→   477→.mb-16{margin-bottom:16px}
+   478→   478→.hidden{display:none!important}
+   479→   479→.progress-bar{height:6px;background:var(--bg-alt);border-radius:3px;overflow:hidden;margin-top:6px}
+   480→   480→.progress-bar .fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--amber),var(--crimson));transition:width .5s}
+   481→   481→.kpi-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+   482→   482→.mini-kpi{flex:1;min-width:120px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px}
+   483→   483→.mini-kpi .l{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+   484→   484→.mini-kpi .v{font-size:18px;font-weight:800;color:var(--sidebar);margin-top:2px}
+   485→   485→.mini-kpi .v.pos{color:var(--emerald)}
+   486→   486→.mini-kpi .v.neg{color:var(--crimson)}
+   487→   487→</style>
+   488→   488→</head>
+   489→   489→<body>
+   490→   490→
+   491→   491→<!-- ============ LOGIN ============ -->
+   492→   492→<div id="loginScreen">
+   493→   493→  <div class="login-card">
+   494→   494→    <div class="login-logo"><i class="fa-solid fa-wine-glass"></i></div>
+   495→   495→    <h1>VinoCellar Pro</h1>
+   496→   496→    <p class="sub">Wine & Spirits Inventory Management</p>
+   497→   497→    <div class="pin-display" id="pinDisplay">
+   498→   498→      <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+   499→   499→    </div>
+   500→   500→    <div id="loginError"></div>
+   501→   501→    <div class="pin-keypad" id="pinKeypad">
+   502→   502→      <button class="pin-key" data-val="1" type="button">1</button>
+   503→   503→      <button class="pin-key" data-val="2" type="button">2</button>
+   504→   504→      <button class="pin-key" data-val="3" type="button">3</button>
+   505→   505→      <button class="pin-key" data-val="4" type="button">4</button>
+   506→   506→      <button class="pin-key" data-val="5" type="button">5</button>
+   507→   507→      <button class="pin-key" data-val="6" type="button">6</button>
+   508→   508→      <button class="pin-key" data-val="7" type="button">7</button>
+   509→   509→      <button class="pin-key" data-val="8" type="button">8</button>
+   510→   510→      <button class="pin-key" data-val="9" type="button">9</button>
+   511→   511→      <button class="pin-key action" data-act="clear" type="button"><i class="fa-solid fa-rotate-left"></i></button>
+   512→   512→      <button class="pin-key" data-val="0" type="button">0</button>
+   513→   513→      <button class="pin-key action" data-act="enter" type="button"><i class="fa-solid fa-arrow-right"></i></button>
+   514→   514→    </div>
+   515→   515→    <div class="login-hint">
+   516→   516→      <b>Manager PIN: 1234</b> &nbsp;·&nbsp; <b>Staff PIN: 5678</b>
+   517→   517→    </div>
+   518→   518→  </div>
+   519→   519→</div>
+   520→   520→
+   521→   521→<!-- ============ APP ============ -->
+   522→   522→<div id="app">
+   523→   523→  <div class="drawer-backdrop" id="drawerBackdrop"></div>
+   524→   524→  <aside class="sidebar" id="sidebar">
+   525→   525→    <div class="sidebar-header">
+   526→   526→      <div class="sidebar-logo"><i class="fa-solid fa-wine-glass"></i></div>
+   527→   527→      <div class="sidebar-title">VinoCellar<small>Pro Edition</small></div>
+   528→   528→    </div>
+   529→   529→    <nav class="sidebar-nav" id="sidebarNav"></nav>
+   530→   530→    <div class="sidebar-footer">
+   531→   531→      <div class="user-chip">
+   532→   532→        <div class="user-avatar" id="userAvatar">M</div>
+   533→   533→        <div class="user-info">
+   534→   534→          <div class="name" id="userName">Manager</div>
+   535→   535→          <div class="role" id="userRole">Manager</div>
+   536→   536→        </div>
+   537→   537→        <button class="logout-btn" id="logoutBtn" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
+   538→   538→      </div>
+   539→   539→    </div>
+   540→   540→  </aside>
+   541→   541→
+   542→   542→  <div class="main">
+   543→   543→    <header class="topbar">
+   544→   544→      <button class="menu-toggle" id="menuToggle"><i class="fa-solid fa-bars"></i></button>
+   545→   545→      <div class="topbar-title" id="topbarTitle">Dashboard</div>
+   546→   546→      <div class="store-selector" id="storeSelectorWrap">
+   547→   547→        <i class="fa-solid fa-store" style="color:var(--crimson)"></i>
+   548→   548→        <select id="storeSelect"></select>
+   549→   549→      </div>
+   550→   550→      <div class="offline-pill online" id="offlinePill"><i class="fa-solid fa-wifi"></i> Online</div>
+   551→   551→      <div class="topbar-actions">
+   552→   552→        <button class="icon-btn" id="scanBtn" title="Scan Barcode"><i class="fa-solid fa-barcode"></i></button>
+   553→   553→        <button class="icon-btn essential" id="homeBtn" title="Home"><i class="fa-solid fa-house"></i></button>
+   554→   554→        <button class="icon-btn" id="backupBtn" title="Backup"><i class="fa-solid fa-cloud-arrow-up"></i></button>
+   555→   555→      </div>
+   556→   556→    </header>
+   557→   557→    <main class="content" id="content"></main>
+   558→   558→  </div>
+   559→   559→
+   560→   560→  <nav class="bottom-nav" id="bottomNav">
+   561→   561→    <div class="bottom-nav-items">
+   562→   562→      <button class="bottom-nav-item" data-nav="inventory"><i class="fa-solid fa-boxes-stacked"></i><span>Stock</span></button>
+   563→   563→      <button class="bottom-nav-item" data-nav="pos"><i class="fa-solid fa-cash-register"></i><span>POS</span></button>
+   564→   564→      <button class="bottom-nav-item" data-nav="stocktake"><i class="fa-solid fa-clipboard-check"></i><span>Count</span></button>
+   565→   565→      <button class="bottom-nav-item" data-nav="reconciliation"><i class="fa-solid fa-scale-balanced"></i><span>Daily</span></button>
+   566→   566→      <button class="bottom-nav-item more" id="moreNavBtn"><i class="fa-solid fa-ellipsis"></i><span>More</span>
+   567→   567→        <div class="more-menu" id="moreMenu"></div>
+   568→   568→      </button>
+   569→   569→    </div>
+   570→   570→  </nav>
+   571→   571→</div>
+   572→   572→
+   573→   573→<!-- Modal -->
+   574→   574→<div class="modal-backdrop" id="modalBackdrop">
+   575→   575→  <div class="modal" id="modal">
+   576→   576→    <div class="modal-header">
+   577→   577→      <h3 id="modalTitle">Title</h3>
+   578→   578→      <button class="modal-close" id="modalClose"><i class="fa-solid fa-xmark"></i></button>
+   579→   579→    </div>
+   580→   580→    <div class="modal-body" id="modalBody"></div>
+   581→   581→    <div class="modal-footer" id="modalFooter"></div>
+   582→   582→  </div>
+   583→   583→</div>
+   584→   584→
+   585→   585→<!-- Scanner -->
+   586→   586→<div class="scanner-overlay" id="scannerOverlay">
+   587→   587→  <video id="scannerVideo" autoplay playsinline muted></video>
+   588→   588→  <div class="scanner-box"></div>
+   589→   589→  <div class="scan-hint">Point camera at barcode</div>
+   590→   590→  <button class="scan-close" id="scannerClose"><i class="fa-solid fa-xmark"></i></button>
+   591→   591→</div>
+   592→   592→
+   593→   593→<!-- Toast -->
+   594→   594→<div id="toastContainer"></div>
+   595→   595→
+   596→   596→<script>
+   597→   597→/* ================== STATE ================== */
+   598→   598→const LS_KEY = 'vinocellar_pro_v1';
+   599→   599→let state = loadState();
+   600→   600→let currentUser = null;
+   601→   601→let currentPage = 'dashboard';
+   602→   602→let cart = [];
+   603→   603→let charts = {};
+   604→   604→let pinBuffer = '';
+   605→   605→let pendingStockTake = null;
+   606→   606→let scannerStream = null;
+   607→   607→
+   608→   608→function loadState(){
+   609→   609→  try{
+   610→   610→    const s = JSON.parse(localStorage.getItem(LS_KEY));
+   611→   611→    if(s && s.inventory && Array.isArray(s.inventory)){
+   612→   612→      // schema migration: ensure all required fields exist AND are arrays (handles upgrades + null/corruption)
+   613→   613→      const seed = seedState();
+   614→   614→      const arrFields = {inventory:seed.inventory,sales:[],stockTakes:[],reconciliation:[],expenses:[]};
+   615→   615→      const objFields = {stores:seed.stores,suppliers:seed.suppliers,staff:seed.staff};
+   616→   616→      const scalarFields = {currentStoreId:seed.currentStoreId,lastBackup:null};
+   617→   617→      Object.keys(arrFields).forEach(k=>{ if(!Array.isArray(s[k])) s[k]=arrFields[k] });
+   618→   618→      Object.keys(objFields).forEach(k=>{ if(!Array.isArray(s[k])) s[k]=objFields[k] });
+   619→   619→      Object.keys(scalarFields).forEach(k=>{ if(s[k]===undefined||s[k]===null) s[k]=scalarFields[k] });
+   620→   620→      // make sure currentStoreId still points to a valid store
+   621→   621→      if(!s.stores.find(st=>st.id===s.currentStoreId)) s.currentStoreId=s.stores[0]?.id;
+   622→   622→      return s;
+   623→   623→    }
+   624→   624→  }catch(e){}
+   625→   625→  return seedState();
+   626→   626→}
+   627→   627→function saveState(){
+   628→   628→  localStorage.setItem(LS_KEY, JSON.stringify(state));
+   629→   629→  localStorage.setItem(LS_KEY+'_lastbackup', new Date().toISOString());
+   630→   630→}
+   631→   631→function seedState(){
+   632→   632→  const stores = [
+   633→   633→    {id:'s1',name:'Downtown Flagship',location:'Nairobi CBD'},
+   634→   634→    {id:'s2',name:'Westlands Branch',location:'Westlands'}
+   635→   635→  ];
+   636→   636→  const suppliers = [
+   637→   637→    {id:'sup1',name:'East African Wines Ltd',contact:'John Mwangi',phone:'+254712345678',email:'sales@eawines.co.ke',products:'Wine,Champagne'},
+   638→   638→    {id:'sup2',name:'Spirits Distributors KE',contact:'Aisha Hassan',phone:'+254722987654',email:'info@spiritske.com',products:'Whisky,Vodka,Gin'},
+   639→   639→    {id:'sup3',name:'Premium Beverages',contact:'Peter Kamau',phone:'+254733456789',email:'orders@premiumbev.co.ke',products:'Beer,Cider'}
+   640→   640→  ];
+   641→   641→  const cats = ['Wine','Whisky','Vodka','Gin','Rum','Champagne','Beer','Cognac','Tequila','Liqueur'];
+   642→   642→  const sizes = ['750ml','1L','700ml','375ml','1.75L','330ml','500ml'];
+   643→   643→  const inv = [
+   644→   644→    {id:'p1',name:'Jameson Caskmates 750ml',sku:'JMS-CSK-750',barcode:'6001234500011',category:'Whisky',size:'750ml',storeId:'s1',opening:30,current:25,reorder:8,cost:3200,sell:4800,supplierId:'sup2'},
+   645→   645→    {id:'p2',name:'Cabernet Sauvignon 750ml',sku:'CAB-SAV-750',barcode:'6001234500028',category:'Wine',size:'750ml',storeId:'s1',opening:48,current:6,reorder:12,cost:1800,sell:2900,supplierId:'sup1'},
+   646→   646→    {id:'p3',name:'Smirnoff Red 1L',sku:'SMR-RED-1L',barcode:'6001234500035',category:'Vodka',size:'1L',storeId:'s1',opening:24,current:18,reorder:6,cost:1900,sell:2800,supplierId:'sup2'},
+   647→   647→    {id:'p4',name:'Tanqueray Gin 750ml',sku:'TNQ-750',barcode:'6001234500042',category:'Gin',size:'750ml',storeId:'s1',opening:18,current:14,reorder:5,cost:3500,sell:5200,supplierId:'sup2'},
+   648→   648→    {id:'p5',name:'Moët & Chandon 750ml',sku:'MOET-750',barcode:'6001234500059',category:'Champagne',size:'750ml',storeId:'s1',opening:12,current:9,reorder:4,cost:8500,sell:12500,supplierId:'sup1'},
+   649→   649→    {id:'p6',name:'Hennessy VS 700ml',sku:'HNY-VS-700',barcode:'6001234500066',category:'Cognac',size:'700ml',storeId:'s1',opening:15,current:3,reorder:5,cost:6800,sell:9800,supplierId:'sup2'},
+   650→   650→    {id:'p7',name:'Bacardi Carta Blanca 1L',sku:'BCR-CB-1L',barcode:'6001234500073',category:'Rum',size:'1L',storeId:'s1',opening:20,current:16,reorder:6,cost:2100,sell:3200,supplierId:'sup2'},
+   651→   651→    {id:'p8',name:'Heineken 330ml',sku:'HEK-330',barcode:'6001234500080',category:'Beer',size:'330ml',storeId:'s1',opening:144,current:96,reorder:48,cost:180,sell:350,supplierId:'sup3'},
+   652→   652→    {id:'p9',name:'Jose Cuervo 750ml',sku:'JSR-CV-750',barcode:'6001234500097',category:'Tequila',size:'750ml',storeId:'s1',opening:10,current:7,reorder:4,cost:2900,sell:4500,supplierId:'sup2'},
+   653→   653→    {id:'p10',name:'Baileys 750ml',sku:'BLY-750',barcode:'6001234500103',category:'Liqueur',size:'750ml',storeId:'s1',opening:16,current:11,reorder:5,cost:3100,sell:4700,supplierId:'sup2'},
+   654→   654→    {id:'p11',name:'Glenfiddich 12 700ml',sku:'GLF-12-700',barcode:'6001234500110',category:'Whisky',size:'700ml',storeId:'s2',opening:12,current:8,reorder:4,cost:5200,sell:7800,supplierId:'sup2'},
+   655→   655→    {id:'p12',name:'Yellow Tail Chardonnay',sku:'YT-CHD-750',barcode:'6001234500127',category:'Wine',size:'750ml',storeId:'s2',opening:36,current:22,reorder:10,cost:1500,sell:2400,supplierId:'sup1'}
+   656→   656→  ];
+   657→   657→  const staff = [
+   658→   658→    {id:'u1',name:'Manager',pin:'1234',role:'manager',storeId:'s1'},
+   659→   659→    {id:'u2',name:'James Staff',pin:'5678',role:'staff',storeId:'s1'},
+   660→   660→    {id:'u3',name:'Mary Clerk',pin:'4321',role:'staff',storeId:'s2'}
+   661→   661→  ];
+   662→   662→  // seed some sales history (last 7 days)
+   663→   663→  const sales = [];
+   664→   664→  const now = Date.now();
+   665→   665→  for(let d=6;d>=0;d--){
+   666→   666→    const dayStart = new Date(now - d*86400000);dayStart.setHours(9,0,0,0);
+   667→   667→    const n = 2 + Math.floor(Math.random()*5);
+   668→   668→    for(let i=0;i<n;i++){
+   669→   669→      const p = inv[Math.floor(Math.random()*inv.length)];
+   670→   670→      const qty = 1 + Math.floor(Math.random()*3);
+   671→   671→      sales.push({id:'sale_'+Math.random().toString(36).slice(2,9),items:[{id:p.id,name:p.name,qty,price:p.sell,cost:p.cost}],total:p.sell*qty,staffId:'u2',storeId:p.storeId,timestamp:dayStart.getTime()+Math.random()*50000000,paymentMethod:['cash','card','mpesa'][Math.floor(Math.random()*3)]});
+   672→   672→    }
+   673→   673→  }
+   674→   674→  const expenses=[
+   675→   675→    {id:'e1',date:todayKey(),category:'Rent',description:'Monthly store rent',amount:85000,storeId:'s1',recordedBy:'u1'},
+   676→   676→    {id:'e2',date:todayKey(),category:'Utilities',description:'Electricity & water',amount:12400,storeId:'s1',recordedBy:'u1'},
+   677→   677→    {id:'e3',date:new Date(Date.now()-86400000).toISOString().slice(0,10),category:'Inventory',description:'Wine restock from East African Wines',amount:68000,storeId:'s1',recordedBy:'u1'},
+   678→   678→    {id:'e4',date:new Date(Date.now()-2*86400000).toISOString().slice(0,10),category:'Salaries',description:'Staff weekly pay',amount:42000,storeId:'s1',recordedBy:'u1'},
+   679→   679→    {id:'e5',date:new Date(Date.now()-3*86400000).toISOString().slice(0,10),category:'Marketing',description:'Social media ads',amount:8500,storeId:'s1',recordedBy:'u1'},
+   680→   680→    {id:'e6',date:new Date(Date.now()-4*86400000).toISOString().slice(0,10),category:'Maintenance',description:'Fridge repair',amount:5600,storeId:'s1',recordedBy:'u1'},
+   681→   681→    {id:'e7',date:new Date(Date.now()-5*86400000).toISOString().slice(0,10),category:'Other',description:'Cleaning supplies',amount:2300,storeId:'s1',recordedBy:'u1'}
+   682→   682→  ];
+   683→   683→  return {stores,currentStoreId:'s1',inventory:inv,suppliers,staff,sales,stockTakes:[],reconciliation:[],expenses,lastBackup:null};
+   684→   684→}
+   685→   685→
+   686→   686→/* ================== HELPERS ================== */
+   687→   687→const $ = (s,el=document)=>el.querySelector(s);
+   688→   688→const $$ = (s,el=document)=>Array.from(el.querySelectorAll(s));
+   689→   689→const fmt = n => 'KSh '+Number(n||0).toLocaleString('en-KE',{maximumFractionDigits:0});
+   690→   690→const fmtN = n => Number(n||0).toLocaleString('en-KE');
+   691→   691→function todayKey(){return new Date().toISOString().slice(0,10)}
+   692→   692→function uid(p){return p+'_'+Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3)}
+   693→   693→function toast(msg,type='info'){
+   694→   694→  const icons={success:'fa-circle-check',error:'fa-circle-exclamation',warn:'fa-triangle-exclamation',info:'fa-circle-info'};
+   695→   695→  const t=document.createElement('div');t.className='toast '+type;
+   696→   696→  t.innerHTML='<i class="fa-solid '+icons[type]+'"></i><span>'+msg+'</span>';
+   697→   697→  $('#toastContainer').appendChild(t);
+   698→   698→  setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(100%)';setTimeout(()=>t.remove(),300)},3500);
+   699→   699→}
+
+[showing lines 200-699 of 1939; use offset=700 with limit to continue reading]

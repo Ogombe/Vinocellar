@@ -14,6 +14,7 @@ export async function getSessionUser(token: string): Promise<{ user: any; org: a
   })
 
   if (!user || !user.isActive || user.organisationId !== payload.organisationId) return null
+  if (user.organisation && !user.organisation.isActive && user.role !== 'super_admin') return null
 
   return {
     user: {

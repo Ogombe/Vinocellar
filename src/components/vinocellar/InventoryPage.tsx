@@ -734,6 +734,7 @@ export function InventoryPage() {
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false)
+  const [receiveModalOpen, setReceiveModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [reorderProduct, setReorderProduct] = useState<Product | null>(null)
 
@@ -869,14 +870,23 @@ export function InventoryPage() {
             </span>
           </div>
           {isManager && (
-            <button
-              onClick={openAddModal}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-sm font-semibold text-white transition-colors cursor-pointer hover:opacity-90 self-start sm:self-auto"
-              style={{ background: '#DC2626' }}
-            >
-              <PlusIcon />
-              Add Product
-            </button>
+            <div className="flex gap-2 self-start sm:self-auto">
+              <button
+                onClick={() => setReceiveModalOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-sm font-semibold text-[#065F46] border border-[#D1FAE5] bg-[#ECFDF5] transition-colors cursor-pointer hover:bg-[#D1FAE5] self-start sm:self-auto"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path d="M3 3a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V3zm0 6a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V9zm0 6a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2z"/></svg>
+                Receive Stock
+              </button>
+              <button
+                onClick={openAddModal}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-sm font-semibold text-white transition-colors cursor-pointer hover:opacity-90 self-start sm:self-auto"
+                style={{ background: '#DC2626' }}
+              >
+                <PlusIcon />
+                Add Product
+              </button>
+            </div>
           )}
         </div>
 
@@ -1185,6 +1195,199 @@ export function InventoryPage() {
           onConfirm={handleReorder}
         />
       )}
+
+      {/* Receive Stock Modal */}
+      <ReceiveStockModal
+        open={receiveModalOpen}
+        onClose={() => setReceiveModalOpen(false)}
+        products={products}
+        onReceived={() => { fetchProducts(); setReceiveModalOpen(false) }}
+      />
+    </div>
+  )
+}
+
+/* ─── Receive Stock Modal ─── */
+function ReceiveStockModal({ open, onClose, products, onReceived }: {
+  open: boolean
+  onClose: () => void
+  products: Product[]
+  onReceived: () => void
+}) {
+  const [receiveItems, setReceiveItems] = useState<{ productId: string; qty: number; costPrice: number }[]>([])
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const storeId = useAppStore(s => s.storeId)
+
+  const addProduct = (product: Product) => {
+    if (receiveItems.find(i => i.productId === product.id)) return
+    setReceiveItems([...receiveItems, { productId: product.id, qty: 1, costPrice: product.costPrice || 0 }])
+  }
+
+  const removeProduct = (productId: string) => {
+    setReceiveItems(receiveItems.filter(i => i.productId !== productId))
+  }
+
+  const updateQty = (productId: string, qty: number) => {
+    setReceiveItems(receiveItems.map(i => i.productId === productId ? { ...i, qty: Math.max(0, qty) } : i))
+  }
+
+  const updateCost = (productId: string, costPrice: number) => {
+    setReceiveItems(receiveItems.map(i => i.productId === productId ? { ...i, costPrice: Math.max(0, costPrice) } : i))
+  }
+
+  const handleReceive = async () => {
+    if (receiveItems.length === 0) return
+    setSaving(true)
+    setError('')
+    try {
+      await api.receiveStock({ storeId, items: receiveItems })
+      onReceived()
+    } catch (err: any) {
+      setError(err.message || 'Failed to receive stock')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!open) return null
+
+  const availableProducts = products.filter(p =>
+    !receiveItems.find(i => i.productId === p.id) &&
+    (p.name + p.sku + p.barcode).toLowerCase().includes(search.toLowerCase())
+  )
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-[14px] shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col" style={{ boxShadow: '0 20px 60px rgba(31,17,41,.18)' }}>
+        <div className="sticky top-0 bg-white border-b border-[#E8E0F0] px-6 py-4 flex items-center justify-between rounded-t-[14px] z-10">
+          <div>
+            <h3 className="text-base font-bold" style={{ color: '#1F1129' }}>Receive Stock</h3>
+            <p className="text-xs mt-0.5" style={{ color: '#8B7FA0' }}>Add stock received from suppliers</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#F5F0EB] transition cursor-pointer" aria-label="Close">
+            <svg className="w-5 h-5" viewBox="0 0 20 20" fill="#8B7FA0"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {error && (
+            <div className="px-4 py-2.5 rounded-xl text-sm font-medium" style={{ backgroundColor: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' }}>{error}</div>
+          )}
+
+          {/* Search products */}
+          <div className="relative">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]">
+              <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" /></svg>
+            </div>
+            <input
+              type="text"
+              placeholder="Search products to add..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full h-9 pl-9 pr-3 text-sm rounded-[8px] border border-[#E8E0F0] bg-[#FAF7F2] text-[#1F1129] placeholder:text-[#9CA3AF] outline-none focus:border-[#DC2626]/40 focus:ring-2 focus:ring-[#DC2626]/10"
+            />
+          </div>
+
+          {search && (
+            <div className="max-h-40 overflow-y-auto border border-[#E8E0F0] rounded-lg divide-y divide-[#F5F0EB]">
+              {availableProducts.slice(0, 10).map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => { addProduct(p); setSearch('') }}
+                  className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#FAF7F2] transition cursor-pointer"
+                >
+                  <div>
+                    <div className="text-sm font-medium text-[#1F1129]">{p.name}</div>
+                    <div className="text-xs text-[#8B7FA0]">{p.category} · {p.size} · Current: {p.currentStock}</div>
+                  </div>
+                  <svg className="w-4 h-4 text-[#8B7FA0]" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>
+                </button>
+              ))}
+              {availableProducts.length === 0 && (
+                <div className="px-3 py-3 text-sm text-[#8B7FA0] text-center">No products found</div>
+              )}
+            </div>
+          )}
+
+          {/* Items to receive */}
+          {receiveItems.length > 0 && (
+            <div className="border border-[#E8E0F0] rounded-xl overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-[#FAF7F2]">
+                    <th className="text-left py-2 px-3 text-xs font-semibold text-[#8B7FA0]">Product</th>
+                    <th className="text-right py-2 px-3 text-xs font-semibold text-[#8B7FA0] w-24">Qty</th>
+                    <th className="text-right py-2 px-3 text-xs font-semibold text-[#8B7FA0] w-28">Unit Cost</th>
+                    <th className="w-10"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {receiveItems.map(item => {
+                    const product = products.find(p => p.id === item.productId)
+                    return (
+                      <tr key={item.productId} className="border-t border-[#F5F0EB]">
+                        <td className="py-2 px-3">
+                          <div className="text-sm font-medium text-[#1F1129]">{product?.name || 'Unknown'}</div>
+                          <div className="text-xs text-[#8B7FA0]">Current: {product?.currentStock || 0}</div>
+                        </td>
+                        <td className="py-2 px-3">
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.qty}
+                            onChange={(e) => updateQty(item.productId, parseInt(e.target.value) || 0)}
+                            className="w-full text-right px-2 py-1 rounded-lg border border-[#E8E0F0] text-sm outline-none focus:border-[#DC2626]/40"
+                          />
+                        </td>
+                        <td className="py-2 px-3">
+                          <input
+                            type="number"
+                            min="0"
+                            value={item.costPrice || ''}
+                            onChange={(e) => updateCost(item.productId, parseFloat(e.target.value) || 0)}
+                            className="w-full text-right px-2 py-1 rounded-lg border border-[#E8E0F0] text-sm outline-none focus:border-[#DC2626]/40"
+                            placeholder="0"
+                          />
+                        </td>
+                        <td className="py-2 px-1">
+                          <button onClick={() => removeProduct(item.productId)} className="p-1 rounded hover:bg-[#FEF2F2] transition cursor-pointer">
+                            <svg className="w-4 h-4 text-[#DC2626]" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              <div className="px-3 py-2 bg-[#FAF7F2] text-xs text-[#8B7FA0]">
+                {receiveItems.reduce((s, i) => s + i.qty, 0)} total units to add
+              </div>
+            </div>
+          )}
+
+          {receiveItems.length === 0 && (
+            <div className="text-center py-10">
+              <svg className="w-12 h-12 mx-auto mb-3 text-[#D1D5DB]" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1 0-2 .9-2 2v3.01c0 .72.43 1.34 1 1.69V20c0 1.1 1.1 2 2 2h14c.9 0 2-.9 2-2V8.7c.57-.35 1-.97 1-1.69V5c0-1.1-1-3-2-3zm-5 12H9v-2h6v2zm5-7H4V5h16v2z"/></svg>
+              <p className="text-sm text-[#8B7FA0]">Search and add products to receive stock</p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-[#E8E0F0] flex justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-semibold border border-[#E8E0F0] text-[#6B5E7A] hover:bg-[#FAF7F2] transition cursor-pointer">Cancel</button>
+          <button
+            onClick={handleReceive}
+            disabled={saving || receiveItems.length === 0}
+            className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60 cursor-pointer"
+            style={{ backgroundColor: '#059669' }}
+          >
+            {saving ? 'Receiving...' : `Receive ${receiveItems.length} Items`}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
