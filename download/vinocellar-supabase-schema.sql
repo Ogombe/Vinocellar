@@ -3,8 +3,17 @@
 -- PostgreSQL with Row Level Security (RLS)
 -- ============================================================
 -- Run this in the Supabase SQL Editor (https://supabase.com/dashboard)
--- Execute each section in order.
+-- Execute the ENTIRE script as one block (Ctrl+Shift+Enter) or
+-- section by section. Do NOT skip Section 0.
 -- ============================================================
+
+-- ════════════════════════════════════════════════════════════
+-- SECTION 0: GRANT ACCESS TO auth SCHEMA (MUST RUN FIRST!)
+-- ════════════════════════════════════════════════════════════
+-- The postgres role (used by the SQL Editor) needs read access
+-- to auth.users so our RLS helper functions can read user meta.
+grant usage on schema auth to postgres;
+grant select on table auth.users to postgres;
 
 -- ════════════════════════════════════════════════════════════
 -- SECTION 1: ENABLE REQUIRED EXTENSIONS
@@ -13,15 +22,20 @@ create extension if not exists "uuid-ossp";
 create extension if not exists "pgcrypto";
 
 -- ════════════════════════════════════════════════════════════
--- SECTION 2: HELPER FUNCTIONS
+-- SECTION 2: HELPER FUNCTIONS (in public schema)
 -- ════════════════════════════════════════════════════════════
+-- NOTE: We create these in the PUBLIC schema (not auth schema)
+-- because the SQL Editor's postgres role cannot create objects
+-- in the auth schema. We use SECURITY DEFINER so the functions
+-- execute with elevated privileges to read auth.users.
 
 -- Get the current user's organisation_id from auth.users meta
 -- This is the KEY function that powers all RLS policies.
-create or replace function auth.organisation_id()
+create or replace function public.get_organisation_id()
 returns uuid
 language sql
 stable
+security definer
 as $$
   select (raw_app_meta_data ->> 'organisation_id')::uuid
   from auth.users
@@ -29,10 +43,11 @@ as $$
 $$;
 
 -- Get the current user's role from auth.users meta
-create or replace function auth.user_role()
+create or replace function public.get_user_role()
 returns text
 language sql
 stable
+security definer
 as $$
   select coalesce(raw_app_meta_data ->> 'role', 'staff')
   from auth.users
@@ -40,10 +55,11 @@ as $$
 $$;
 
 -- Get current user's store_id
-create or replace function auth.user_store_id()
+create or replace function public.get_user_store_id()
 returns uuid
 language sql
 stable
+security definer
 as $$
   select (raw_app_meta_data ->> 'store_id')::uuid
   from auth.users
@@ -451,22 +467,20 @@ create index idx_sa_access_expires on public.super_admin_access (expires_at);
 -- ════════════════════════════════════════════════════════════
 -- Every table gets RLS. Policies ensure users can ONLY
 -- see/modify data belonging to THEIR organisation.
+-- All policies use public.get_organisation_id() and
+-- public.get_user_role() (defined in Section 2).
 -- ════════════════════════════════════════════════════════════
-
--- ── Helper: Enable RLS and add standard policies ──
--- Pattern: Each table gets SELECT, INSERT, UPDATE, DELETE
--- scoped to auth.organisation_id()
 
 -- 13a. Organisations ──────────────────────────────────
 alter table public.organisations enable row level security;
 
 -- Anyone authenticated can read their own org
 create policy "org_select_own" on public.organisations
-  for select using (id = auth.organisation_id());
+  for select using (id = public.get_organisation_id());
 
 -- Super admin can read all orgs
 create policy "org_select_super_admin" on public.organisations
-  for select using (auth.user_role() = 'super_admin');
+  for select using (public.get_user_role() = 'super_admin');
 
 -- No insert/update/delete via RLS — use server-side functions
 
@@ -475,17 +489,17 @@ create policy "org_select_super_admin" on public.organisations
 alter table public.users enable row level security;
 
 create policy "users_select_own_org" on public.users
-  for select using (organisation_id = auth.organisation_id());
+  for select using (organisation_id = public.get_organisation_id());
 
 create policy "users_update_own" on public.users
-  for update using (id = auth.uid() or auth.user_role() = 'manager')
-  with check (organisation_id = auth.organisation_id());
+  for update using (id = auth.uid() or public.get_user_role() = 'manager')
+  with check (organisation_id = public.get_organisation_id());
 
 -- Managers can insert new staff
 create policy "users_insert_manager" on public.users
   for insert with check (
-    organisation_id = auth.organisation_id()
-    and auth.user_role() = 'manager'
+    organisation_id = public.get_organisation_id()
+    and public.get_user_role() = 'manager'
   );
 
 
@@ -493,24 +507,24 @@ create policy "users_insert_manager" on public.users
 alter table public.stores enable row level security;
 
 create policy "stores_select_own_org" on public.stores
-  for select using (organisation_id = auth.organisation_id());
+  for select using (organisation_id = public.get_organisation_id());
 
 create policy "stores_insert_manager" on public.stores
   for insert with check (
-    organisation_id = auth.organisation_id()
-    and auth.user_role() in ('manager', 'super_admin')
+    organisation_id = public.get_organisation_id()
+    and public.get_user_role() in ('manager', 'super_admin')
   );
 
 create policy "stores_update_manager" on public.stores
   for update using (
-    organisation_id = auth.organisation_id()
-    and auth.user_role() in ('manager', 'super_admin')
+    organisation_id = public.get_organisation_id()
+    and public.get_user_role() in ('manager', 'super_admin')
   );
 
 create policy "stores_delete_manager" on public.stores
   for delete using (
-    organisation_id = auth.organisation_id()
-    and auth.user_role() = 'manager'
+    organisation_id = public.get_organisation_id()
+    and public.get_user_role() = 'manager'
   );
 
 
@@ -518,24 +532,24 @@ create policy "stores_delete_manager" on public.stores
 alter table public.categories enable row level security;
 
 create policy "categories_select_own_org" on public.categories
-  for select using (organisation_id = auth.organisation_id());
+  for select using (organisation_id = public.get_organisation_id());
 
 create policy "categories_insert_manager" on public.categories
   for insert with check (
-    organisation_id = auth.organisation_id()
-    and auth.user_role() in ('manager', 'super_admin')
+    organisation_id = public.get_organisation_id()
+    and public.get_user_role() in ('manager', 'super_admin')
   );
 
 create policy "categories_update_manager" on public.categories
   for update using (
-    organisation_id = auth.organisation_id()
-    and auth.user_role() in ('manager', 'super_admin')
+    organisation_id = public.get_organisation_id()
+    and public.get_user_role() in ('manager', 'super_admin')
   );
 
 create policy "categories_delete_manager" on public.categories
   for delete using (
-    organisation_id = auth.organisation_id()
-    and auth.user_role() in ('manager', 'super_admin')
+    organisation_id = public.get_organisation_id()
+    and public.get_user_role() in ('manager', 'super_admin')
   );
 
 
@@ -543,24 +557,24 @@ create policy "categories_delete_manager" on public.categories
 alter table public.suppliers enable row level security;
 
 create policy "suppliers_select_own_org" on public.suppliers
-  for select using (organisation_id = auth.organisation_id());
+  for select using (organisation_id = public.get_organisation_id());
 
 create policy "suppliers_insert_manager" on public.suppliers
   for insert with check (
-    organisation_id = auth.organisation_id()
-    and auth.user_role() in ('manager', 'super_admin')
+    organisation_id = public.get_organisation_id()
+    and public.get_user_role() in ('manager', 'super_admin')
   );
 
 create policy "suppliers_update_manager" on public.suppliers
   for update using (
-    organisation_id = auth.organisation_id()
-    and auth.user_role() in ('manager', 'super_admin')
+    organisation_id = public.get_organisation_id()
+    and public.get_user_role() in ('manager', 'super_admin')
   );
 
 create policy "suppliers_delete_manager" on public.suppliers
   for delete using (
-    organisation_id = auth.organisation_id()
-    and auth.user_role() in ('manager', 'super_admin')
+    organisation_id = public.get_organisation_id()
+    and public.get_user_role() in ('manager', 'super_admin')
   );
 
 
@@ -568,24 +582,24 @@ create policy "suppliers_delete_manager" on public.suppliers
 alter table public.products enable row level security;
 
 create policy "products_select_own_org" on public.products
-  for select using (organisation_id = auth.organisation_id());
+  for select using (organisation_id = public.get_organisation_id());
 
 create policy "products_insert_manager" on public.products
   for insert with check (
-    organisation_id = auth.organisation_id()
-    and auth.user_role() in ('manager', 'super_admin')
+    organisation_id = public.get_organisation_id()
+    and public.get_user_role() in ('manager', 'super_admin')
   );
 
 create policy "products_update_manager" on public.products
   for update using (
-    organisation_id = auth.organisation_id()
-    and auth.user_role() in ('manager', 'super_admin')
+    organisation_id = public.get_organisation_id()
+    and public.get_user_role() in ('manager', 'super_admin')
   );
 
 create policy "products_delete_manager" on public.products
   for delete using (
-    organisation_id = auth.organisation_id()
-    and auth.user_role() in ('manager', 'super_admin')
+    organisation_id = public.get_organisation_id()
+    and public.get_user_role() in ('manager', 'super_admin')
   );
 
 
@@ -593,10 +607,10 @@ create policy "products_delete_manager" on public.products
 alter table public.sales enable row level security;
 
 create policy "sales_select_own_org" on public.sales
-  for select using (organisation_id = auth.organisation_id());
+  for select using (organisation_id = public.get_organisation_id());
 
 create policy "sales_insert_own_org" on public.sales
-  for insert with check (organisation_id = auth.organisation_id());
+  for insert with check (organisation_id = public.get_organisation_id());
 
 -- No update or delete on sales (immutable)
 
@@ -609,7 +623,7 @@ create policy "sale_items_select_own_org" on public.sale_items
     exists (
       select 1 from public.sales
       where sales.id = sale_items.sale_id
-      and sales.organisation_id = auth.organisation_id()
+      and sales.organisation_id = public.get_organisation_id()
     )
   );
 
@@ -618,7 +632,7 @@ create policy "sale_items_insert_own_org" on public.sale_items
     exists (
       select 1 from public.sales
       where sales.id = sale_items.sale_id
-      and sales.organisation_id = auth.organisation_id()
+      and sales.organisation_id = public.get_organisation_id()
     )
   );
 
@@ -627,11 +641,11 @@ create policy "sale_items_insert_own_org" on public.sale_items
 alter table public.stock_movements enable row level security;
 
 create policy "stock_movements_select_own_org" on public.stock_movements
-  for select using (organisation_id = auth.organisation_id());
+  for select using (organisation_id = public.get_organisation_id());
 
 -- Insert via server-side functions only (or manager)
 create policy "stock_movements_insert_own_org" on public.stock_movements
-  for insert with check (organisation_id = auth.organisation_id());
+  for insert with check (organisation_id = public.get_organisation_id());
 
 -- NEVER update or delete stock movements (immutable ledger)
 
@@ -640,12 +654,12 @@ create policy "stock_movements_insert_own_org" on public.stock_movements
 alter table public.purchases enable row level security;
 
 create policy "purchases_select_own_org" on public.purchases
-  for select using (organisation_id = auth.organisation_id());
+  for select using (organisation_id = public.get_organisation_id());
 
 create policy "purchases_insert_manager" on public.purchases
   for insert with check (
-    organisation_id = auth.organisation_id()
-    and auth.user_role() in ('manager', 'super_admin')
+    organisation_id = public.get_organisation_id()
+    and public.get_user_role() in ('manager', 'super_admin')
   );
 
 
@@ -653,15 +667,15 @@ create policy "purchases_insert_manager" on public.purchases
 alter table public.stock_takes enable row level security;
 
 create policy "stock_takes_select_own_org" on public.stock_takes
-  for select using (organisation_id = auth.organisation_id());
+  for select using (organisation_id = public.get_organisation_id());
 
 create policy "stock_takes_insert_own_org" on public.stock_takes
-  for insert with check (organisation_id = auth.organisation_id());
+  for insert with check (organisation_id = public.get_organisation_id());
 
 create policy "stock_takes_update_own_org" on public.stock_takes
   for update using (
-    organisation_id = auth.organisation_id()
-    and auth.user_role() in ('manager', 'super_admin')
+    organisation_id = public.get_organisation_id()
+    and public.get_user_role() in ('manager', 'super_admin')
   );
 
 
@@ -673,7 +687,7 @@ create policy "stock_take_items_select_own_org" on public.stock_take_items
     exists (
       select 1 from public.stock_takes
       where stock_takes.id = stock_take_items.stock_take_id
-      and stock_takes.organisation_id = auth.organisation_id()
+      and stock_takes.organisation_id = public.get_organisation_id()
     )
   );
 
@@ -682,7 +696,7 @@ create policy "stock_take_items_insert_own_org" on public.stock_take_items
     exists (
       select 1 from public.stock_takes
       where stock_takes.id = stock_take_items.stock_take_id
-      and stock_takes.organisation_id = auth.organisation_id()
+      and stock_takes.organisation_id = public.get_organisation_id()
     )
   );
 
@@ -691,7 +705,7 @@ create policy "stock_take_items_update_own_org" on public.stock_take_items
     exists (
       select 1 from public.stock_takes
       where stock_takes.id = stock_take_items.stock_take_id
-      and stock_takes.organisation_id = auth.organisation_id()
+      and stock_takes.organisation_id = public.get_organisation_id()
     )
   );
 
@@ -700,13 +714,13 @@ create policy "stock_take_items_update_own_org" on public.stock_take_items
 alter table public.reconciliations enable row level security;
 
 create policy "recon_select_own_org" on public.reconciliations
-  for select using (organisation_id = auth.organisation_id());
+  for select using (organisation_id = public.get_organisation_id());
 
 create policy "recon_insert_own_org" on public.reconciliations
-  for insert with check (organisation_id = auth.organisation_id());
+  for insert with check (organisation_id = public.get_organisation_id());
 
 create policy "recon_update_own_org" on public.reconciliations
-  for update using (organisation_id = auth.organisation_id());
+  for update using (organisation_id = public.get_organisation_id());
 
 
 -- 13n. Reconciliation Items ──────────────────────────
@@ -717,7 +731,7 @@ create policy "recon_items_select_own_org" on public.reconciliation_items
     exists (
       select 1 from public.reconciliations
       where reconciliations.id = reconciliation_items.reconciliation_id
-      and reconciliations.organisation_id = auth.organisation_id()
+      and reconciliations.organisation_id = public.get_organisation_id()
     )
   );
 
@@ -726,7 +740,7 @@ create policy "recon_items_insert_own_org" on public.reconciliation_items
     exists (
       select 1 from public.reconciliations
       where reconciliations.id = reconciliation_items.reconciliation_id
-      and reconciliations.organisation_id = auth.organisation_id()
+      and reconciliations.organisation_id = public.get_organisation_id()
     )
   );
 
@@ -735,7 +749,7 @@ create policy "recon_items_update_own_org" on public.reconciliation_items
     exists (
       select 1 from public.reconciliations
       where reconciliations.id = reconciliation_items.reconciliation_id
-      and reconciliations.organisation_id = auth.organisation_id()
+      and reconciliations.organisation_id = public.get_organisation_id()
     )
   );
 
@@ -744,24 +758,24 @@ create policy "recon_items_update_own_org" on public.reconciliation_items
 alter table public.expenses enable row level security;
 
 create policy "expenses_select_own_org" on public.expenses
-  for select using (organisation_id = auth.organisation_id());
+  for select using (organisation_id = public.get_organisation_id());
 
 create policy "expenses_insert_manager" on public.expenses
   for insert with check (
-    organisation_id = auth.organisation_id()
-    and auth.user_role() in ('manager', 'super_admin')
+    organisation_id = public.get_organisation_id()
+    and public.get_user_role() in ('manager', 'super_admin')
   );
 
 create policy "expenses_update_manager" on public.expenses
   for update using (
-    organisation_id = auth.organisation_id()
-    and auth.user_role() in ('manager', 'super_admin')
+    organisation_id = public.get_organisation_id()
+    and public.get_user_role() in ('manager', 'super_admin')
   );
 
 create policy "expenses_delete_manager" on public.expenses
   for delete using (
-    organisation_id = auth.organisation_id()
-    and auth.user_role() in ('manager', 'super_admin')
+    organisation_id = public.get_organisation_id()
+    and public.get_user_role() in ('manager', 'super_admin')
   );
 
 
@@ -770,7 +784,7 @@ alter table public.audit_logs enable row level security;
 
 -- Users can read their org's audit logs
 create policy "audit_select_own_org" on public.audit_logs
-  for select using (organisation_id = auth.organisation_id());
+  for select using (organisation_id = public.get_organisation_id());
 
 -- Insert is done by server-side trigger/function, not directly by users
 create policy "audit_insert_service_role" on public.audit_logs
@@ -792,12 +806,12 @@ create policy "notifications_update_own" on public.notifications
 alter table public.org_settings enable row level security;
 
 create policy "settings_select_own_org" on public.org_settings
-  for select using (organisation_id = auth.organisation_id());
+  for select using (organisation_id = public.get_organisation_id());
 
 create policy "settings_update_manager" on public.org_settings
   for update using (
-    organisation_id = auth.organisation_id()
-    and auth.user_role() in ('manager', 'super_admin')
+    organisation_id = public.get_organisation_id()
+    and public.get_user_role() in ('manager', 'super_admin')
   );
 
 
@@ -805,13 +819,13 @@ create policy "settings_update_manager" on public.org_settings
 alter table public.super_admin_access enable row level security;
 
 create policy "sa_access_select_super" on public.super_admin_access
-  for select using (auth.user_role() = 'super_admin');
+  for select using (public.get_user_role() = 'super_admin');
 
 create policy "sa_access_insert_super" on public.super_admin_access
-  for insert with check (auth.user_role() = 'super_admin');
+  for insert with check (public.get_user_role() = 'super_admin');
 
 create policy "sa_access_update_super" on public.super_admin_access
-  for update using (auth.user_role() = 'super_admin');
+  for update using (public.get_user_role() = 'super_admin');
 
 
 -- ════════════════════════════════════════════════════════════
@@ -852,9 +866,10 @@ begin
   values ('Main Store', v_org_id)
   returning id into v_store_id;
 
-  -- Create user via Supabase Auth
-  -- NOTE: In production, use supabase.auth.admin.createUser() from your backend.
-  -- For now, we create the profile row. The auth.users row is created separately.
+  -- Create user profile row
+  -- NOTE: The auth.users row is created separately via supabase.auth.signUp()
+  -- or supabase.auth.admin.createUser() from your app backend.
+  -- This function only creates the public.users profile.
   insert into public.users (email, name, pin, role, organisation_id, store_id)
   values (p_email, p_manager_name, p_pin, 'manager', v_org_id, v_store_id)
   returning id into v_user_id;
@@ -909,7 +924,11 @@ declare
   v_item       jsonb;
   v_product_id uuid;
   v_qty        int;
+  v_org_id     uuid;
 begin
+  -- Get org_id from current user
+  v_org_id := public.get_organisation_id();
+
   -- Calculate total
   v_total := 0;
   for v_item in select * from jsonb_array_elements(p_items)
@@ -922,7 +941,7 @@ begin
   values (
     v_total,
     p_payment_method,
-    auth.organisation_id(),
+    v_org_id,
     p_store_id,
     p_staff_id
   )
@@ -950,11 +969,11 @@ begin
     set current_stock = current_stock - v_qty,
         updated_at = now()
     where id = v_product_id
-      and organisation_id = auth.organisation_id();
+      and organisation_id = v_org_id;
 
     -- Log stock movement (immutable)
     insert into public.stock_movements (product_id, store_id, organisation_id, movement_type, quantity, reference_id, notes, created_by)
-    values (v_product_id, p_store_id, auth.organisation_id(), 'sale', -v_qty, v_sale_id, 'POS sale', p_staff_id);
+    values (v_product_id, p_store_id, v_org_id, 'sale', -v_qty, v_sale_id, 'POS sale', p_staff_id);
   end loop;
 
   return v_sale_id;
@@ -978,12 +997,14 @@ declare
   v_purchase_id  uuid;
   v_total_cost   numeric;
   v_item         jsonb;
+  v_org_id       uuid;
 begin
+  v_org_id := public.get_organisation_id();
   v_total_cost := 0;
 
   -- Create purchase record
   insert into public.purchases (supplier_id, store_id, organisation_id, total_cost, notes, received_by, items_data)
-  values (p_supplier_id, p_store_id, auth.organisation_id(), 0, p_notes, p_received_by, p_items)
+  values (p_supplier_id, p_store_id, v_org_id, 0, p_notes, p_received_by, p_items)
   returning id into v_purchase_id;
 
   for v_item in select * from jsonb_array_elements(p_items)
@@ -993,14 +1014,14 @@ begin
     set current_stock = current_stock + (v_item ->> 'qty')::int,
         updated_at = now()
     where id = (v_item ->> 'productId')::uuid
-      and organisation_id = auth.organisation_id();
+      and organisation_id = v_org_id;
 
     -- Log movement
     insert into public.stock_movements (product_id, store_id, organisation_id, movement_type, quantity, reference_id, notes, created_by)
     values (
       (v_item ->> 'productId')::uuid,
       p_store_id,
-      auth.organisation_id(),
+      v_org_id,
       'purchase',
       (v_item ->> 'qty')::int,
       v_purchase_id,
@@ -1106,11 +1127,19 @@ create trigger trg_org_settings_updated
 -- ════════════════════════════════════════════════════════════
 -- Enable Supabase Realtime for key tables so all staff
 -- see live updates (new sales, stock changes, etc.)
+-- NOTE: If you get a permission error here, you can enable
+-- Realtime from the Supabase Dashboard instead:
+-- Database → Replication → Select tables → Enable
 
-alter publication supabase_realtime add table public.sales;
-alter publication supabase_realtime add table public.products;
-alter publication supabase_realtime add table public.stock_takes;
-alter publication supabase_realtime add table public.notifications;
+do $$
+begin
+  alter publication supabase_realtime add table public.sales;
+  alter publication supabase_realtime add table public.products;
+  alter publication supabase_realtime add table public.stock_takes;
+  alter publication supabase_realtime add table public.notifications;
+exception when others then
+  raise notice 'Realtime setup skipped: %. Enable manually from Dashboard → Database → Replication.', SQLERRM;
+end $$;
 
 
 -- ════════════════════════════════════════════════════════════

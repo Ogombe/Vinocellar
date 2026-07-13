@@ -1,0 +1,1118 @@
+     1→-- ============================================================
+     2→-- VinoCellar Pro — Multi-Tenant SaaS Schema for Supabase
+     3→-- PostgreSQL with Row Level Security (RLS)
+     4→-- ============================================================
+     5→-- Run this in the Supabase SQL Editor (https://supabase.com/dashboard)
+     6→-- Execute each section in order.
+     7→-- ============================================================
+     8→
+     9→-- ════════════════════════════════════════════════════════════
+    10→-- SECTION 1: ENABLE REQUIRED EXTENSIONS
+    11→-- ════════════════════════════════════════════════════════════
+    12→create extension if not exists "uuid-ossp";
+    13→create extension if not exists "pgcrypto";
+    14→
+    15→-- ════════════════════════════════════════════════════════════
+    16→-- SECTION 2: HELPER FUNCTIONS
+    17→-- ════════════════════════════════════════════════════════════
+    18→
+    19→-- Get the current user's organisation_id from auth.users meta
+    20→-- This is the KEY function that powers all RLS policies.
+    21→create or replace function auth.organisation_id()
+    22→returns uuid
+    23→language sql
+    24→stable
+    25→as $$
+    26→  select (raw_app_meta_data ->> 'organisation_id')::uuid
+    27→  from auth.users
+    28→  where id = auth.uid()
+    29→$$;
+    30→
+    31→-- Get the current user's role from auth.users meta
+    32→create or replace function auth.user_role()
+    33→returns text
+    34→language sql
+    35→stable
+    36→as $$
+    37→  select coalesce(raw_app_meta_data ->> 'role', 'staff')
+    38→  from auth.users
+    39→  where id = auth.uid()
+    40→$$;
+    41→
+    42→-- Get current user's store_id
+    43→create or replace function auth.user_store_id()
+    44→returns uuid
+    45→language sql
+    46→stable
+    47→as $$
+    48→  select (raw_app_meta_data ->> 'store_id')::uuid
+    49→  from auth.users
+    50→  where id = auth.uid()
+    51→$$;
+    52→
+    53→-- ════════════════════════════════════════════════════════════
+    54→-- SECTION 3: CORE TABLES (Multi-Tenant Foundation)
+    55→-- ════════════════════════════════════════════════════════════
+    56→
+    57→-- ── 3a. Organisations (Tenants) ──────────────────────────
+    58→create table public.organisations (
+    59→  id                uuid primary key default uuid_generate_v4(),
+    60→  name              text not null,
+    61→  slug              text not null unique,
+    62→  plan              text not null default 'trial'
+    63→                    check (plan in ('trial', 'starter', 'professional', 'enterprise')),
+    64→  is_active         boolean not null default true,
+    65→  trial_ends_at     timestamptz,
+    66→  current_period_end timestamptz,
+    67→  max_stores        int not null default 1,
+    68→  max_staff         int not null default 5,
+    69→  max_products      int not null default 200,
+    70→  created_at        timestamptz not null default now(),
+    71→  updated_at        timestamptz not null default now()
+    72→);
+    73→
+    74→create index idx_organisations_slug on public.organisations (slug);
+    75→create index idx_organisations_active on public.organisations (is_active);
+    76→
+    77→comment on table public.organisations is 'Each row = one tenant business (wine shop, bar, etc.)';
+    78→
+    79→
+    80→-- ── 3b. Users (linked to Supabase Auth) ──────────────────
+    81→create table public.users (
+    82→  id                uuid primary key references auth.users(id) on delete cascade,
+    83→  email             text not null,
+    84→  name              text not null,
+    85→  pin               text unique,
+    86→  role              text not null default 'staff'
+    87→                    check (role in ('staff', 'manager', 'super_admin')),
+    88→  is_active         boolean not null default true,
+    89→  organisation_id   uuid not null references public.organisations(id) on delete restrict,
+    90→  store_id          uuid,
+    91→  last_login_at     timestamptz,
+    92→  created_at        timestamptz not null default now(),
+    93→  updated_at        timestamptz not null default now(),
+    94→
+    95→  unique (email, organisation_id)
+    96→);
+    97→
+    98→create index idx_users_organisation on public.users (organisation_id);
+    99→create index idx_users_pin on public.users (pin);
+   100→create index idx_users_role on public.users (role);
+   101→create index idx_users_store on public.users (store_id);
+   102→
+   103→comment on table public.users is 'App-level user profile. id = auth.users.id. organisation_id set during registration.';
+   104→
+   105→
+   106→-- ── 3c. Stores / Branches ───────────────────────────────
+   107→create table public.stores (
+   108→  id                uuid primary key default uuid_generate_v4(),
+   109→  name              text not null,
+   110→  location          text not null default '',
+   111→  organisation_id   uuid not null references public.organisations(id) on delete cascade,
+   112→  created_at        timestamptz not null default now(),
+   113→  updated_at        timestamptz not null default now()
+   114→);
+   115→
+   116→create index idx_stores_organisation on public.stores (organisation_id);
+   117→
+   118→comment on table public.stores is 'Physical store/branch locations. Each tenant can have multiple stores.';
+   119→
+   120→
+   121→-- ════════════════════════════════════════════════════════════
+   122→-- SECTION 4: PRODUCT CATALOGUE
+   123→-- ════════════════════════════════════════════════════════════
+   124→
+   125→-- ── 4a. Categories ──────────────────────────────────────
+   126→create table public.categories (
+   127→  id                uuid primary key default uuid_generate_v4(),
+   128→  name              text not null,
+   129→  colour            text not null default '#6B7280',
+   130→  organisation_id   uuid not null references public.organisations(id) on delete cascade,
+   131→  created_at        timestamptz not null default now(),
+   132→
+   133→  unique (name, organisation_id)
+   134→);
+   135→
+   136→create index idx_categories_organisation on public.categories (organisation_id);
+   137→
+   138→
+   139→-- ── 4b. Suppliers ───────────────────────────────────────
+   140→create table public.suppliers (
+   141→  id                uuid primary key default uuid_generate_v4(),
+   142→  name              text not null,
+   143→  contact_person    text not null default '',
+   144→  phone             text not null default '',
+   145→  email             text not null default '',
+   146→  product_types     text not null default '',
+   147→  organisation_id   uuid not null references public.organisations(id) on delete cascade,
+   148→  created_at        timestamptz not null default now(),
+   149→  updated_at        timestamptz not null default now()
+   150→);
+   151→
+   152→create index idx_suppliers_organisation on public.suppliers (organisation_id);
+   153→
+   154→
+   155→-- ── 4c. Products (Inventory Items) ─────────────────────
+   156→create table public.products (
+   157→  id                uuid primary key default uuid_generate_v4(),
+   158→  name              text not null,
+   159→  sku               text not null default '',
+   160→  barcode           text not null default '',
+   161→  size              text not null default '750ml',
+   162→  opening_stock     int not null default 0,
+   163→  current_stock     int not null default 0,
+   164→  reorder_level     int not null default 5,
+   165→  cost_price        numeric(12,2) not null default 0,
+   166→  sell_price        numeric(12,2) not null default 0,
+   167→  organisation_id   uuid not null references public.organisations(id) on delete cascade,
+   168→  store_id          uuid not null references public.stores(id) on delete cascade,
+   169→  category_id       uuid references public.categories(id) on delete set null,
+   170→  supplier_id       uuid references public.suppliers(id) on delete set null,
+   171→  created_at        timestamptz not null default now(),
+   172→  updated_at        timestamptz not null default now()
+   173→);
+   174→
+   175→create index idx_products_organisation on public.products (organisation_id);
+   176→create index idx_products_store on public.products (store_id);
+   177→create index idx_products_barcode on public.products (barcode);
+   178→create index idx_products_sku on public.products (sku);
+   179→create index idx_products_category on public.products (category_id);
+   180→create index idx_products_supplier on public.products (supplier_id);
+   181→
+   182→comment on table public.products is 'current_stock is NEVER manually edited. It is calculated: opening + purchases - sales - damaged - expired +/- adjustments.';
+   183→
+   184→
+   185→-- ════════════════════════════════════════════════════════════
+   186→-- SECTION 5: SALES & POS
+   187→-- ════════════════════════════════════════════════════════════
+   188→
+   189→-- ── 5a. Sales ───────────────────────────────────────────
+   190→create table public.sales (
+   191→  id                uuid primary key default uuid_generate_v4(),
+   192→  total             numeric(12,2) not null,
+   193→  payment_method    text not null default 'cash'
+   194→                    check (payment_method in ('cash', 'card', 'mpesa')),
+   195→  organisation_id   uuid not null references public.organisations(id) on delete cascade,
+   196→  store_id          uuid not null references public.stores(id) on delete cascade,
+   197→  staff_id          uuid not null references public.users(id) on delete restrict,
+   198→  created_at        timestamptz not null default now()
+   199→);
+   200→
+   201→create index idx_sales_organisation on public.sales (organisation_id);
+   202→create index idx_sales_store on public.sales (store_id);
+   203→create index idx_sales_staff on public.sales (staff_id);
+   204→create index idx_sales_created on public.sales (created_at desc);
+   205→
+   206→
+   207→-- ── 5b. Sale Items ─────────────────────────────────────
+   208→create table public.sale_items (
+   209→  id                uuid primary key default uuid_generate_v4(),
+   210→  name              text not null,
+   211→  qty               int not null,
+   212→  price             numeric(12,2) not null,
+   213→  cost              numeric(12,2) not null,
+   214→  sale_id           uuid not null references public.sales(id) on delete cascade,
+   215→  product_id        uuid not null references public.products(id) on delete restrict
+   216→);
+   217→
+   218→create index idx_sale_items_sale on public.sale_items (sale_id);
+   219→create index idx_sale_items_product on public.sale_items (product_id);
+   220→
+   221→
+   222→-- ════════════════════════════════════════════════════════════
+   223→-- SECTION 6: STOCK MANAGEMENT
+   224→-- ════════════════════════════════════════════════════════════
+   225→
+   226→-- ── 6a. Stock Movements (immutable ledger) ─────────────
+   227→create table public.stock_movements (
+   228→  id                uuid primary key default uuid_generate_v4(),
+   229→  product_id        uuid not null references public.products(id) on delete restrict,
+   230→  store_id          uuid not null references public.stores(id) on delete cascade,
+   231→  organisation_id   uuid not null references public.organisations(id) on delete cascade,
+   232→  movement_type     text not null
+   233→                    check (movement_type in (
+   234→                      'purchase',        -- Stock received from supplier
+   235→                      'sale',            -- Stock sold (deducted at POS)
+   236→                      'adjustment',      -- Manual correction
+   237→                      'damaged',         -- Damaged/broken stock
+   238→                      'expired',         -- Expired stock removed
+   239→                      'stock_take',      -- Stock count adjustment
+   240→                      'opening'          -- Initial opening stock
+   241→                    )),
+   242→  quantity          int not null,        -- positive = in, negative = out
+   243→  reference_id      uuid,               -- e.g. sale_id, purchase_id, stock_take_id
+   244→  notes             text not null default '',
+   245→  created_by        uuid not null references public.users(id) on delete restrict,
+   246→  created_at        timestamptz not null default now()
+   247→);
+   248→
+   249→create index idx_stock_movements_product on public.stock_movements (product_id);
+   250→create index idx_stock_movements_store on public.stock_movements (store_id);
+   251→create index idx_stock_movements_org on public.stock_movements (organisation_id);
+   252→create index idx_stock_movements_type on public.stock_movements (movement_type);
+   253→create index idx_stock_movements_created on public.stock_movements (created_at desc);
+   254→
+   255→comment on table public.stock_movements is 'Immutable stock ledger. Every stock change is recorded here. current_stock on products is a computed view over this table.';
+   256→
+   257→
+   258→-- ── 6b. Purchases / Stock Receiving ────────────────────
+   259→create table public.purchases (
+   260→  id                uuid primary key default uuid_generate_v4(),
+   261→  supplier_id       uuid references public.suppliers(id) on delete set null,
+   262→  store_id          uuid not null references public.stores(id) on delete cascade,
+   263→  organisation_id   uuid not null references public.organisations(id) on delete cascade,
+   264→  total_cost        numeric(12,2) not null default 0,
+   265→  notes             text not null default '',
+   266→  received_by       uuid not null references public.users(id) on delete restrict,
+   267→  created_at        timestamptz not null default now(),
+   268→
+   269→  -- JSON array of items received: [{productId, name, qty, costPrice}]
+   270→  items_data        jsonb not null default '[]'::jsonb
+   271→);
+   272→
+   273→create index idx_purchases_organisation on public.purchases (organisation_id);
+   274→create index idx_purchases_store on public.purchases (store_id);
+   275→create index idx_purchases_supplier on public.purchases (supplier_id);
+   276→
+   277→
+   278→-- ── 6c. Stock Takes (Physical Counts) ──────────────────
+   279→create table public.stock_takes (
+   280→  id                uuid primary key default uuid_generate_v4(),
+   281→  status            text not null default 'in_progress'
+   282→                    check (status in ('in_progress', 'pending', 'approved', 'rejected')),
+   283→  started_by        uuid not null references public.users(id) on delete restrict,
+   284→  approved_by       uuid references public.users(id) on delete set null,
+   285→  approved_at       timestamptz,
+   286→  organisation_id   uuid not null references public.organisations(id) on delete cascade,
+   287→  store_id          uuid not null references public.stores(id) on delete cascade,
+   288→  started_at        timestamptz not null default now(),
+   289→  submitted_at      timestamptz
+   290→);
+   291→
+   292→create index idx_stock_takes_organisation on public.stock_takes (organisation_id);
+   293→create index idx_stock_takes_store on public.stock_takes (store_id);
+   294→create index idx_stock_takes_status on public.stock_takes (status);
+   295→
+   296→
+   297→-- ── 6d. Stock Take Items ───────────────────────────────
+   298→create table public.stock_take_items (
+   299→  id                uuid primary key default uuid_generate_v4(),
+   300→  expected          int not null,
+   301→  counted           int,
+   302→  stock_take_id     uuid not null references public.stock_takes(id) on delete cascade,
+   303→  product_id        uuid not null references public.products(id) on delete restrict
+   304→);
+   305→
+   306→create index idx_stock_take_items_take on public.stock_take_items (stock_take_id);
+   307→create index idx_stock_take_items_product on public.stock_take_items (product_id);
+   308→
+   309→
+   310→-- ════════════════════════════════════════════════════════════
+   311→-- SECTION 7: DAILY RECONCILIATION
+   312→-- ════════════════════════════════════════════════════════════
+   313→
+   314→create table public.reconciliations (
+   315→  id                uuid primary key default uuid_generate_v4(),
+   316→  date              text not null,       -- YYYY-MM-DD
+   317→  organisation_id   uuid not null references public.organisations(id) on delete cascade,
+   318→  store_id          uuid not null references public.stores(id) on delete cascade,
+   319→  recorded_by       uuid not null references public.users(id) on delete restrict,
+   320→  created_at        timestamptz not null default now(),
+   321→  updated_at        timestamptz not null default now(),
+   322→
+   323→  unique (date, store_id)
+   324→);
+   325→
+   326→create index idx_recon_organisation on public.reconciliations (organisation_id);
+   327→create index idx_recon_store on public.reconciliations (store_id);
+   328→
+   329→
+   330→create table public.reconciliation_items (
+   331→  id                uuid primary key default uuid_generate_v4(),
+   332→  opening           int not null,
+   333→  sales_today       int not null default 0,
+   334→  stock_added       int not null default 0,
+   335→  expected_closing  int not null,
+   336→  actual_closing    int,
+   337→  reconciliation_id uuid not null references public.reconciliations(id) on delete cascade,
+   338→  product_id        uuid not null references public.products(id) on delete restrict
+   339→);
+   340→
+   341→create index idx_recon_items_recon on public.reconciliation_items (reconciliation_id);
+   342→create index idx_recon_items_product on public.reconciliation_items (product_id);
+   343→
+   344→
+   345→-- ════════════════════════════════════════════════════════════
+   346→-- SECTION 8: EXPENSES
+   347→-- ════════════════════════════════════════════════════════════
+   348→
+   349→create table public.expenses (
+   350→  id                uuid primary key default uuid_generate_v4(),
+   351→  date              text not null,       -- YYYY-MM-DD
+   352→  category          text not null,       -- Rent, Utilities, Salaries, Inventory, Marketing, Maintenance, Other
+   353→  description       text not null,
+   354→  amount            numeric(12,2) not null,
+   355→  organisation_id   uuid not null references public.organisations(id) on delete cascade,
+   356→  store_id          uuid not null references public.stores(id) on delete cascade,
+   357→  recorded_by       uuid not null references public.users(id) on delete restrict,
+   358→  created_at        timestamptz not null default now(),
+   359→  updated_at        timestamptz not null default now()
+   360→);
+   361→
+   362→create index idx_expenses_organisation on public.expenses (organisation_id);
+   363→create index idx_expenses_store on public.expenses (store_id);
+   364→create index idx_expenses_date on public.expenses (date);
+   365→
+   366→
+   367→-- ════════════════════════════════════════════════════════════
+   368→-- SECTION 9: AUDIT LOGS (Immutable)
+   369→-- ════════════════════════════════════════════════════════════
+   370→
+   371→create table public.audit_logs (
+   372→  id                uuid primary key default uuid_generate_v4(),
+   373→  action            text not null,       -- e.g. "product.created", "sale.completed"
+   374→  entity            text not null,       -- e.g. "Product", "Sale", "User"
+   375→  entity_id         uuid,
+   376→  before_value      jsonb,               -- Snapshot before change
+   377→  after_value       jsonb,               -- Snapshot after change
+   378→  user_id           uuid not null references public.users(id) on delete restrict,
+   379→  organisation_id   uuid not null references public.organisations(id) on delete cascade,
+   380→  ip_address        text not null default '',
+   381→  created_at        timestamptz not null default now()
+   382→);
+   383→
+   384→create index idx_audit_organisation on public.audit_logs (organisation_id);
+   385→create index idx_audit_user on public.audit_logs (user_id);
+   386→create index idx_audit_action on public.audit_logs (action);
+   387→create index idx_audit_created on public.audit_logs (created_at desc);
+   388→
+   389→comment on table public.audit_logs is 'Immutable audit trail. Records who did what, when, and what changed. Never update or delete rows.';
+   390→
+   391→
+   392→-- ════════════════════════════════════════════════════════════
+   393→-- SECTION 10: NOTIFICATIONS
+   394→-- ════════════════════════════════════════════════════════════
+   395→
+   396→create table public.notifications (
+   397→  id                uuid primary key default uuid_generate_v4(),
+   398→  title             text not null,
+   399→  message           text not null,
+   400→  type              text not null default 'info'
+   401→                    check (type in ('info', 'warning', 'error', 'success')),
+   402→  is_read           boolean not null default false,
+   403→  user_id           uuid not null references public.users(id) on delete cascade,
+   404→  organisation_id   uuid not null references public.organisations(id) on delete cascade,
+   405→  created_at        timestamptz not null default now()
+   406→);
+   407→
+   408→create index idx_notifications_user on public.notifications (user_id);
+   409→create index idx_notifications_organisation on public.notifications (organisation_id);
+   410→create index idx_notifications_read on public.notifications (is_read);
+   411→
+   412→
+   413→-- ════════════════════════════════════════════════════════════
+   414→-- SECTION 11: ORG SETTINGS (Key-Value)
+   415→-- ════════════════════════════════════════════════════════════
+   416→
+   417→create table public.org_settings (
+   418→  id                uuid primary key default uuid_generate_v4(),
+   419→  key               text not null,
+   420→  value             text not null default '',
+   421→  organisation_id   uuid not null references public.organisations(id) on delete cascade,
+   422→  created_at        timestamptz not null default now(),
+   423→  updated_at        timestamptz not null default now(),
+   424→
+   425→  unique (key, organisation_id)
+   426→);
+   427→
+   428→create index idx_orgsettings_organisation on public.org_settings (organisation_id);
+   429→
+   430→
+   431→-- ════════════════════════════════════════════════════════════
+   432→-- SECTION 12: SUPER ADMIN ACCESS
+   433→-- ════════════════════════════════════════════════════════════
+   434→
+   435→create table public.super_admin_access (
+   436→  id                uuid primary key default uuid_generate_v4(),
+   437→  organisation_id   uuid not null references public.organisations(id) on delete cascade,
+   438→  granted_by        uuid not null,       -- super_admin user id
+   439→  reason            text not null default '',
+   440→  expires_at        timestamptz not null,
+   441→  revoked_at        timestamptz,
+   442→  created_at        timestamptz not null default now()
+   443→);
+   444→
+   445→create index idx_sa_access_org on public.super_admin_access (organisation_id);
+   446→create index idx_sa_access_expires on public.super_admin_access (expires_at);
+   447→
+   448→
+   449→-- ════════════════════════════════════════════════════════════
+   450→-- SECTION 13: ROW LEVEL SECURITY (CRITICAL!)
+   451→-- ════════════════════════════════════════════════════════════
+   452→-- Every table gets RLS. Policies ensure users can ONLY
+   453→-- see/modify data belonging to THEIR organisation.
+   454→-- ════════════════════════════════════════════════════════════
+   455→
+   456→-- ── Helper: Enable RLS and add standard policies ──
+   457→-- Pattern: Each table gets SELECT, INSERT, UPDATE, DELETE
+   458→-- scoped to auth.organisation_id()
+   459→
+   460→-- 13a. Organisations ──────────────────────────────────
+   461→alter table public.organisations enable row level security;
+   462→
+   463→-- Anyone authenticated can read their own org
+   464→create policy "org_select_own" on public.organisations
+   465→  for select using (id = auth.organisation_id());
+   466→
+   467→-- Super admin can read all orgs
+   468→create policy "org_select_super_admin" on public.organisations
+   469→  for select using (auth.user_role() = 'super_admin');
+   470→
+   471→-- No insert/update/delete via RLS — use server-side functions
+   472→
+   473→
+   474→-- 13b. Users ───────────────────────────────────────────
+   475→alter table public.users enable row level security;
+   476→
+   477→create policy "users_select_own_org" on public.users
+   478→  for select using (organisation_id = auth.organisation_id());
+   479→
+   480→create policy "users_update_own" on public.users
+   481→  for update using (id = auth.uid() or auth.user_role() = 'manager')
+   482→  with check (organisation_id = auth.organisation_id());
+   483→
+   484→-- Managers can insert new staff
+   485→create policy "users_insert_manager" on public.users
+   486→  for insert with check (
+   487→    organisation_id = auth.organisation_id()
+   488→    and auth.user_role() = 'manager'
+   489→  );
+   490→
+   491→
+   492→-- 13c. Stores ─────────────────────────────────────────
+   493→alter table public.stores enable row level security;
+   494→
+   495→create policy "stores_select_own_org" on public.stores
+   496→  for select using (organisation_id = auth.organisation_id());
+   497→
+   498→create policy "stores_insert_manager" on public.stores
+   499→  for insert with check (
+   500→    organisation_id = auth.organisation_id()
+   501→    and auth.user_role() in ('manager', 'super_admin')
+   502→  );
+   503→
+   504→create policy "stores_update_manager" on public.stores
+   505→  for update using (
+   506→    organisation_id = auth.organisation_id()
+   507→    and auth.user_role() in ('manager', 'super_admin')
+   508→  );
+   509→
+   510→create policy "stores_delete_manager" on public.stores
+   511→  for delete using (
+   512→    organisation_id = auth.organisation_id()
+   513→    and auth.user_role() = 'manager'
+   514→  );
+   515→
+   516→
+   517→-- 13d. Categories ─────────────────────────────────────
+   518→alter table public.categories enable row level security;
+   519→
+   520→create policy "categories_select_own_org" on public.categories
+   521→  for select using (organisation_id = auth.organisation_id());
+   522→
+   523→create policy "categories_insert_manager" on public.categories
+   524→  for insert with check (
+   525→    organisation_id = auth.organisation_id()
+   526→    and auth.user_role() in ('manager', 'super_admin')
+   527→  );
+   528→
+   529→create policy "categories_update_manager" on public.categories
+   530→  for update using (
+   531→    organisation_id = auth.organisation_id()
+   532→    and auth.user_role() in ('manager', 'super_admin')
+   533→  );
+   534→
+   535→create policy "categories_delete_manager" on public.categories
+   536→  for delete using (
+   537→    organisation_id = auth.organisation_id()
+   538→    and auth.user_role() in ('manager', 'super_admin')
+   539→  );
+   540→
+   541→
+   542→-- 13e. Suppliers ──────────────────────────────────────
+   543→alter table public.suppliers enable row level security;
+   544→
+   545→create policy "suppliers_select_own_org" on public.suppliers
+   546→  for select using (organisation_id = auth.organisation_id());
+   547→
+   548→create policy "suppliers_insert_manager" on public.suppliers
+   549→  for insert with check (
+   550→    organisation_id = auth.organisation_id()
+   551→    and auth.user_role() in ('manager', 'super_admin')
+   552→  );
+   553→
+   554→create policy "suppliers_update_manager" on public.suppliers
+   555→  for update using (
+   556→    organisation_id = auth.organisation_id()
+   557→    and auth.user_role() in ('manager', 'super_admin')
+   558→  );
+   559→
+   560→create policy "suppliers_delete_manager" on public.suppliers
+   561→  for delete using (
+   562→    organisation_id = auth.organisation_id()
+   563→    and auth.user_role() in ('manager', 'super_admin')
+   564→  );
+   565→
+   566→
+   567→-- 13f. Products ───────────────────────────────────────
+   568→alter table public.products enable row level security;
+   569→
+   570→create policy "products_select_own_org" on public.products
+   571→  for select using (organisation_id = auth.organisation_id());
+   572→
+   573→create policy "products_insert_manager" on public.products
+   574→  for insert with check (
+   575→    organisation_id = auth.organisation_id()
+   576→    and auth.user_role() in ('manager', 'super_admin')
+   577→  );
+   578→
+   579→create policy "products_update_manager" on public.products
+   580→  for update using (
+   581→    organisation_id = auth.organisation_id()
+   582→    and auth.user_role() in ('manager', 'super_admin')
+   583→  );
+   584→
+   585→create policy "products_delete_manager" on public.products
+   586→  for delete using (
+   587→    organisation_id = auth.organisation_id()
+   588→    and auth.user_role() in ('manager', 'super_admin')
+   589→  );
+   590→
+   591→
+   592→-- 13g. Sales ──────────────────────────────────────────
+   593→alter table public.sales enable row level security;
+   594→
+   595→create policy "sales_select_own_org" on public.sales
+   596→  for select using (organisation_id = auth.organisation_id());
+   597→
+   598→create policy "sales_insert_own_org" on public.sales
+   599→  for insert with check (organisation_id = auth.organisation_id());
+   600→
+   601→-- No update or delete on sales (immutable)
+   602→
+   603→
+   604→-- 13h. Sale Items ─────────────────────────────────────
+   605→alter table public.sale_items enable row level security;
+   606→
+   607→create policy "sale_items_select_own_org" on public.sale_items
+   608→  for select using (
+   609→    exists (
+   610→      select 1 from public.sales
+   611→      where sales.id = sale_items.sale_id
+   612→      and sales.organisation_id = auth.organisation_id()
+   613→    )
+   614→  );
+   615→
+   616→create policy "sale_items_insert_own_org" on public.sale_items
+   617→  for insert with check (
+   618→    exists (
+   619→      select 1 from public.sales
+   620→      where sales.id = sale_items.sale_id
+   621→      and sales.organisation_id = auth.organisation_id()
+   622→    )
+   623→  );
+   624→
+   625→
+   626→-- 13i. Stock Movements ────────────────────────────────
+   627→alter table public.stock_movements enable row level security;
+   628→
+   629→create policy "stock_movements_select_own_org" on public.stock_movements
+   630→  for select using (organisation_id = auth.organisation_id());
+   631→
+   632→-- Insert via server-side functions only (or manager)
+   633→create policy "stock_movements_insert_own_org" on public.stock_movements
+   634→  for insert with check (organisation_id = auth.organisation_id());
+   635→
+   636→-- NEVER update or delete stock movements (immutable ledger)
+   637→
+   638→
+   639→-- 13j. Purchases ──────────────────────────────────────
+   640→alter table public.purchases enable row level security;
+   641→
+   642→create policy "purchases_select_own_org" on public.purchases
+   643→  for select using (organisation_id = auth.organisation_id());
+   644→
+   645→create policy "purchases_insert_manager" on public.purchases
+   646→  for insert with check (
+   647→    organisation_id = auth.organisation_id()
+   648→    and auth.user_role() in ('manager', 'super_admin')
+   649→  );
+   650→
+   651→
+   652→-- 13k. Stock Takes ───────────────────────────────────
+   653→alter table public.stock_takes enable row level security;
+   654→
+   655→create policy "stock_takes_select_own_org" on public.stock_takes
+   656→  for select using (organisation_id = auth.organisation_id());
+   657→
+   658→create policy "stock_takes_insert_own_org" on public.stock_takes
+   659→  for insert with check (organisation_id = auth.organisation_id());
+   660→
+   661→create policy "stock_takes_update_own_org" on public.stock_takes
+   662→  for update using (
+   663→    organisation_id = auth.organisation_id()
+   664→    and auth.user_role() in ('manager', 'super_admin')
+   665→  );
+   666→
+   667→
+   668→-- 13l. Stock Take Items ──────────────────────────────
+   669→alter table public.stock_take_items enable row level security;
+   670→
+   671→create policy "stock_take_items_select_own_org" on public.stock_take_items
+   672→  for select using (
+   673→    exists (
+   674→      select 1 from public.stock_takes
+   675→      where stock_takes.id = stock_take_items.stock_take_id
+   676→      and stock_takes.organisation_id = auth.organisation_id()
+   677→    )
+   678→  );
+   679→
+   680→create policy "stock_take_items_insert_own_org" on public.stock_take_items
+   681→  for insert with check (
+   682→    exists (
+   683→      select 1 from public.stock_takes
+   684→      where stock_takes.id = stock_take_items.stock_take_id
+   685→      and stock_takes.organisation_id = auth.organisation_id()
+   686→    )
+   687→  );
+   688→
+   689→create policy "stock_take_items_update_own_org" on public.stock_take_items
+   690→  for update using (
+   691→    exists (
+   692→      select 1 from public.stock_takes
+   693→      where stock_takes.id = stock_take_items.stock_take_id
+   694→      and stock_takes.organisation_id = auth.organisation_id()
+   695→    )
+   696→  );
+   697→
+   698→
+   699→-- 13m. Reconciliations ───────────────────────────────
+   700→alter table public.reconciliations enable row level security;
+   701→
+   702→create policy "recon_select_own_org" on public.reconciliations
+   703→  for select using (organisation_id = auth.organisation_id());
+   704→
+   705→create policy "recon_insert_own_org" on public.reconciliations
+   706→  for insert with check (organisation_id = auth.organisation_id());
+   707→
+   708→create policy "recon_update_own_org" on public.reconciliations
+   709→  for update using (organisation_id = auth.organisation_id());
+   710→
+   711→
+   712→-- 13n. Reconciliation Items ──────────────────────────
+   713→alter table public.reconciliation_items enable row level security;
+   714→
+   715→create policy "recon_items_select_own_org" on public.reconciliation_items
+   716→  for select using (
+   717→    exists (
+   718→      select 1 from public.reconciliations
+   719→      where reconciliations.id = reconciliation_items.reconciliation_id
+   720→      and reconciliations.organisation_id = auth.organisation_id()
+   721→    )
+   722→  );
+   723→
+   724→create policy "recon_items_insert_own_org" on public.reconciliation_items
+   725→  for insert with check (
+   726→    exists (
+   727→      select 1 from public.reconciliations
+   728→      where reconciliations.id = reconciliation_items.reconciliation_id
+   729→      and reconciliations.organisation_id = auth.organisation_id()
+   730→    )
+   731→  );
+   732→
+   733→create policy "recon_items_update_own_org" on public.reconciliation_items
+   734→  for update using (
+   735→    exists (
+   736→      select 1 from public.reconciliations
+   737→      where reconciliations.id = reconciliation_items.reconciliation_id
+   738→      and reconciliations.organisation_id = auth.organisation_id()
+   739→    )
+   740→  );
+   741→
+   742→
+   743→-- 13o. Expenses ──────────────────────────────────────
+   744→alter table public.expenses enable row level security;
+   745→
+   746→create policy "expenses_select_own_org" on public.expenses
+   747→  for select using (organisation_id = auth.organisation_id());
+   748→
+   749→create policy "expenses_insert_manager" on public.expenses
+   750→  for insert with check (
+   751→    organisation_id = auth.organisation_id()
+   752→    and auth.user_role() in ('manager', 'super_admin')
+   753→  );
+   754→
+   755→create policy "expenses_update_manager" on public.expenses
+   756→  for update using (
+   757→    organisation_id = auth.organisation_id()
+   758→    and auth.user_role() in ('manager', 'super_admin')
+   759→  );
+   760→
+   761→create policy "expenses_delete_manager" on public.expenses
+   762→  for delete using (
+   763→    organisation_id = auth.organisation_id()
+   764→    and auth.user_role() in ('manager', 'super_admin')
+   765→  );
+   766→
+   767→
+   768→-- 13p. Audit Logs ────────────────────────────────────
+   769→alter table public.audit_logs enable row level security;
+   770→
+   771→-- Users can read their org's audit logs
+   772→create policy "audit_select_own_org" on public.audit_logs
+   773→  for select using (organisation_id = auth.organisation_id());
+   774→
+   775→-- Insert is done by server-side trigger/function, not directly by users
+   776→create policy "audit_insert_service_role" on public.audit_logs
+   777→  for insert with check (true); -- Allow service_role to insert
+   778→
+   779→
+   780→-- 13q. Notifications ────────────────────────────────
+   781→alter table public.notifications enable row level security;
+   782→
+   783→create policy "notifications_select_own" on public.notifications
+   784→  for select using (user_id = auth.uid());
+   785→
+   786→create policy "notifications_update_own" on public.notifications
+   787→  for update using (user_id = auth.uid())
+   788→  with check (user_id = auth.uid());
+   789→
+   790→
+   791→-- 13r. Org Settings ─────────────────────────────────
+   792→alter table public.org_settings enable row level security;
+   793→
+   794→create policy "settings_select_own_org" on public.org_settings
+   795→  for select using (organisation_id = auth.organisation_id());
+   796→
+   797→create policy "settings_update_manager" on public.org_settings
+   798→  for update using (
+   799→    organisation_id = auth.organisation_id()
+   800→    and auth.user_role() in ('manager', 'super_admin')
+   801→  );
+   802→
+   803→
+   804→-- 13s. Super Admin Access ───────────────────────────
+   805→alter table public.super_admin_access enable row level security;
+   806→
+   807→create policy "sa_access_select_super" on public.super_admin_access
+   808→  for select using (auth.user_role() = 'super_admin');
+   809→
+   810→create policy "sa_access_insert_super" on public.super_admin_access
+   811→  for insert with check (auth.user_role() = 'super_admin');
+   812→
+   813→create policy "sa_access_update_super" on public.super_admin_access
+   814→  for update using (auth.user_role() = 'super_admin');
+   815→
+   816→
+   817→-- ════════════════════════════════════════════════════════════
+   818→-- SECTION 14: SERVER-SIDE FUNCTIONS (Business Logic)
+   819→-- ════════════════════════════════════════════════════════════
+   820→
+   821→-- ── 14a. Register: Create Org + User + First Store ───
+   822→create or replace function public.register_new_organisation(
+   823→  p_business_name text,
+   824→  p_manager_name  text,
+   825→  p_email         text,
+   826→  p_password_hash text,  -- Pre-hashed on client or via Supabase Auth
+   827→  p_pin           text
+   828→)
+   829→returns jsonb
+   830→language plpgsql
+   831→security definer
+   832→as $$
+   833→declare
+   834→  v_org_id         uuid;
+   835→  v_store_id       uuid;
+   836→  v_user_id        uuid;
+   837→  v_slug           text;
+   838→  v_result         jsonb;
+   839→begin
+   840→  -- Generate unique slug
+   841→  v_slug := lower(regexp_replace(p_business_name, '[^a-z0-9]+', '-', 'g'));
+   842→  v_slug := v_slug || '-' || substr(encode(gen_random_bytes(3), 'hex'), 1, 6);
+   843→  v_slug := regexp_replace(v_slug, '-+', '-', 'g');
+   844→
+   845→  -- Create organisation
+   846→  insert into public.organisations (name, slug, trial_ends_at, current_period_end)
+   847→  values (p_business_name, v_slug, now() + interval '14 days', now() + interval '14 days')
+   848→  returning id into v_org_id;
+   849→
+   850→  -- Create first store
+   851→  insert into public.stores (name, organisation_id)
+   852→  values ('Main Store', v_org_id)
+   853→  returning id into v_store_id;
+   854→
+   855→  -- Create user via Supabase Auth
+   856→  -- NOTE: In production, use supabase.auth.admin.createUser() from your backend.
+   857→  -- For now, we create the profile row. The auth.users row is created separately.
+   858→  insert into public.users (email, name, pin, role, organisation_id, store_id)
+   859→  values (p_email, p_manager_name, p_pin, 'manager', v_org_id, v_store_id)
+   860→  returning id into v_user_id;
+   861→
+   862→  -- Seed default categories
+   863→  insert into public.categories (name, colour, organisation_id) values
+   864→    ('Wine',      '#DC2626', v_org_id),
+   865→    ('Whisky',    '#92400E', v_org_id),
+   866→    ('Vodka',     '#3B82F6', v_org_id),
+   867→    ('Gin',       '#10B981', v_org_id),
+   868→    ('Rum',       '#F97316', v_org_id),
+   869→    ('Champagne', '#F59E0B', v_org_id),
+   870→    ('Beer',      '#FBBF24', v_org_id),
+   871→    ('Cognac',    '#78350F', v_org_id),
+   872→    ('Tequila',   '#059669', v_org_id),
+   873→    ('Liqueur',   '#8B5CF6', v_org_id),
+   874→    ('Brandy',    '#B91C1C', v_org_id),
+   875→    ('Other',     '#6B7280', v_org_id);
+   876→
+   877→  -- Seed default suppliers
+   878→  insert into public.suppliers (name, contact_person, phone, email, product_types, organisation_id) values
+   879→    ('East African Wines Ltd', 'Peter Mwangi',   '+254 720 123 456', 'info@eawines.co.ke',     'Wine, Champagne',        v_org_id),
+   880→    ('Spirits Distributors KE','Jane Wanjiku',    '+254 733 456 789', 'orders@spiritsdist.co.ke','Whisky, Vodka, Gin, Rum', v_org_id),
+   881→    ('Premium Beverages',      'Samuel Ochieng',  '+254 711 789 012', 'sales@premiumbev.co.ke',  'Beer, Liqueur, Tequila',  v_org_id);
+   882→
+   883→  v_result := jsonb_build_object(
+   884→    'organisation_id', v_org_id,
+   885→    'store_id', v_store_id,
+   886→    'user_id', v_user_id,
+   887→    'slug', v_slug
+   888→  );
+   889→
+   890→  return v_result;
+   891→end;
+   892→$$;
+   893→
+   894→
+   895→-- ── 14b. Complete Sale (Atomic: create sale + deduct stock + log movement) ──
+   896→create or replace function public.complete_sale(
+   897→  p_store_id       uuid,
+   898→  p_staff_id       uuid,
+   899→  p_payment_method text,
+   900→  p_items          jsonb   -- [{productId, name, qty, price, cost}]
+   901→)
+   902→returns uuid
+   903→language plpgsql
+   904→security definer
+   905→as $$
+   906→declare
+   907→  v_sale_id    uuid;
+   908→  v_total      numeric;
+   909→  v_item       jsonb;
+   910→  v_product_id uuid;
+   911→  v_qty        int;
+   912→begin
+   913→  -- Calculate total
+   914→  v_total := 0;
+   915→  for v_item in select * from jsonb_array_elements(p_items)
+   916→  loop
+   917→    v_total := v_total + (v_item ->> 'price')::numeric * (v_item ->> 'qty')::int;
+   918→  end loop;
+   919→
+   920→  -- Create the sale
+   921→  insert into public.sales (total, payment_method, organisation_id, store_id, staff_id)
+   922→  values (
+   923→    v_total,
+   924→    p_payment_method,
+   925→    auth.organisation_id(),
+   926→    p_store_id,
+   927→    p_staff_id
+   928→  )
+   929→  returning id into v_sale_id;
+   930→
+   931→  -- Create sale items + deduct stock + log movements
+   932→  for v_item in select * from jsonb_array_elements(p_items)
+   933→  loop
+   934→    v_product_id := (v_item ->> 'productId')::uuid;
+   935→    v_qty := (v_item ->> 'qty')::int;
+   936→
+   937→    -- Insert sale item
+   938→    insert into public.sale_items (name, qty, price, cost, sale_id, product_id)
+   939→    values (
+   940→      v_item ->> 'name',
+   941→      v_qty,
+   942→      (v_item ->> 'price')::numeric,
+   943→      (v_item ->> 'cost')::numeric,
+   944→      v_sale_id,
+   945→      v_product_id
+   946→    );
+   947→
+   948→    -- Deduct stock
+   949→    update public.products
+   950→    set current_stock = current_stock - v_qty,
+   951→        updated_at = now()
+   952→    where id = v_product_id
+   953→      and organisation_id = auth.organisation_id();
+   954→
+   955→    -- Log stock movement (immutable)
+   956→    insert into public.stock_movements (product_id, store_id, organisation_id, movement_type, quantity, reference_id, notes, created_by)
+   957→    values (v_product_id, p_store_id, auth.organisation_id(), 'sale', -v_qty, v_sale_id, 'POS sale', p_staff_id);
+   958→  end loop;
+   959→
+   960→  return v_sale_id;
+   961→end;
+   962→$$;
+   963→
+   964→
+   965→-- ── 14c. Receive Stock (Atomic: add stock + log movement) ──
+   966→create or replace function public.receive_stock(
+   967→  p_store_id     uuid,
+   968→  p_supplier_id  uuid,
+   969→  p_items        jsonb,  -- [{productId, qty, costPrice}]
+   970→  p_notes        text default '',
+   971→  p_received_by  uuid
+   972→)
+   973→returns uuid
+   974→language plpgsql
+   975→security definer
+   976→as $$
+   977→declare
+   978→  v_purchase_id  uuid;
+   979→  v_total_cost   numeric;
+   980→  v_item         jsonb;
+   981→begin
+   982→  v_total_cost := 0;
+   983→
+   984→  -- Create purchase record
+   985→  insert into public.purchases (supplier_id, store_id, organisation_id, total_cost, notes, received_by, items_data)
+   986→  values (p_supplier_id, p_store_id, auth.organisation_id(), 0, p_notes, p_received_by, p_items)
+   987→  returning id into v_purchase_id;
+   988→
+   989→  for v_item in select * from jsonb_array_elements(p_items)
+   990→  loop
+   991→    -- Add stock
+   992→    update public.products
+   993→    set current_stock = current_stock + (v_item ->> 'qty')::int,
+   994→        updated_at = now()
+   995→    where id = (v_item ->> 'productId')::uuid
+   996→      and organisation_id = auth.organisation_id();
+   997→
+   998→    -- Log movement
+   999→    insert into public.stock_movements (product_id, store_id, organisation_id, movement_type, quantity, reference_id, notes, created_by)
+  1000→    values (
+  1001→      (v_item ->> 'productId')::uuid,
+  1002→      p_store_id,
+  1003→      auth.organisation_id(),
+  1004→      'purchase',
+  1005→      (v_item ->> 'qty')::int,
+  1006→      v_purchase_id,
+  1007→      p_notes,
+  1008→      p_received_by
+  1009→    );
+  1010→
+  1011→    v_total_cost := v_total_cost + ((v_item ->> 'qty')::int * (v_item ->> 'costPrice')::numeric);
+  1012→  end loop;
+  1013→
+  1014→  -- Update total cost
+  1015→  update public.purchases set total_cost = v_total_cost where id = v_purchase_id;
+  1016→
+  1017→  return v_purchase_id;
+  1018→end;
+  1019→$$;
+  1020→
+  1021→
+  1022→-- ── 14d. Calculate Computed Stock (view over stock_movements) ──
+  1023→create or replace view public.computed_stock as
+  1024→select
+  1025→  p.id as product_id,
+  1026→  p.name,
+  1027→  p.store_id,
+  1028→  p.organisation_id,
+  1029→  p.opening_stock,
+  1030→  coalesce(
+  1031→    p.opening_stock + sum(
+  1032→      case
+  1033→        when sm.movement_type in ('purchase', 'adjustment', 'stock_take', 'opening') then sm.quantity
+  1034→        when sm.movement_type in ('sale', 'damaged', 'expired') then sm.quantity  -- already negative
+  1035→        else 0
+  1036→      end
+  1037→    ),
+  1038→    p.opening_stock
+  1039→  ) as calculated_stock,
+  1040→  p.current_stock as recorded_stock,
+  1041→  p.current_stock - coalesce(
+  1042→    p.opening_stock + sum(
+  1043→      case
+  1044→        when sm.movement_type in ('purchase', 'adjustment', 'stock_take', 'opening') then sm.quantity
+  1045→        when sm.movement_type in ('sale', 'damaged', 'expired') then sm.quantity
+  1046→        else 0
+  1047→      end
+  1048→    ), p.opening_stock
+  1049→  ) as variance
+  1050→from public.products p
+  1051→left join public.stock_movements sm
+  1052→  on sm.product_id = p.id
+  1053→  and sm.store_id = p.store_id
+  1054→group by p.id, p.name, p.store_id, p.organisation_id, p.opening_stock, p.current_stock;
+  1055→
+  1056→
+  1057→-- ════════════════════════════════════════════════════════════
+  1058→-- SECTION 15: UPDATED_AT AUTO-UPDATE TRIGGERS
+  1059→-- ════════════════════════════════════════════════════════════
+  1060→
+  1061→create or replace function public.trigger_updated_at()
+  1062→returns trigger
+  1063→language plpgsql
+  1064→as $$
+  1065→begin
+  1066→  new.updated_at = now();
+  1067→  return new;
+  1068→end;
+  1069→$$;
+  1070→
+  1071→create trigger trg_organisations_updated
+  1072→  before update on public.organisations
+  1073→  for each row execute function public.trigger_updated_at();
+  1074→
+  1075→create trigger trg_users_updated
+  1076→  before update on public.users
+  1077→  for each row execute function public.trigger_updated_at();
+  1078→
+  1079→create trigger trg_stores_updated
+  1080→  before update on public.stores
+  1081→  for each row execute function public.trigger_updated_at();
+  1082→
+  1083→create trigger trg_suppliers_updated
+  1084→  before update on public.suppliers
+  1085→  for each row execute function public.trigger_updated_at();
+  1086→
+  1087→create trigger trg_products_updated
+  1088→  before update on public.products
+  1089→  for each row execute function public.trigger_updated_at();
+  1090→
+  1091→create trigger trg_reconciliations_updated
+  1092→  before update on public.reconciliations
+  1093→  for each row execute function public.trigger_updated_at();
+  1094→
+  1095→create trigger trg_expenses_updated
+  1096→  before update on public.expenses
+  1097→  for each row execute function public.trigger_updated_at();
+  1098→
+  1099→create trigger trg_org_settings_updated
+  1100→  before update on public.org_settings
+  1101→  for each row execute function public.trigger_updated_at();
+  1102→
+  1103→
+  1104→-- ════════════════════════════════════════════════════════════
+  1105→-- SECTION 16: REALTIME SUBSCRIPTIONS (Optional)
+  1106→-- ════════════════════════════════════════════════════════════
+  1107→-- Enable Supabase Realtime for key tables so all staff
+  1108→-- see live updates (new sales, stock changes, etc.)
+  1109→
+  1110→alter publication supabase_realtime add table public.sales;
+  1111→alter publication supabase_realtime add table public.products;
+  1112→alter publication supabase_realtime add table public.stock_takes;
+  1113→alter publication supabase_realtime add table public.notifications;
+  1114→
+  1115→
+  1116→-- ════════════════════════════════════════════════════════════
+  1117→-- DONE! Schema is complete.
+  1118→-- ════════════════════════════════════════════════════════════
