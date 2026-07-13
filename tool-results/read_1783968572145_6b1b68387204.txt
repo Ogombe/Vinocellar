@@ -1,0 +1,502 @@
+   600→   600→let currentUser = null;
+   601→   601→let currentPage = 'dashboard';
+   602→   602→let cart = [];
+   603→   603→let charts = {};
+   604→   604→let pinBuffer = '';
+   605→   605→let pendingStockTake = null;
+   606→   606→let scannerStream = null;
+   607→   607→
+   608→   608→function loadState(){
+   609→   609→  try{
+   610→   610→    const s = JSON.parse(localStorage.getItem(LS_KEY));
+   611→   611→    if(s && s.inventory && Array.isArray(s.inventory)){
+   612→   612→      // schema migration: ensure all required fields exist AND are arrays (handles upgrades + null/corruption)
+   613→   613→      const seed = seedState();
+   614→   614→      const arrFields = {inventory:seed.inventory,sales:[],stockTakes:[],reconciliation:[],expenses:[]};
+   615→   615→      const objFields = {stores:seed.stores,suppliers:seed.suppliers,staff:seed.staff};
+   616→   616→      const scalarFields = {currentStoreId:seed.currentStoreId,lastBackup:null};
+   617→   617→      Object.keys(arrFields).forEach(k=>{ if(!Array.isArray(s[k])) s[k]=arrFields[k] });
+   618→   618→      Object.keys(objFields).forEach(k=>{ if(!Array.isArray(s[k])) s[k]=objFields[k] });
+   619→   619→      Object.keys(scalarFields).forEach(k=>{ if(s[k]===undefined||s[k]===null) s[k]=scalarFields[k] });
+   620→   620→      // make sure currentStoreId still points to a valid store
+   621→   621→      if(!s.stores.find(st=>st.id===s.currentStoreId)) s.currentStoreId=s.stores[0]?.id;
+   622→   622→      return s;
+   623→   623→    }
+   624→   624→  }catch(e){}
+   625→   625→  return seedState();
+   626→   626→}
+   627→   627→function saveState(){
+   628→   628→  localStorage.setItem(LS_KEY, JSON.stringify(state));
+   629→   629→  localStorage.setItem(LS_KEY+'_lastbackup', new Date().toISOString());
+   630→   630→}
+   631→   631→function seedState(){
+   632→   632→  const stores = [
+   633→   633→    {id:'s1',name:'Downtown Flagship',location:'Nairobi CBD'},
+   634→   634→    {id:'s2',name:'Westlands Branch',location:'Westlands'}
+   635→   635→  ];
+   636→   636→  const suppliers = [
+   637→   637→    {id:'sup1',name:'East African Wines Ltd',contact:'John Mwangi',phone:'+254712345678',email:'sales@eawines.co.ke',products:'Wine,Champagne'},
+   638→   638→    {id:'sup2',name:'Spirits Distributors KE',contact:'Aisha Hassan',phone:'+254722987654',email:'info@spiritske.com',products:'Whisky,Vodka,Gin'},
+   639→   639→    {id:'sup3',name:'Premium Beverages',contact:'Peter Kamau',phone:'+254733456789',email:'orders@premiumbev.co.ke',products:'Beer,Cider'}
+   640→   640→  ];
+   641→   641→  const cats = ['Wine','Whisky','Vodka','Gin','Rum','Champagne','Beer','Cognac','Tequila','Liqueur'];
+   642→   642→  const sizes = ['750ml','1L','700ml','375ml','1.75L','330ml','500ml'];
+   643→   643→  const inv = [
+   644→   644→    {id:'p1',name:'Jameson Caskmates 750ml',sku:'JMS-CSK-750',barcode:'6001234500011',category:'Whisky',size:'750ml',storeId:'s1',opening:30,current:25,reorder:8,cost:3200,sell:4800,supplierId:'sup2'},
+   645→   645→    {id:'p2',name:'Cabernet Sauvignon 750ml',sku:'CAB-SAV-750',barcode:'6001234500028',category:'Wine',size:'750ml',storeId:'s1',opening:48,current:6,reorder:12,cost:1800,sell:2900,supplierId:'sup1'},
+   646→   646→    {id:'p3',name:'Smirnoff Red 1L',sku:'SMR-RED-1L',barcode:'6001234500035',category:'Vodka',size:'1L',storeId:'s1',opening:24,current:18,reorder:6,cost:1900,sell:2800,supplierId:'sup2'},
+   647→   647→    {id:'p4',name:'Tanqueray Gin 750ml',sku:'TNQ-750',barcode:'6001234500042',category:'Gin',size:'750ml',storeId:'s1',opening:18,current:14,reorder:5,cost:3500,sell:5200,supplierId:'sup2'},
+   648→   648→    {id:'p5',name:'Moët & Chandon 750ml',sku:'MOET-750',barcode:'6001234500059',category:'Champagne',size:'750ml',storeId:'s1',opening:12,current:9,reorder:4,cost:8500,sell:12500,supplierId:'sup1'},
+   649→   649→    {id:'p6',name:'Hennessy VS 700ml',sku:'HNY-VS-700',barcode:'6001234500066',category:'Cognac',size:'700ml',storeId:'s1',opening:15,current:3,reorder:5,cost:6800,sell:9800,supplierId:'sup2'},
+   650→   650→    {id:'p7',name:'Bacardi Carta Blanca 1L',sku:'BCR-CB-1L',barcode:'6001234500073',category:'Rum',size:'1L',storeId:'s1',opening:20,current:16,reorder:6,cost:2100,sell:3200,supplierId:'sup2'},
+   651→   651→    {id:'p8',name:'Heineken 330ml',sku:'HEK-330',barcode:'6001234500080',category:'Beer',size:'330ml',storeId:'s1',opening:144,current:96,reorder:48,cost:180,sell:350,supplierId:'sup3'},
+   652→   652→    {id:'p9',name:'Jose Cuervo 750ml',sku:'JSR-CV-750',barcode:'6001234500097',category:'Tequila',size:'750ml',storeId:'s1',opening:10,current:7,reorder:4,cost:2900,sell:4500,supplierId:'sup2'},
+   653→   653→    {id:'p10',name:'Baileys 750ml',sku:'BLY-750',barcode:'6001234500103',category:'Liqueur',size:'750ml',storeId:'s1',opening:16,current:11,reorder:5,cost:3100,sell:4700,supplierId:'sup2'},
+   654→   654→    {id:'p11',name:'Glenfiddich 12 700ml',sku:'GLF-12-700',barcode:'6001234500110',category:'Whisky',size:'700ml',storeId:'s2',opening:12,current:8,reorder:4,cost:5200,sell:7800,supplierId:'sup2'},
+   655→   655→    {id:'p12',name:'Yellow Tail Chardonnay',sku:'YT-CHD-750',barcode:'6001234500127',category:'Wine',size:'750ml',storeId:'s2',opening:36,current:22,reorder:10,cost:1500,sell:2400,supplierId:'sup1'}
+   656→   656→  ];
+   657→   657→  const staff = [
+   658→   658→    {id:'u1',name:'Manager',pin:'1234',role:'manager',storeId:'s1'},
+   659→   659→    {id:'u2',name:'James Staff',pin:'5678',role:'staff',storeId:'s1'},
+   660→   660→    {id:'u3',name:'Mary Clerk',pin:'4321',role:'staff',storeId:'s2'}
+   661→   661→  ];
+   662→   662→  // seed some sales history (last 7 days)
+   663→   663→  const sales = [];
+   664→   664→  const now = Date.now();
+   665→   665→  for(let d=6;d>=0;d--){
+   666→   666→    const dayStart = new Date(now - d*86400000);dayStart.setHours(9,0,0,0);
+   667→   667→    const n = 2 + Math.floor(Math.random()*5);
+   668→   668→    for(let i=0;i<n;i++){
+   669→   669→      const p = inv[Math.floor(Math.random()*inv.length)];
+   670→   670→      const qty = 1 + Math.floor(Math.random()*3);
+   671→   671→      sales.push({id:'sale_'+Math.random().toString(36).slice(2,9),items:[{id:p.id,name:p.name,qty,price:p.sell,cost:p.cost}],total:p.sell*qty,staffId:'u2',storeId:p.storeId,timestamp:dayStart.getTime()+Math.random()*50000000,paymentMethod:['cash','card','mpesa'][Math.floor(Math.random()*3)]});
+   672→   672→    }
+   673→   673→  }
+   674→   674→  const expenses=[
+   675→   675→    {id:'e1',date:todayKey(),category:'Rent',description:'Monthly store rent',amount:85000,storeId:'s1',recordedBy:'u1'},
+   676→   676→    {id:'e2',date:todayKey(),category:'Utilities',description:'Electricity & water',amount:12400,storeId:'s1',recordedBy:'u1'},
+   677→   677→    {id:'e3',date:new Date(Date.now()-86400000).toISOString().slice(0,10),category:'Inventory',description:'Wine restock from East African Wines',amount:68000,storeId:'s1',recordedBy:'u1'},
+   678→   678→    {id:'e4',date:new Date(Date.now()-2*86400000).toISOString().slice(0,10),category:'Salaries',description:'Staff weekly pay',amount:42000,storeId:'s1',recordedBy:'u1'},
+   679→   679→    {id:'e5',date:new Date(Date.now()-3*86400000).toISOString().slice(0,10),category:'Marketing',description:'Social media ads',amount:8500,storeId:'s1',recordedBy:'u1'},
+   680→   680→    {id:'e6',date:new Date(Date.now()-4*86400000).toISOString().slice(0,10),category:'Maintenance',description:'Fridge repair',amount:5600,storeId:'s1',recordedBy:'u1'},
+   681→   681→    {id:'e7',date:new Date(Date.now()-5*86400000).toISOString().slice(0,10),category:'Other',description:'Cleaning supplies',amount:2300,storeId:'s1',recordedBy:'u1'}
+   682→   682→  ];
+   683→   683→  return {stores,currentStoreId:'s1',inventory:inv,suppliers,staff,sales,stockTakes:[],reconciliation:[],expenses,lastBackup:null};
+   684→   684→}
+   685→   685→
+   686→   686→/* ================== HELPERS ================== */
+   687→   687→const $ = (s,el=document)=>el.querySelector(s);
+   688→   688→const $$ = (s,el=document)=>Array.from(el.querySelectorAll(s));
+   689→   689→const fmt = n => 'KSh '+Number(n||0).toLocaleString('en-KE',{maximumFractionDigits:0});
+   690→   690→const fmtN = n => Number(n||0).toLocaleString('en-KE');
+   691→   691→function todayKey(){return new Date().toISOString().slice(0,10)}
+   692→   692→function uid(p){return p+'_'+Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3)}
+   693→   693→function toast(msg,type='info'){
+   694→   694→  const icons={success:'fa-circle-check',error:'fa-circle-exclamation',warn:'fa-triangle-exclamation',info:'fa-circle-info'};
+   695→   695→  const t=document.createElement('div');t.className='toast '+type;
+   696→   696→  t.innerHTML='<i class="fa-solid '+icons[type]+'"></i><span>'+msg+'</span>';
+   697→   697→  $('#toastContainer').appendChild(t);
+   698→   698→  setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(100%)';setTimeout(()=>t.remove(),300)},3500);
+   699→   699→}
+   700→   700→function openModal(title,body,footer,lg){
+   701→   701→  $('#modalTitle').textContent=title;
+   702→   702→  $('#modalBody').innerHTML=body;
+   703→   703→  $('#modalFooter').innerHTML=footer||'';
+   704→   704→  $('#modal').classList.toggle('lg',!!lg);
+   705→   705→  $('#modalBackdrop').classList.add('show');
+   706→   706→}
+   707→   707→function closeModal(){$('#modalBackdrop').classList.remove('show')}
+   708→   708→$('#modalClose').addEventListener('click',closeModal);
+   709→   709→$('#modalBackdrop').addEventListener('click',e=>{if(e.target===$('#modalBackdrop'))closeModal()});
+   710→   710→
+   711→   711→function currentStoreInv(){return state.inventory.filter(p=>p.storeId===state.currentStoreId)}
+   712→   712→function supplierName(id){const s=state.suppliers.find(x=>x.id===id);return s?s.name:'—'}
+   713→   713→function staffName(id){const s=state.staff.find(x=>x.id===id);return s?s.name:'—'}
+   714→   714→
+   715→   715→/* ================== LOGIN ================== */
+   716→   716→function renderPinDots(){
+   717→   717→  $$('#pinDisplay .pin-dot').forEach((d,i)=>d.classList.toggle('filled',i<pinBuffer.length));
+   718→   718→}
+   719→   719→function handlePin(val){
+   720→   720→  if(pinBuffer.length<4){pinBuffer+=val;renderPinDots()}
+   721→   721→  if(pinBuffer.length===4){setTimeout(attemptLogin,150)}
+   722→   722→}
+   723→   723→$('#pinKeypad').addEventListener('click',e=>{
+   724→   724→  const b=e.target.closest('.pin-key');if(!b)return;
+   725→   725→  if(b.dataset.act==='clear'){pinBuffer='';renderPinDots();$('#loginError').textContent='';return}
+   726→   726→  if(b.dataset.act==='enter'){if(pinBuffer.length>0)attemptLogin();return}
+   727→   727→  handlePin(b.dataset.val);
+   728→   728→});
+   729→   729→document.addEventListener('keydown',e=>{
+   730→   730→  if($('#loginScreen').style.display==='none'||$('#loginScreen').style.display==='')return;
+   731→   731→  if(/^[0-9]$/.test(e.key)){handlePin(e.key)}
+   732→   732→  else if(e.key==='Backspace'){pinBuffer=pinBuffer.slice(0,-1);renderPinDots()}
+   733→   733→  else if(e.key==='Enter'&&pinBuffer.length>0)attemptLogin();
+   734→   734→});
+   735→   735→function attemptLogin(){
+   736→   736→  const user=state.staff.find(s=>s.pin===pinBuffer);
+   737→   737→  pinBuffer='';renderPinDots();
+   738→   738→  if(!user){$('#loginError').textContent='Invalid PIN. Try 1234 or 5678';return}
+   739→   739→  currentUser=user;
+   740→   740→  $('#loginScreen').style.display='none';
+   741→   741→  $('#app').classList.add('ready');
+   742→   742→  $('#userName').textContent=user.name;
+   743→   743→  $('#userRole').textContent=user.role.charAt(0).toUpperCase()+user.role.slice(1);
+   744→   744→  $('#userAvatar').textContent=user.name.charAt(0).toUpperCase();
+   745→   745→  // staff: respect their store; manager: keep current
+   746→   746→  if(user.role==='staff')state.currentStoreId=user.storeId;
+   747→   747→  buildSidebar();
+   748→   748→  buildStoreSelector();
+   749→   749→  navigate(user.role==='manager'?'dashboard':'inventory');
+   750→   750→  toast('Welcome back, '+user.name.split(' ')[0],'success');
+   751→   751→}
+   752→   752→$('#logoutBtn').addEventListener('click',()=>{
+   753→   753→  currentUser=null;
+   754→   754→  $('#app').classList.remove('ready');
+   755→   755→  $('#loginScreen').style.display='flex';
+   756→   756→  pinBuffer='';renderPinDots();
+   757→   757→});
+   758→   758→
+   759→   759→/* ================== NAVIGATION ================== */
+   760→   760→const PAGES=[
+   761→   761→  {id:'dashboard',icon:'fa-chart-line',label:'Dashboard',roles:['manager'],section:'Overview'},
+   762→   762→  {id:'inventory',icon:'fa-boxes-stacked',label:'Inventory',roles:['manager','staff'],section:'Operations'},
+   763→   763→  {id:'pos',icon:'fa-cash-register',label:'Point of Sale',roles:['manager','staff'],section:'Operations'},
+   764→   764→  {id:'stocktake',icon:'fa-clipboard-check',label:'Stock Counting',roles:['manager','staff'],section:'Operations'},
+   765→   765→  {id:'reconciliation',icon:'fa-scale-balanced',label:'Daily Reconciliation',roles:['manager','staff'],section:'Operations'},
+   766→   766→  {id:'suppliers',icon:'fa-truck',label:'Suppliers',roles:['manager'],section:'Management'},
+   767→   767→  {id:'expenses',icon:'fa-receipt',label:'Expenses',roles:['manager'],section:'Management'},
+   768→   768→  {id:'analytics',icon:'fa-chart-bar',label:'Sales Analytics',roles:['manager'],section:'Insights'},
+   769→   769→  {id:'profit',icon:'fa-coins',label:'Profit Analytics',roles:['manager'],section:'Insights'},
+   770→   770→  {id:'reports',icon:'fa-file-pdf',label:'PDF Reports',roles:['manager'],section:'Insights'},
+   771→   771→  {id:'staff',icon:'fa-users',label:'Staff Management',roles:['manager'],section:'Management'},
+   772→   772→  {id:'stores',icon:'fa-store',label:'Multi-Store',roles:['manager'],section:'Management'},
+   773→   773→  {id:'settings',icon:'fa-gear',label:'Settings',roles:['manager'],section:'System'}
+   774→   774→];
+   775→   775→function buildSidebar(){
+   776→   776→  const nav=$('#sidebarNav');nav.innerHTML='';
+   777→   777→  let lastSec='';
+   778→   778→  PAGES.forEach(p=>{
+   779→   779→    if(!p.roles.includes(currentUser.role))return;
+   780→   780→    if(p.section!==lastSec){lastSec=p.section;const lbl=document.createElement('div');lbl.className='nav-section-label';lbl.textContent=p.section;nav.appendChild(lbl)}
+   781→   781→    const b=document.createElement('button');
+   782→   782→    b.className='nav-item';b.dataset.page=p.id;
+   783→   783→    b.innerHTML='<i class="fa-solid '+p.icon+'"></i> '+p.label;
+   784→   784→    b.addEventListener('click',()=>{closeDrawer();navigate(p.id)});
+   785→   785→    nav.appendChild(b);
+   786→   786→  });
+   787→   787→  // bottom nav + more menu
+   788→   788→  buildBottomNav();
+   789→   789→}
+   790→   790→function buildBottomNav(){
+   791→   791→  const main=['inventory','pos','stocktake','reconciliation'];
+   792→   792→  const items=$('#bottomNav .bottom-nav-items');
+   793→   793→  // re-render main 4 + more
+   794→   794→  items.querySelectorAll('.bottom-nav-item:not(#moreNavBtn)').forEach(n=>n.remove());
+   795→   795→  const moreBtn=items.querySelector('#moreNavBtn');
+   796→   796→  main.forEach(id=>{
+   797→   797→    const p=PAGES.find(x=>x.id===id);if(!p||!p.roles.includes(currentUser.role))return;
+   798→   798→    const b=document.createElement('button');b.className='bottom-nav-item';b.dataset.nav=id;
+   799→   799→    b.innerHTML='<i class="fa-solid '+p.icon+'"></i><span>'+p.label.split(' ')[0]+'</span>';
+   800→   800→    b.addEventListener('click',()=>navigate(id));
+   801→   801→    items.insertBefore(b,moreBtn);
+   802→   802→  });
+   803→   803→  // more menu: all other pages available to role
+   804→   804→  const more=$('#moreMenu');more.innerHTML='';
+   805→   805→  PAGES.filter(p=>!main.includes(p.id)&&p.roles.includes(currentUser.role)).forEach(p=>{
+   806→   806→    const b=document.createElement('button');b.dataset.nav=p.id;
+   807→   807→    b.innerHTML='<i class="fa-solid '+p.icon+'"></i><span>'+p.label.split(' ')[0]+'</span>';
+   808→   808→    b.addEventListener('click',()=>{more.classList.remove('show');navigate(p.id)});
+   809→   809→    more.appendChild(b);
+   810→   810→  });
+   811→   811→  if(!more.children.length){moreBtn.style.display='none'}else{moreBtn.style.display='flex'}
+   812→   812→}
+   813→   813→$('#moreNavBtn').addEventListener('click',e=>{e.stopPropagation();$('#moreMenu').classList.toggle('show')});
+   814→   814→document.addEventListener('click',e=>{if(!e.target.closest('#moreNavBtn'))$('#moreMenu').classList.remove('show')});
+   815→   815→
+   816→   816→function navigate(pageId){
+   817→   817→  if(!PAGES.find(p=>p.id===pageId&&p.roles.includes(currentUser.role))){pageId=currentUser.role==='manager'?'dashboard':'inventory'}
+   818→   818→  currentPage=pageId;
+   819→   819→  $$('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===pageId));
+   820→   820→  $$('.bottom-nav-item').forEach(n=>n.classList.toggle('active',n.dataset.nav===pageId));
+   821→   821→  const p=PAGES.find(x=>x.id===pageId);
+   822→   822→  $('#topbarTitle').textContent=p?p.label:'';
+   823→   823→  // destroy charts
+   824→   824→  Object.values(charts).forEach(c=>{try{c.destroy()}catch(e){}});charts={};
+   825→   825→  const renderer=RENDERERS[pageId]||RENDERERS.dashboard;
+   826→   826→  try{
+   827→   827→    renderer();
+   828→   828→  }catch(err){
+   829→   829→    console.error('Page render error:',err);
+   830→   830→    $('#content').innerHTML='<div class="empty-state"><i class="fa-solid fa-triangle-exclamation" style="color:var(--crimson)"></i><h3>Could not load this page</h3><p>'+err.message+'</p><button class="btn btn-primary mt-12" onclick="navigate(\'dashboard\')"><i class="fa-solid fa-house"></i> Back to Dashboard</button></div>';
+   831→   831→    toast('Page failed to load: '+err.message,'error');
+   832→   832→  }
+   833→   833→  $('#content').scrollTop=0;
+   834→   834→}
+   835→   835→$('#homeBtn').addEventListener('click',()=>navigate(currentUser.role==='manager'?'dashboard':'inventory'));
+   836→   836→
+   837→   837→/* DRAWER */
+   838→   838→$('#menuToggle').addEventListener('click',()=>{$('#sidebar').classList.add('open');$('#drawerBackdrop').classList.add('show')});
+   839→   839→$('#drawerBackdrop').addEventListener('click',closeDrawer);
+   840→   840→function closeDrawer(){$('#sidebar').classList.remove('open');$('#drawerBackdrop').classList.remove('show')}
+   841→   841→
+   842→   842→/* STORE SELECTOR */
+   843→   843→function buildStoreSelector(){
+   844→   844→  const sel=$('#storeSelect');sel.innerHTML='';
+   845→   845→  state.stores.forEach(s=>{
+   846→   846→    const o=document.createElement('option');o.value=s.id;o.textContent=s.name;
+   847→   847→    if(s.id===state.currentStoreId)o.selected=true;
+   848→   848→    sel.appendChild(o);
+   849→   849→  });
+   850→   850→  if(currentUser&&currentUser.role==='staff'){sel.disabled=true}
+   851→   851→}
+   852→   852→$('#storeSelect').addEventListener('change',e=>{
+   853→   853→  state.currentStoreId=e.target.value;
+   854→   854→  if(currentPage==='inventory'||currentPage==='pos'||currentPage==='stocktake'||currentPage==='reconciliation')navigate(currentPage);
+   855→   855→});
+   856→   856→
+   857→   857→/* ================== RENDERERS ================== */
+   858→   858→const RENDERERS={};
+   859→   859→
+   860→   860→/* ----- DASHBOARD ----- */
+   861→   861→RENDERERS.dashboard=function(){
+   862→   862→  const inv=currentStoreInv();
+   863→   863→  const todaySales=state.sales.filter(s=>s.storeId===state.currentStoreId&&new Date(s.timestamp).toDateString()===new Date().toDateString());
+   864→   864→  const todayRev=todaySales.reduce((a,b)=>a+b.total,0);
+   865→   865→  const weekRev=state.sales.filter(s=>s.storeId===state.currentStoreId&&s.timestamp>Date.now()-7*86400000).reduce((a,b)=>a+b.total,0);
+   866→   866→  const lowStock=inv.filter(p=>p.current<=p.reorder);
+   867→   867→  const stockVal=inv.reduce((a,b)=>a+b.current*b.cost,0);
+   868→   868→  const items=inv.length;
+   869→   869→  const totalUnits=inv.reduce((a,b)=>a+b.current,0);
+   870→   870→
+   871→   871→  const health=computeHealthScore(inv);
+   872→   872→
+   873→   873→  let html=`
+   874→   874→  <div class="page-header"><div><h2>Dashboard</h2><p>Live overview of ${state.stores.find(s=>s.id===state.currentStoreId).name}</p></div>
+   875→   875→    <div class="page-actions"><button class="btn btn-outline btn-sm" onclick="navigate('analytics')"><i class="fa-solid fa-chart-line"></i> Analytics</button>
+   876→   876→    <button class="btn btn-amber btn-sm" onclick="navigate('reconciliation')"><i class="fa-solid fa-scale-balanced"></i> Daily Reconciliation</button>
+   877→   877→    <button class="btn btn-emerald btn-sm" onclick="navigate('reports')"><i class="fa-solid fa-file-pdf"></i> PDF Reports</button></div>
+   878→   878→  </div>
+   879→   879→
+   880→   880→  <div class="stat-grid">
+   881→   881→    <div class="stat-card stat-crimson"><div class="label">Today's Revenue</div><div class="value">${fmt(todayRev)}</div><div class="delta">${todaySales.length} transactions</div><i class="fa-solid fa-money-bill-trend-up icon"></i></div>
+   882→   882→    <div class="stat-card stat-emerald"><div class="label">7-Day Revenue</div><div class="value">${fmt(weekRev)}</div><div class="delta">Weekly performance</div><i class="fa-solid fa-calendar-week icon"></i></div>
+   883→   883→    <div class="stat-card stat-blue"><div class="label">Stock Value</div><div class="value">${fmt(stockVal)}</div><div class="delta">${totalUnits} units on hand</div><i class="fa-solid fa-warehouse icon"></i></div>
+   884→   884→    <div class="stat-card stat-amber"><div class="label">Low Stock Alerts</div><div class="value">${lowStock.length}</div><div class="delta">${lowStock.length} items need reorder</div><i class="fa-solid fa-triangle-exclamation icon"></i></div>
+   885→   885→  </div>
+   886→   886→
+   887→   887→  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
+   888→   888→    <div class="card">
+   889→   889→      <div class="card-header"><div><h3>Inventory Health Score</h3><div class="sub">Live composite score</div></div><span class="badge ${health.score>=70?'badge-green':health.score>=40?'badge-gold':'badge-red'}">${health.label}</span></div>
+   890→   890→      <div class="health-score">
+   891→   891→        <div class="health-ring">
+   892→   892→          <svg width="120" height="120" viewBox="0 0 120 120">
+   893→   893→            <defs><linearGradient id="healthGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#F59E0B"/><stop offset="100%" stop-color="#DC2626"/></linearGradient></defs>
+   894→   894→            <circle class="ring-bg" cx="60" cy="60" r="50"/>
+   895→   895→            <circle class="ring-fg" cx="60" cy="60" r="50" stroke-dasharray="${2*Math.PI*50}" stroke-dashoffset="${2*Math.PI*50*(1-health.score/100)}"/>
+   896→   896→          </svg>
+   897→   897→          <div class="score-text"><div class="score-num">${health.score}</div><div class="score-label">out of 100</div></div>
+   898→   898→        </div>
+   899→   899→        <div class="health-details">
+   900→   900→          ${health.details.map(d=>`<div class="h-row"><span>${d.label}</span><span class="${d.good?'text-emerald':'text-crimson'}">${d.value}</span></div>`).join('')}
+   901→   901→        </div>
+   902→   902→      </div>
+   903→   903→    </div>
+   904→   904→    <div class="card">
+   905→   905→      <div class="card-header"><div><h3>Sales This Week</h3><div class="sub">Last 7 days</div></div></div>
+   906→   906→      <canvas id="weekChart" height="180"></canvas>
+   907→   907→    </div>
+   908→   908→  </div>
+   909→   909→
+   910→   910→  <div class="ai-panel mt-16">
+   911→   911→    <div class="ai-header">
+   912→   912→      <div class="ai-icon"><i class="fa-solid fa-brain"></i></div>
+   913→   913→      <div><h3>AI Business Insights</h3><div class="sub">Generated from your live data</div></div>
+   914→   914→    </div>
+   915→   915→    <div id="aiInsights"></div>
+   916→   916→  </div>
+   917→   917→
+   918→   918→  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
+   919→   919→    <div class="card">
+   920→   920→      <div class="card-header"><div><h3>Low Stock Items</h3><div class="sub">Need reorder soon</div></div><button class="btn btn-ghost btn-sm" onclick="navigate('inventory')">View all</button></div>
+   921→   921→      ${lowStock.length?`<div class="table-wrap"><table><thead><tr><th>Product</th><th>Current</th><th>Reorder At</th><th>Action</th></tr></thead><tbody>
+   922→   922→        ${lowStock.map(p=>`<tr><td><b>${p.name}</b><br><small class="text-muted">${p.category} · ${p.size}</small></td><td><span class="badge badge-red">${p.current}</span></td><td>${p.reorder}</td><td><button class="btn btn-amber btn-sm" onclick="quickReorder('${p.id}')"><i class="fa-solid fa-truck"></i> Reorder</button></td></tr>`).join('')}
+   923→   923→      </tbody></table></div>`:'<div class="empty-state"><i class="fa-solid fa-circle-check"></i><h3>All stock healthy</h3><p>No items below reorder level.</p></div>'}
+   924→   924→    </div>
+   925→   925→    <div class="card">
+   926→   926→      <div class="card-header"><div><h3>Top Sellers</h3><div class="sub">By revenue this week</div></div></div>
+   927→   927→      <canvas id="topChart" height="180"></canvas>
+   928→   928→    </div>
+   929→   929→  </div>
+   930→   930→  `;
+   931→   931→  $('#content').innerHTML=html;
+   932→   932→
+   933→   933→  // apply responsive grid
+   934→   934→  if(window.innerWidth<=1024){
+   935→   935→    $$('.dash-grid').forEach(g=>g.style.gridTemplateColumns='1fr');
+   936→   936→  }
+   937→   937→
+   938→   938→  // week chart
+   939→   939→  const days=[];const revs=[];
+   940→   940→  for(let d=6;d>=0;d--){
+   941→   941→    const dt=new Date(Date.now()-d*86400000);
+   942→   942→    days.push(['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()]);
+   943→   943→    revs.push(state.sales.filter(s=>s.storeId===state.currentStoreId&&new Date(s.timestamp).toDateString()===dt.toDateString()).reduce((a,b)=>a+b.total,0));
+   944→   944→  }
+   945→   945→  charts.week=new Chart($('#weekChart'),{type:'line',data:{labels:days,datasets:[{label:'Revenue',data:revs,borderColor:'#DC2626',backgroundColor:'rgba(220,38,38,.12)',fill:true,tension:.35,pointBackgroundColor:'#F59E0B',pointRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+   946→   946→
+   947→   947→  // top sellers
+   948→   948→  const sellerMap={};
+   949→   949→  state.sales.filter(s=>s.storeId===state.currentStoreId&&s.timestamp>Date.now()-7*86400000).forEach(s=>s.items.forEach(it=>{sellerMap[it.name]=(sellerMap[it.name]||0)+it.price*it.qty}));
+   950→   950→  const top=Object.entries(sellerMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
+   951→   951→  charts.top=new Chart($('#topChart'),{type:'bar',data:{labels:top.map(t=>t[0].split(' ').slice(0,2).join(' ')),datasets:[{data:top.map(t=>t[1]),backgroundColor:['#DC2626','#F59E0B','#10B981','#3B82F6','#8B5CF6'],borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+   952→   952→
+   953→   953→  // AI insights
+   954→   954→  renderAIInsights(inv,todaySales,health);
+   955→   955→};
+   956→   956→
+   957→   957→function computeHealthScore(inv){
+   958→   958→  if(!inv.length)return{score:0,label:'No Data',details:[]};
+   959→   959→  const totalItems=inv.length;
+   960→   960→  const lowStock=inv.filter(p=>p.current<=p.reorder).length;
+   961→   961→  const outOfStock=inv.filter(p=>p.current===0).length;
+   962→   962→  const stockVal=inv.reduce((a,b)=>a+b.current*b.cost,0);
+   963→   963→  const avgCoverage=inv.reduce((a,b)=>a+(b.current>0?b.current/b.reorder*7:0),0)/totalItems;
+   964→   964→  const variety=totalItems;
+   965→   965→  const lowPct=lowStock/totalItems;
+   966→   966→  const outPct=outOfStock/totalItems;
+   967→   967→  let score=Math.round(100 - lowPct*30 - outPct*40 - Math.max(0,(7-avgCoverage)/7*20));
+   968→   968→  score=Math.max(0,Math.min(100,score));
+   969→   969→  let label=score>=80?'Excellent':score>=60?'Good':score>=40?'Fair':score>=20?'Poor':'Critical';
+   970→   970→  return {score,label,details:[
+   971→   971→    {label:'Total SKUs',value:variety,good:true},
+   972→   972→    {label:'Low stock items',value:lowStock,good:lowStock===0},
+   973→   973→    {label:'Out of stock',value:outOfStock,good:outOfStock===0},
+   974→   974→    {label:'Avg coverage (days)',value:avgCoverage.toFixed(1),good:avgCoverage>=7},
+   975→   975→    {label:'Stock value',value:fmt(stockVal),good:true}
+   976→   976→  ]};
+   977→   977→}
+   978→   978→
+   979→   979→function renderAIInsights(inv,todaySales,health){
+   980→   980→  const insights=[];
+   981→   981→  // low stock
+   982→   982→  inv.filter(p=>p.current<=p.reorder).slice(0,3).forEach(p=>{
+   983→   983→    insights.push({type:'danger',icon:'fa-triangle-exclamation',text:`<b>${p.name}</b> is at ${p.current} units (reorder level: ${p.reorder}). Projected stockout in ~${p.current>0?Math.ceil(p.current/2):0} days at current pace. Suggested reorder qty: ${p.reorder*2} units from ${supplierName(p.supplierId)}.`});
+   984→   984→  });
+   985→   985→  // sales trend
+   986→   986→  const todayRev=todaySales.reduce((a,b)=>a+b.total,0);
+   987→   987→  const yesterday=state.sales.filter(s=>s.storeId===state.currentStoreId&&new Date(s.timestamp).toDateString()===new Date(Date.now()-86400000).toDateString()).reduce((a,b)=>a+b.total,0);
+   988→   988→  if(yesterday>0){
+   989→   989→    const chg=((todayRev-yesterday)/yesterday*100).toFixed(0);
+   990→   990→    insights.push({type:chg>=0?'success':'warn',icon:chg>=0?'fa-arrow-trend-up':'fa-arrow-trend-down',text:`Today's revenue is ${chg>=0?'+':''}${chg}% vs yesterday. ${chg>=0?'Strong momentum — consider promoting top sellers.':'Slow day — try a happy hour push on slow movers.'}`});
+   991→   991→  }
+   992→   992→  // profit opportunity
+   993→   993→  const profitItems=inv.map(p=>({p,margin:p.sell-p.cost,margPct:(p.sell-p.cost)/p.sell*100})).sort((a,b)=>b.margPct-a.margPct);
+   994→   994→  if(profitItems.length){
+   995→   995→    const top=profitItems[0];
+   996→   996→    insights.push({type:'info',icon:'fa-lightbulb',text:`<b>${top.p.name}</b> has your highest margin at ${top.margPct.toFixed(0)}% (KSh ${top.margin} per unit). Consider featuring it prominently to boost profitability.`});
+   997→   997→  }
+   998→   998→  // dead stock
+   999→   999→  const slowMovers=inv.filter(p=>{const sold=state.sales.filter(s=>s.storeId===state.currentStoreId&&s.items.some(i=>i.id===p.id)).reduce((a,b)=>a+b.items.find(i=>i.id===p.id).qty,0);return sold===0&&p.current>10});
+  1000→  1000→  if(slowMovers.length){
+  1001→  1001→    insights.push({type:'warn',icon:'fa-hourglass-half',text:`<b>${slowMovers[0].name}</b> hasn't sold this week but you have ${slowMovers[0].current} units. Consider a discount bundle or staff recommendation push.`});
+  1002→  1002→  }
+  1003→  1003→  // health
+  1004→  1004→  if(health.score<60){
+  1005→  1005→    insights.push({type:'warn',icon:'fa-heart-pulse',text:`Inventory Health Score is ${health.score}/100 (${health.label}). Address ${inv.filter(p=>p.current<=p.reorder).length} low-stock items to improve coverage.`});
+  1006→  1006→  }else{
+  1007→  1007→    insights.push({type:'success',icon:'fa-heart-pulse',text:`Inventory Health Score is ${health.score}/100 (${health.label}). Stock levels are well balanced.`});
+  1008→  1008→  }
+  1009→  1009→  if(!insights.length)insights.push({type:'info',icon:'fa-circle-info',text:'Not enough data for insights yet. Make a few sales and check back.'});
+  1010→  1010→  $('#aiInsights').innerHTML=insights.map(i=>`<div class="ai-insight ${i.type}"><i class="fa-solid ${i.icon}"></i><div>${i.text}</div></div>`).join('');
+  1011→  1011→}
+  1012→  1012→
+  1013→  1013→window.quickReorder=function(pid){
+  1014→  1014→  const p=currentStoreInv().find(x=>x.id===pid);if(!p)return;
+  1015→  1015→  openModal('Reorder: '+p.name,
+  1016→  1016→    `<div class="form-group"><label>Supplier</label><input class="form-control" value="${supplierName(p.supplierId)}" disabled></div>
+  1017→  1017→     <div class="form-group"><label>Quantity to order</label><input type="number" id="roQty" class="form-control" value="${p.reorder*2}" min="1"></div>
+  1018→  1018→     <div class="form-group"><label>Estimated cost</label><input class="form-control" id="roCost" disabled></div>`,
+  1019→  1019→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmReorder('${pid}')"><i class="fa-solid fa-check"></i> Place Order</button>`);
+  1020→  1020→  const calc=()=>{$('#roCost').value=fmt(($('#roQty').value||0)*p.cost)};
+  1021→  1021→  $('#roQty').addEventListener('input',calc);calc();
+  1022→  1022→};
+  1023→  1023→window.confirmReorder=function(pid){
+  1024→  1024→  const qty=parseInt($('#roQty').value);if(!qty||qty<1){toast('Enter valid quantity','error');return}
+  1025→  1025→  const p=currentStoreInv().find(x=>x.id===pid);
+  1026→  1026→  p.current+=qty;p.opening=p.current;
+  1027→  1027→  saveState();
+  1028→  1028→  closeModal();toast('Order received. '+qty+' units of '+p.name+' added.','success');
+  1029→  1029→  navigate('inventory');
+  1030→  1030→};
+  1031→  1031→
+  1032→  1032→/* ----- INVENTORY ----- */
+  1033→  1033→RENDERERS.inventory=function(){
+  1034→  1034→  const inv=currentStoreInv();
+  1035→  1035→  const cats=['All',...new Set(inv.map(p=>p.category))];
+  1036→  1036→  let html=`
+  1037→  1037→  <div class="page-header"><div><h2>Inventory Management</h2><p>${inv.length} products in ${state.stores.find(s=>s.id===state.currentStoreId).name}</p></div>
+  1038→  1038→    <div class="page-actions">
+  1039→  1039→      <button class="btn btn-outline btn-sm" id="invScanBtn"><i class="fa-solid fa-barcode"></i> Scan</button>
+  1040→  1040→      <button class="btn btn-amber btn-sm" onclick="navigate('stocktake')"><i class="fa-solid fa-clipboard-check"></i> Stock Count</button>
+  1041→  1041→      <button class="btn btn-primary btn-sm" onclick="openProductModal()"><i class="fa-solid fa-plus"></i> Add Product</button>
+  1042→  1042→    </div>
+  1043→  1043→  </div>
+  1044→  1044→  <div class="flex gap-8 items-center mb-12 flex-wrap">
+  1045→  1045→    <div class="search-bar"><i class="fa-solid fa-magnifying-glass"></i><input id="invSearch" placeholder="Search by name, SKU, barcode..."></div>
+  1046→  1046→    <div class="filter-chips" id="catChips">${cats.map((c,i)=>`<button class="chip ${i===0?'active':''}" data-cat="${c}">${c}</button>`).join('')}</div>
+  1047→  1047→  </div>
+  1048→  1048→  <div class="card" style="padding:0">
+  1049→  1049→    <div class="table-wrap"><table><thead><tr><th>Product</th><th>Category</th><th>SKU</th><th>Stock</th><th>Cost</th><th>Price</th><th>Margin</th><th>Status</th><th>Actions</th></tr></thead><tbody id="invBody"></tbody></table></div>
+  1050→  1050→  </div>`;
+  1051→  1051→  $('#content').innerHTML=html;
+  1052→  1052→  let curCat='All',curSearch='';
+  1053→  1053→  function draw(){
+  1054→  1054→    let rows=inv.filter(p=>(curCat==='All'||p.category===curCat)&&(p.name+p.sku+p.barcode).toLowerCase().includes(curSearch.toLowerCase()));
+  1055→  1055→    $('#invBody').innerHTML=rows.length?rows.map(p=>{
+  1056→  1056→      const margin=p.sell-p.cost;const pct=(margin/p.sell*100).toFixed(0);
+  1057→  1057→      const status=p.current===0?'<span class="badge badge-red">Out</span>':p.current<=p.reorder?'<span class="badge badge-gold">Low</span>':'<span class="badge badge-green">OK</span>';
+  1058→  1058→      return `<tr><td><b>${p.name}</b><br><small class="text-muted">${p.barcode}</small></td><td><span class="badge badge-purple">${p.category}</span></td><td>${p.sku}</td><td><b style="font-size:15px;color:${p.current<=p.reorder?'var(--crimson)':'var(--sidebar)'}">${p.current}</b><br><small class="text-muted">min ${p.reorder}</small></td><td>${fmt(p.cost)}</td><td>${fmt(p.sell)}</td><td><b class="text-emerald">${fmt(margin)}</b><br><small class="text-muted">${pct}%</small></td><td>${status}</td><td><div class="row-actions"><button onclick="openProductModal('${p.id}')" title="Edit"><i class="fa-solid fa-pen"></i></button><button class="delete" onclick="deleteProduct('${p.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button></div></td></tr>`;
+  1059→  1059→    }).join(''):'<tr><td colspan="9"><div class="empty-state"><i class="fa-solid fa-box-open"></i><h3>No products found</h3></div></td></tr>';
+  1060→  1060→  }
+  1061→  1061→  draw();
+  1062→  1062→  $('#invSearch').addEventListener('input',e=>{curSearch=e.target.value;draw()});
+  1063→  1063→  $$('#catChips .chip').forEach(c=>c.addEventListener('click',()=>{$$('#catChips .chip').forEach(x=>x.classList.remove('active'));c.classList.add('active');curCat=c.dataset.cat;draw()}));
+  1064→  1064→  $('#invScanBtn').addEventListener('click',startScanner);
+  1065→  1065→};
+  1066→  1066→
+  1067→  1067→window.openProductModal=function(id){
+  1068→  1068→  const p=id?currentStoreInv().find(x=>x.id===id):null;
+  1069→  1069→  const cats=['Wine','Whisky','Vodka','Gin','Rum','Champagne','Beer','Cognac','Tequila','Liqueur','Other'];
+  1070→  1070→  const sizes=['750ml','1L','700ml','375ml','1.75L','330ml','500ml','50ml'];
+  1071→  1071→  openModal(p?'Edit Product':'Add Product',
+  1072→  1072→    `<div class="form-grid">
+  1073→  1073→      <div class="form-group"><label>Product Name</label><input id="pName" class="form-control" value="${p?p.name:''}"></div>
+  1074→  1074→      <div class="form-group"><label>SKU</label><input id="pSku" class="form-control" value="${p?p.sku:''}"></div>
+  1075→  1075→      <div class="form-group"><label>Barcode</label><div style="display:flex;gap:6px"><input id="pBarcode" class="form-control" value="${p?p.barcode:''}"><button class="btn btn-ghost" onclick="document.getElementById('pBarcode').value=generateBarcode()"><i class="fa-solid fa-dice"></i></button></div></div>
+  1076→  1076→      <div class="form-group"><label>Category</label><select id="pCategory" class="form-control">${cats.map(c=>`<option ${p&&p.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+  1077→  1077→      <div class="form-group"><label>Size</label><select id="pSize" class="form-control">${sizes.map(s=>`<option ${p&&p.size===s?'selected':''}>${s}</option>`).join('')}</select></div>
+  1078→  1078→      <div class="form-group"><label>Supplier</label><select id="pSupplier" class="form-control">${state.suppliers.map(s=>`<option value="${s.id}" ${p&&p.supplierId===s.id?'selected':''}>${s.name}</option>`).join('')}</select></div>
+  1079→  1079→      <div class="form-group"><label>Opening Stock</label><input type="number" id="pOpening" class="form-control" value="${p?p.opening:0}"></div>
+  1080→  1080→      <div class="form-group"><label>Current Stock</label><input type="number" id="pCurrent" class="form-control" value="${p?p.current:0}"></div>
+  1081→  1081→      <div class="form-group"><label>Reorder Level</label><input type="number" id="pReorder" class="form-control" value="${p?p.reorder:5}"></div>
+  1082→  1082→      <div class="form-group"><label>Cost Price (KSh)</label><input type="number" id="pCost" class="form-control" value="${p?p.cost:0}"></div>
+  1083→  1083→      <div class="form-group"><label>Sell Price (KSh)</label><input type="number" id="pSell" class="form-control" value="${p?p.sell:0}"></div>
+  1084→  1084→    </div>`,
+  1085→  1085→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveProduct('${id||''}')"><i class="fa-solid fa-check"></i> ${p?'Save Changes':'Add Product'}</button>`,true);
+  1086→  1086→};
+  1087→  1087→window.generateBarcode=function(){return '600'+Math.floor(Math.random()*9000000000+1000000000)};
+  1088→  1088→window.saveProduct=function(id){
+  1089→  1089→  const get=v=>$('#'+v).value.trim();
+  1090→  1090→  if(!get('pName')||!get('pSku')){toast('Name and SKU required','error');return}
+  1091→  1091→  const data={name:get('pName'),sku:get('pSku'),barcode:get('pBarcode')||generateBarcode(),category:get('pCategory'),size:get('pSize'),supplierId:get('pSupplier'),opening:parseInt(get('pOpening'))||0,current:parseInt(get('pCurrent'))||0,reorder:parseInt(get('pReorder'))||5,cost:parseInt(get('pCost'))||0,sell:parseInt(get('pSell'))||0};
+  1092→  1092→  if(id){Object.assign(currentStoreInv().find(x=>x.id===id),data);toast('Product updated','success')}
+  1093→  1093→  else{data.id=uid('p');data.storeId=state.currentStoreId;state.inventory.push(data);toast('Product added','success')}
+  1094→  1094→  saveState();closeModal();navigate('inventory');
+  1095→  1095→};
+  1096→  1096→window.deleteProduct=function(id){
+  1097→  1097→  if(!confirm('Delete this product?'))return;
+  1098→  1098→  state.inventory=state.inventory.filter(p=>p.id!==id);saveState();toast('Product deleted','success');navigate('inventory');
+  1099→  1099→};
+
+[showing lines 600-1099 of 1939; use offset=1100 with limit to continue reading]

@@ -1,0 +1,1939 @@
+     1→<!DOCTYPE html>
+     2→<html lang="en">
+     3→<head>
+     4→<meta charset="UTF-8">
+     5→<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+     6→<title>VinoCellar Pro — Wine Inventory Management</title>
+     7→<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+     8→<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+     9→<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    10→<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    11→<style>
+    12→:root{
+    13→  --crimson:#DC2626; --crimson-dark:#991B1B;
+    14→  --amber:#F59E0B; --amber-dark:#B45309;
+    15→  --emerald:#10B981; --emerald-dark:#047857;
+    16→  --blue:#3B82F6; --blue-dark:#1D4ED8;
+    17→  --purple:#8B5CF6; --purple-dark:#6D28D9;
+    18→  --teal:#14B8A6; --teal-dark:#0F766E;
+    19→  --pink:#EC4899; --orange:#F97316;
+    20→  --bg:#FAF7F2; --bg-alt:#F3EEE6;
+    21→  --sidebar:#1F1129; --sidebar-alt:#2D1A3D;
+    22→  --text:#1F2937; --text-muted:#6B7280; --text-light:#9CA3AF;
+    23→  --border:#E5DDD0; --border-light:#EDE7DA;
+    24→  --card:#FFFFFF;
+    25→  --shadow:0 4px 12px rgba(31,17,41,.06);
+    26→  --shadow-md:0 8px 24px rgba(31,17,41,.10);
+    27→  --shadow-lg:0 16px 40px rgba(31,17,41,.14);
+    28→  --radius:14px; --radius-sm:10px; --radius-lg:20px;
+    29→  --sidebar-w:260px;
+    30→}
+    31→*{box-sizing:border-box;margin:0;padding:0}
+    32→html,body{height:100%}
+    33→body{
+    34→  font-family:'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+    35→  background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;
+    36→  -webkit-font-smoothing:antialiased;overflow:hidden;
+    37→}
+    38→button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+    39→input,select,textarea{font-family:inherit;font-size:14px}
+    40→::-webkit-scrollbar{width:8px;height:8px}
+    41→::-webkit-scrollbar-track{background:transparent}
+    42→::-webkit-scrollbar-thumb{background:#D1C7B8;border-radius:4px}
+    43→::-webkit-scrollbar-thumb:hover{background:#B8AC9A}
+    44→
+    45→/* ---------- LOGIN ---------- */
+    46→#loginScreen{
+    47→  position:fixed;inset:0;z-index:1000;
+    48→  background:linear-gradient(135deg,#1F1129 0%,#3D1A4D 50%,#5B1E3F 100%);
+    49→  display:flex;align-items:center;justify-content:center;padding:20px;
+    50→}
+    51→.login-card{
+    52→  background:rgba(255,255,255,.97);border-radius:var(--radius-lg);
+    53→  padding:40px 32px;width:100%;max-width:380px;box-shadow:var(--shadow-lg);
+    54→  text-align:center;animation:popIn .5s cubic-bezier(.2,.8,.2,1);
+    55→}
+    56→@keyframes popIn{from{opacity:0;transform:translateY(20px) scale(.96)}to{opacity:1;transform:none}}
+    57→.login-logo{
+    58→  width:80px;height:80px;margin:0 auto 16px;border-radius:50%;
+    59→  background:linear-gradient(135deg,var(--crimson),var(--purple));
+    60→  display:flex;align-items:center;justify-content:center;color:#fff;font-size:34px;
+    61→  box-shadow:0 8px 24px rgba(220,38,38,.4);
+    62→}
+    63→.login-card h1{font-size:24px;font-weight:800;color:var(--sidebar);margin-bottom:4px}
+    64→.login-card p.sub{color:var(--text-muted);font-size:13px;margin-bottom:24px}
+    65→.pin-display{
+    66→  display:flex;gap:10px;justify-content:center;margin-bottom:24px;
+    67→}
+    68→.pin-dot{
+    69→  width:14px;height:14px;border-radius:50%;border:2px solid var(--border);
+    70→  transition:all .2s;background:#fff;
+    71→}
+    72→.pin-dot.filled{background:var(--crimson);border-color:var(--crimson);transform:scale(1.1)}
+    73→.pin-keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+    74→.pin-key{
+    75→  height:56px;border-radius:var(--radius);background:var(--bg-alt);
+    76→  font-size:20px;font-weight:700;color:var(--sidebar);transition:all .15s;
+    77→  display:flex;align-items:center;justify-content:center;
+    78→}
+    79→.pin-key:hover{background:#EDE5D8}
+    80→.pin-key:active{transform:scale(.94);background:var(--amber);color:#fff}
+    81→.pin-key.action{background:transparent;color:var(--text-muted);font-size:16px}
+    82→.pin-key.action:hover{background:#FEE2E2;color:var(--crimson)}
+    83→.login-hint{font-size:11px;color:var(--text-light);margin-top:14px;line-height:1.6}
+    84→.login-hint b{color:var(--crimson)}
+    85→#loginError{color:var(--crimson);font-size:12px;min-height:16px;margin-bottom:8px;font-weight:600}
+    86→
+    87→/* ---------- APP SHELL ---------- */
+    88→#app{display:none;height:100vh;height:100dvh}
+    89→#app.ready{display:flex}
+    90→
+    91→.sidebar{
+    92→  width:var(--sidebar-w);background:var(--sidebar);color:#fff;
+    93→  display:flex;flex-direction:column;flex-shrink:0;
+    94→  position:fixed;top:0;bottom:0;left:0;z-index:50;
+    95→  transition:transform .3s cubic-bezier(.2,.8,.2,1);
+    96→}
+    97→.sidebar-header{
+    98→  padding:20px 22px;display:flex;align-items:center;gap:12px;
+    99→  border-bottom:1px solid rgba(255,255,255,.08);
+   100→}
+   101→.sidebar-logo{
+   102→  width:38px;height:38px;border-radius:10px;
+   103→  background:linear-gradient(135deg,var(--crimson),var(--purple));
+   104→  display:flex;align-items:center;justify-content:center;font-size:18px;
+   105→}
+   106→.sidebar-title{font-size:17px;font-weight:800;letter-spacing:.2px}
+   107→.sidebar-title small{display:block;font-size:10px;font-weight:500;color:var(--amber);letter-spacing:1.5px;text-transform:uppercase}
+   108→.sidebar-nav{flex:1;overflow-y:auto;padding:14px 12px}
+   109→.nav-section-label{font-size:10px;color:var(--text-light);text-transform:uppercase;letter-spacing:1.5px;margin:16px 12px 8px;font-weight:700}
+   110→.nav-item{
+   111→  display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:10px;
+   112→  color:rgba(255,255,255,.72);font-size:14px;font-weight:500;margin-bottom:2px;
+   113→  transition:all .15s;position:relative;width:100%;text-align:left;
+   114→}
+   115→.nav-item i{width:18px;text-align:center;font-size:15px}
+   116→.nav-item:hover{background:rgba(255,255,255,.06);color:#fff}
+   117→.nav-item.active{
+   118→  background:linear-gradient(90deg,rgba(245,158,11,.18),transparent);
+   119→  color:var(--amber);
+   120→}
+   121→.nav-item.active::before{
+   122→  content:'';position:absolute;left:0;top:8px;bottom:8px;width:3px;
+   123→  background:var(--amber);border-radius:0 3px 3px 0;
+   124→}
+   125→.sidebar-footer{padding:14px;border-top:1px solid rgba(255,255,255,.08)}
+   126→.user-chip{
+   127→  display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;
+   128→  background:rgba(255,255,255,.04);
+   129→}
+   130→.user-avatar{
+   131→  width:34px;height:34px;border-radius:50%;
+   132→  background:linear-gradient(135deg,var(--amber),var(--crimson));
+   133→  display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:13px;
+   134→}
+   135→.user-info{flex:1;min-width:0}
+   136→.user-info .name{font-size:13px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+   137→.user-info .role{font-size:10px;color:var(--amber);text-transform:uppercase;letter-spacing:1px}
+   138→.logout-btn{
+   139→  color:rgba(255,255,255,.5);padding:6px 8px;border-radius:6px;font-size:13px;
+   140→}
+   141→.logout-btn:hover{color:#fff;background:rgba(255,255,255,.08)}
+   142→
+   143→/* MAIN */
+   144→.main{flex:1;display:flex;flex-direction:column;margin-left:var(--sidebar-w);min-width:0;height:100vh;height:100dvh}
+   145→.topbar{
+   146→  height:60px;background:var(--card);border-bottom:1px solid var(--border);
+   147→  display:flex;align-items:center;gap:14px;padding:0 20px;flex-shrink:0;
+   148→  box-shadow:0 1px 3px rgba(0,0,0,.03);
+   149→}
+   150→.menu-toggle{display:none;font-size:18px;color:var(--sidebar);padding:6px 8px;border-radius:6px}
+   151→.menu-toggle:hover{background:var(--bg-alt)}
+   152→.topbar-title{font-size:18px;font-weight:700;color:var(--sidebar);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+   153→.store-selector{display:flex;align-items:center;gap:8px;background:var(--bg-alt);padding:7px 12px;border-radius:10px;font-size:13px;font-weight:600}
+   154→.store-selector select{background:none;border:none;font-weight:600;color:var(--sidebar);outline:none;cursor:pointer}
+   155→.topbar-actions{display:flex;align-items:center;gap:6px}
+   156→.icon-btn{
+   157→  width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+   158→  color:var(--text-muted);font-size:15px;transition:all .15s;position:relative;
+   159→}
+   160→.icon-btn:hover{background:var(--bg-alt);color:var(--crimson)}
+   161→.icon-btn .badge-dot{
+   162→  position:absolute;top:7px;right:7px;width:8px;height:8px;border-radius:50%;
+   163→  background:var(--crimson);border:2px solid var(--card);
+   164→}
+   165→.offline-pill{
+   166→  display:flex;align-items:center;gap:6px;background:#FEF3C7;color:#92400E;
+   167→  padding:6px 12px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+   168→}
+   169→.offline-pill.online{background:#D1FAE5;color:#065F46}
+   170→
+   171→.content{flex:1;overflow-y:auto;padding:24px}
+   172→.page{display:none;animation:fadeIn .3s ease}
+   173→.page.active{display:block}
+   174→@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+   175→
+   176→.page-header{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:20px;flex-wrap:wrap}
+   177→.page-header h2{font-size:22px;font-weight:800;color:var(--sidebar)}
+   178→.page-header p{color:var(--text-muted);font-size:13px;margin-top:2px}
+   179→.page-actions{display:flex;gap:8px;flex-wrap:wrap}
+   180→
+   181→/* BUTTONS */
+   182→.btn{
+   183→  display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:10px;
+   184→  font-size:13px;font-weight:600;transition:all .15s;white-space:nowrap;
+   185→}
+   186→.btn i{font-size:12px}
+   187→.btn-primary{background:var(--crimson);color:#fff}
+   188→.btn-primary:hover{background:var(--crimson-dark);transform:translateY(-1px);box-shadow:0 4px 12px rgba(220,38,38,.3)}
+   189→.btn-amber{background:var(--amber);color:#fff}
+   190→.btn-amber:hover{background:var(--amber-dark)}
+   191→.btn-emerald{background:var(--emerald);color:#fff}
+   192→.btn-emerald:hover{background:var(--emerald-dark)}
+   193→.btn-blue{background:var(--blue);color:#fff}
+   194→.btn-blue:hover{background:var(--blue-dark)}
+   195→.btn-ghost{background:var(--bg-alt);color:var(--text)}
+   196→.btn-ghost:hover{background:#E5DDD0}
+   197→.btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--text)}
+   198→.btn-outline:hover{border-color:var(--crimson);color:var(--crimson)}
+   199→.btn-danger{background:#FEE2E2;color:var(--crimson)}
+   200→.btn-danger:hover{background:#FECACA}
+   201→.btn-sm{padding:6px 11px;font-size:12px;border-radius:8px}
+   202→.btn-block{width:100%;justify-content:center}
+   203→
+   204→/* CARDS */
+   205→.card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;margin-bottom:16px}
+   206→.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px}
+   207→.card-header h3{font-size:15px;font-weight:700;color:var(--sidebar)}
+   208→.card-header .sub{font-size:11px;color:var(--text-muted);font-weight:500}
+   209→
+   210→/* STAT CARDS */
+   211→.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:18px}
+   212→.stat-card{
+   213→  border-radius:var(--radius);padding:18px;color:#fff;position:relative;overflow:hidden;
+   214→  box-shadow:0 6px 16px rgba(0,0,0,.10);transition:transform .2s;
+   215→}
+   216→.stat-card:hover{transform:translateY(-2px)}
+   217→.stat-card .label{font-size:11px;text-transform:uppercase;letter-spacing:1px;opacity:.9;font-weight:600}
+   218→.stat-card .value{font-size:26px;font-weight:800;margin-top:6px}
+   219→.stat-card .delta{font-size:11px;margin-top:4px;opacity:.9}
+   220→.stat-card .icon{position:absolute;right:-6px;bottom:-6px;font-size:54px;opacity:.18}
+   221→.stat-crimson{background:linear-gradient(135deg,#EF4444,#DC2626)}
+   222→.stat-amber{background:linear-gradient(135deg,#FBBF24,#F59E0B)}
+   223→.stat-emerald{background:linear-gradient(135deg,#34D399,#10B981)}
+   224→.stat-blue{background:linear-gradient(135deg,#60A5FA,#3B82F6)}
+   225→.stat-purple{background:linear-gradient(135deg,#A78BFA,#8B5CF6)}
+   226→.stat-teal{background:linear-gradient(135deg,#2DD4BF,#14B8A6)}
+   227→.stat-pink{background:linear-gradient(135deg,#F472B6,#EC4899)}
+   228→.stat-orange{background:linear-gradient(135deg,#FB923C,#F97316)}
+   229→
+   230→/* TABLES */
+   231→.table-wrap{overflow-x:auto;border-radius:var(--radius-sm)}
+   232→table{width:100%;border-collapse:collapse;font-size:13px}
+   233→thead th{
+   234→  text-align:left;padding:11px 12px;background:var(--bg-alt);color:var(--text-muted);
+   235→  font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.5px;
+   236→  border-bottom:2px solid var(--border);white-space:nowrap;
+   237→}
+   238→tbody td{padding:11px 12px;border-bottom:1px solid var(--border-light);vertical-align:middle}
+   239→tbody tr{transition:background .12s}
+   240→tbody tr:hover{background:#FFF8EC}
+   241→tbody tr:last-child td{border-bottom:none}
+   242→.row-actions{display:flex;gap:4px}
+   243→.row-actions button{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--text-muted)}
+   244→.row-actions button:hover{background:var(--bg-alt);color:var(--crimson)}
+   245→.row-actions button.delete:hover{background:#FEE2E2;color:var(--crimson)}
+   246→
+   247→/* BADGES */
+   248→.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.3px}
+   249→.badge-wine{background:#FEE2E2;color:#991B1B}
+   250→.badge-gold{background:#FEF3C7;color:#92400E}
+   251→.badge-green{background:#D1FAE5;color:#065F46}
+   252→.badge-red{background:#FEE2E2;color:#991B1B}
+   253→.badge-blue{background:#DBEAFE;color:#1E40AF}
+   254→.badge-purple{background:#EDE9FE;color:#5B21B6}
+   255→.badge-teal{background:#CCFBF1;color:#115E59}
+   256→.badge-gray{background:#F3F4F6;color:#4B5563}
+   257→
+   258→/* FORMS */
+   259→.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+   260→.form-group{margin-bottom:12px}
+   261→.form-group label{display:block;font-size:12px;font-weight:600;color:var(--text);margin-bottom:5px}
+   262→.form-control{
+   263→  width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;
+   264→  background:#fff;color:var(--text);transition:all .15s;font-size:13px;
+   265→}
+   266→.form-control:focus{outline:none;border-color:var(--crimson);box-shadow:0 0 0 3px rgba(220,38,38,.12)}
+   267→textarea.form-control{resize:vertical;min-height:70px}
+   268→.form-row{display:flex;gap:10px;flex-wrap:wrap}
+   269→.form-row .form-group{flex:1;min-width:140px}
+   270→
+   271→/* SEARCH */
+   272→.search-bar{position:relative;flex:1;min-width:200px;max-width:380px}
+   273→.search-bar i{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-light);font-size:13px}
+   274→.search-bar input{width:100%;padding:9px 12px 9px 36px;border:1.5px solid var(--border);border-radius:10px;font-size:13px}
+   275→.search-bar input:focus{outline:none;border-color:var(--crimson)}
+   276→
+   277→/* FILTER CHIPS */
+   278→.filter-chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+   279→.chip{
+   280→  padding:6px 13px;border-radius:20px;background:var(--bg-alt);font-size:12px;font-weight:600;
+   281→  color:var(--text-muted);transition:all .15s;
+   282→}
+   283→.chip:hover{background:#E5DDD0}
+   284→.chip.active{background:var(--crimson);color:#fff}
+   285→
+   286→/* MODAL */
+   287→.modal-backdrop{
+   288→  position:fixed;inset:0;background:rgba(31,17,41,.55);z-index:200;
+   289→  display:none;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);
+   290→}
+   291→.modal-backdrop.show{display:flex;animation:fadeIn .2s}
+   292→.modal{
+   293→  background:#fff;border-radius:var(--radius-lg);width:100%;max-width:520px;max-height:90vh;
+   294→  overflow-y:auto;box-shadow:var(--shadow-lg);animation:popIn .25s;
+   295→}
+   296→.modal.lg{max-width:780px}
+   297→.modal-header{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#fff;z-index:1;border-radius:var(--radius-lg) var(--radius-lg) 0 0}
+   298→.modal-header h3{font-size:17px;font-weight:700;color:var(--sidebar)}
+   299→.modal-close{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}
+   300→.modal-close:hover{background:var(--bg-alt);color:var(--crimson)}
+   301→.modal-body{padding:20px 22px}
+   302→.modal-footer{padding:14px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;position:sticky;bottom:0;background:#fff;border-radius:0 0 var(--radius-lg) var(--radius-lg)}
+   303→
+   304→/* TOAST */
+   305→#toastContainer{position:fixed;top:20px;right:20px;z-index:1000;display:flex;flex-direction:column;gap:8px;max-width:340px}
+   306→.toast{
+   307→  background:#fff;border-radius:10px;padding:12px 16px;box-shadow:var(--shadow-md);
+   308→  display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500;
+   309→  border-left:4px solid var(--text-muted);animation:slideIn .3s;min-width:240px;
+   310→}
+   311→@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:none;opacity:1}}
+   312→.toast.success{border-left-color:var(--emerald);background:#ECFDF5}
+   313→.toast.error{border-left-color:var(--crimson);background:#FEF2F2}
+   314→.toast.warn{border-left-color:var(--amber);background:#FFFBEB}
+   315→.toast.info{border-left-color:var(--blue);background:#EFF6FF}
+   316→.toast i{font-size:16px}
+   317→.toast.success i{color:var(--emerald)}
+   318→.toast.error i{color:var(--crimson)}
+   319→.toast.warn i{color:var(--amber)}
+   320→.toast.info i{color:var(--blue)}
+   321→
+   322→/* AI INSIGHTS */
+   323→.ai-panel{background:linear-gradient(135deg,#1F1129 0%,#3D1A4D 100%);border-radius:var(--radius);padding:18px;color:#fff;margin-bottom:16px;position:relative;overflow:hidden}
+   324→.ai-panel::before{content:'';position:absolute;top:-30px;right:-30px;width:140px;height:140px;border-radius:50%;background:radial-gradient(circle,rgba(245,158,11,.25),transparent 70%)}
+   325→.ai-header{display:flex;align-items:center;gap:10px;margin-bottom:14px;position:relative}
+   326→.ai-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--amber),var(--crimson));display:flex;align-items:center;justify-content:center;font-size:16px}
+   327→.ai-header h3{font-size:15px;font-weight:700;color:#fff}
+   328→.ai-header .sub{font-size:11px;color:var(--amber)}
+   329→.ai-insight{display:flex;gap:10px;padding:10px 12px;background:rgba(255,255,255,.06);border-radius:10px;margin-bottom:8px;font-size:12.5px;line-height:1.5}
+   330→.ai-insight:last-child{margin-bottom:0}
+   331→.ai-insight i{font-size:14px;margin-top:1px;flex-shrink:0}
+   332→.ai-insight.warn i{color:var(--amber)}
+   333→.ai-insight.danger i{color:#F87171}
+   334→.ai-insight.success i{color:var(--emerald)}
+   335→.ai-insight.info i{color:#60A5FA}
+   336→
+   337→/* HEALTH SCORE */
+   338→.health-score{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+   339→.health-ring{position:relative;width:120px;height:120px;flex-shrink:0}
+   340→.health-ring svg{transform:rotate(-90deg)}
+   341→.health-ring .ring-bg{stroke:var(--bg-alt);fill:none;stroke-width:10}
+   342→.health-ring .ring-fg{stroke:url(#healthGrad);fill:none;stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset 1s ease}
+   343→.health-ring .score-text{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+   344→.health-ring .score-num{font-size:28px;font-weight:800;color:var(--sidebar);line-height:1}
+   345→.health-ring .score-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-top:3px}
+   346→.health-details{flex:1;min-width:200px}
+   347→.health-details .h-row{display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-bottom:1px dashed var(--border-light)}
+   348→.health-details .h-row:last-child{border:none}
+   349→.health-details .h-row span:first-child{color:var(--text-muted)}
+   350→.health-details .h-row span:last-child{font-weight:700}
+   351→
+   352→/* STOCK TAKE */
+   353→.stocktake-item{display:grid;grid-template-columns:1fr auto auto auto;gap:10px;align-items:center;padding:12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;background:#fff}
+   354→.stocktake-item .st-name{font-weight:600;font-size:13px}
+   355→.stocktake-item .st-meta{font-size:11px;color:var(--text-muted)}
+   356→.stocktake-input{width:80px;padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;text-align:center;font-weight:700;font-size:14px}
+   357→.stocktake-input:focus{outline:none;border-color:var(--crimson)}
+   358→.st-variance{font-size:13px;font-weight:700;min-width:60px;text-align:right}
+   359→.st-variance.zero{color:var(--emerald)}
+   360→.st-variance.pos{color:var(--amber)}
+   361→.st-variance.neg{color:var(--crimson)}
+   362→
+   363→/* POS */
+   364→.pos-grid{display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start}
+   365→.pos-products{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;align-content:start}
+   366→.pos-product{background:#fff;border:2px solid var(--border);border-radius:12px;padding:12px;cursor:pointer;text-align:center;transition:all .15s}
+   367→.pos-product:hover{border-color:var(--crimson);transform:translateY(-2px);box-shadow:var(--shadow)}
+   368→.pos-product:active{transform:scale(.97)}
+   369→.pos-product.out{opacity:.5;cursor:not-allowed}
+   370→.pos-product .pp-icon{font-size:30px;margin-bottom:6px}
+   371→.pos-product .pp-name{font-size:12px;font-weight:600;line-height:1.3;margin-bottom:4px;height:32px;overflow:hidden}
+   372→.pos-product .pp-price{font-size:14px;font-weight:800;color:var(--crimson)}
+   373→.pos-product .pp-stock{font-size:10px;color:var(--text-muted);margin-top:2px}
+   374→.cart{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);display:flex;flex-direction:column;position:sticky;top:14px;max-height:calc(100vh - 110px)}
+   375→.cart-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+   376→.cart-header h3{font-size:14px;font-weight:700;color:var(--sidebar)}
+   377→.cart-items{flex:1;overflow-y:auto;padding:8px;min-height:120px}
+   378→.cart-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border-light)}
+   379→.cart-item .ci-name{flex:1;font-size:12px;font-weight:600;line-height:1.3}
+   380→.cart-item .ci-price{font-size:12px;font-weight:700;color:var(--crimson)}
+   381→.qty-ctrl{display:flex;align-items:center;gap:6px}
+   382→.qty-ctrl button{width:24px;height:24px;border-radius:6px;background:var(--bg-alt);font-weight:700;font-size:12px}
+   383→.qty-ctrl button:hover{background:var(--crimson);color:#fff}
+   384→.qty-ctrl span{min-width:22px;text-align:center;font-weight:700;font-size:13px}
+   385→.cart-footer{padding:14px 16px;border-top:1px solid var(--border);flex-shrink:0;background:#fff;border-radius:0 0 var(--radius) var(--radius)}
+   386→.cart-total{display:flex;justify-content:space-between;font-size:18px;font-weight:800;margin-bottom:12px;color:var(--sidebar)}
+   387→.pos-checkout-bar{display:none}
+   388→
+   389→/* SCANNER */
+   390→.scanner-overlay{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:300;display:none;align-items:center;justify-content:center;flex-direction:column;padding:20px}
+   391→.scanner-overlay.show{display:flex}
+   392→.scanner-overlay video{max-width:100%;max-height:70vh;border-radius:12px}
+   393→.scanner-box{width:80%;max-width:400px;height:200px;border:3px solid var(--amber);border-radius:12px;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);box-shadow:0 0 0 9999px rgba(0,0,0,.4)}
+   394→.scanner-overlay .scan-hint{color:#fff;font-size:14px;margin-top:16px;text-align:center}
+   395→.scanner-overlay .scan-close{position:absolute;top:20px;right:20px;color:#fff;font-size:24px;background:rgba(255,255,255,.15);width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+   396→
+   397→/* BOTTOM NAV (mobile) */
+   398→.bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--border);z-index:60;padding:6px 4px;box-shadow:0 -4px 12px rgba(0,0,0,.06)}
+   399→.bottom-nav-items{display:flex;justify-content:space-around}
+   400→.bottom-nav-item{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 10px;color:var(--text-muted);font-size:10px;font-weight:600;border-radius:8px}
+   401→.bottom-nav-item i{font-size:17px}
+   402→.bottom-nav-item.active{color:var(--crimson)}
+   403→.bottom-nav-item.more{position:relative}
+   404→.more-menu{position:absolute;bottom:60px;left:10px;right:10px;background:#fff;border-radius:14px;box-shadow:var(--shadow-lg);padding:8px;display:none;grid-template-columns:repeat(4,1fr);gap:4px}
+   405→.more-menu.show{display:grid}
+   406→.more-menu button{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 6px;font-size:10px;color:var(--text-muted);border-radius:8px}
+   407→.more-menu button:hover{background:var(--bg-alt);color:var(--crimson)}
+   408→.more-menu button i{font-size:16px}
+   409→
+   410→/* BACKDROP for drawer */
+   411→.drawer-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:40}
+   412→.drawer-backdrop.show{display:block}
+   413→
+   414→/* RESPONSIVE */
+   415→@media(max-width:1024px){
+   416→  :root{--sidebar-w:0px}
+   417→  .sidebar{transform:translateX(-100%);width:260px}
+   418→  .sidebar.open{transform:translateX(0)}
+   419→  .main{margin-left:0}
+   420→  .menu-toggle{display:flex}
+   421→  .pos-grid{grid-template-columns:1fr}
+   422→  .cart{position:relative;top:auto;max-height:none}
+   423→  .cart-items{max-height:280px}
+   424→}
+   425→@media(max-width:768px){
+   426→  .content{padding:14px;padding-bottom:90px}
+   427→  .topbar{padding:0 12px;gap:8px}
+   428→  .topbar-title{font-size:16px}
+   429→  .store-selector{padding:5px 8px;font-size:11px}
+   430→  .stat-grid{grid-template-columns:repeat(2,1fr);gap:10px}
+   431→  .stat-card{padding:14px}
+   432→  .stat-card .value{font-size:22px}
+   433→  .stat-card .icon{font-size:42px}
+   434→  .bottom-nav{display:block}
+   435→  .page-header h2{font-size:19px}
+   436→  .pos-products{grid-template-columns:repeat(2,1fr)}
+   437→  .stocktake-item{grid-template-columns:1fr;gap:6px}
+   438→  .stocktake-item .st-variance{text-align:left}
+   439→  .modal{max-width:calc(100vw - 24px)}
+   440→  .form-grid{grid-template-columns:1fr}
+   441→  .search-bar{max-width:none}
+   442→  .offline-pill{display:none}
+   443→  .ai-panel{padding:14px}
+   444→  .health-score{flex-direction:column;align-items:flex-start}
+   445→  .health-ring{width:100px;height:100px}
+   446→}
+   447→@media(max-width:480px){
+   448→  .stat-grid{grid-template-columns:1fr}
+   449→  .pos-products{grid-template-columns:repeat(2,1fr)}
+   450→  .topbar-actions .icon-btn:not(.essential){display:none}
+   451→}
+   452→
+   453→/* utility */
+   454→.empty-state{text-align:center;padding:50px 20px;color:var(--text-muted)}
+   455→.empty-state i{font-size:42px;margin-bottom:12px;opacity:.4}
+   456→.empty-state h3{font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px}
+   457→.flex{display:flex}
+   458→.flex-1{flex:1}
+   459→.gap-8{gap:8px}
+   460→.gap-12{gap:12px}
+   461→.items-center{align-items:center}
+   462→.justify-between{justify-content:space-between}
+   463→.flex-wrap{flex-wrap:wrap}
+   464→.text-crimson{color:var(--crimson)}
+   465→.text-emerald{color:var(--emerald)}
+   466→.text-amber{color:var(--amber)}
+   467→.text-muted{color:var(--text-muted)}
+   468→.text-right{text-align:right}
+   469→.text-center{text-align:center}
+   470→.fw-700{font-weight:700}
+   471→.fw-800{font-weight:800}
+   472→.mt-8{margin-top:8px}
+   473→.mt-12{margin-top:12px}
+   474→.mt-16{margin-top:16px}
+   475→.mb-8{margin-bottom:8px}
+   476→.mb-12{margin-bottom:12px}
+   477→.mb-16{margin-bottom:16px}
+   478→.hidden{display:none!important}
+   479→.progress-bar{height:6px;background:var(--bg-alt);border-radius:3px;overflow:hidden;margin-top:6px}
+   480→.progress-bar .fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--amber),var(--crimson));transition:width .5s}
+   481→.kpi-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+   482→.mini-kpi{flex:1;min-width:120px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px}
+   483→.mini-kpi .l{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+   484→.mini-kpi .v{font-size:18px;font-weight:800;color:var(--sidebar);margin-top:2px}
+   485→.mini-kpi .v.pos{color:var(--emerald)}
+   486→.mini-kpi .v.neg{color:var(--crimson)}
+   487→</style>
+   488→</head>
+   489→<body>
+   490→
+   491→<!-- ============ LOGIN ============ -->
+   492→<div id="loginScreen">
+   493→  <div class="login-card">
+   494→    <div class="login-logo"><i class="fa-solid fa-wine-glass"></i></div>
+   495→    <h1>VinoCellar Pro</h1>
+   496→    <p class="sub">Wine & Spirits Inventory Management</p>
+   497→    <div class="pin-display" id="pinDisplay">
+   498→      <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+   499→    </div>
+   500→    <div id="loginError"></div>
+   501→    <div class="pin-keypad" id="pinKeypad">
+   502→      <button class="pin-key" data-val="1" type="button">1</button>
+   503→      <button class="pin-key" data-val="2" type="button">2</button>
+   504→      <button class="pin-key" data-val="3" type="button">3</button>
+   505→      <button class="pin-key" data-val="4" type="button">4</button>
+   506→      <button class="pin-key" data-val="5" type="button">5</button>
+   507→      <button class="pin-key" data-val="6" type="button">6</button>
+   508→      <button class="pin-key" data-val="7" type="button">7</button>
+   509→      <button class="pin-key" data-val="8" type="button">8</button>
+   510→      <button class="pin-key" data-val="9" type="button">9</button>
+   511→      <button class="pin-key action" data-act="clear" type="button"><i class="fa-solid fa-rotate-left"></i></button>
+   512→      <button class="pin-key" data-val="0" type="button">0</button>
+   513→      <button class="pin-key action" data-act="enter" type="button"><i class="fa-solid fa-arrow-right"></i></button>
+   514→    </div>
+   515→    <div class="login-hint">
+   516→      <b>Manager PIN: 1234</b> &nbsp;·&nbsp; <b>Staff PIN: 5678</b>
+   517→    </div>
+   518→  </div>
+   519→</div>
+   520→
+   521→<!-- ============ APP ============ -->
+   522→<div id="app">
+   523→  <div class="drawer-backdrop" id="drawerBackdrop"></div>
+   524→  <aside class="sidebar" id="sidebar">
+   525→    <div class="sidebar-header">
+   526→      <div class="sidebar-logo"><i class="fa-solid fa-wine-glass"></i></div>
+   527→      <div class="sidebar-title">VinoCellar<small>Pro Edition</small></div>
+   528→    </div>
+   529→    <nav class="sidebar-nav" id="sidebarNav"></nav>
+   530→    <div class="sidebar-footer">
+   531→      <div class="user-chip">
+   532→        <div class="user-avatar" id="userAvatar">M</div>
+   533→        <div class="user-info">
+   534→          <div class="name" id="userName">Manager</div>
+   535→          <div class="role" id="userRole">Manager</div>
+   536→        </div>
+   537→        <button class="logout-btn" id="logoutBtn" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
+   538→      </div>
+   539→    </div>
+   540→  </aside>
+   541→
+   542→  <div class="main">
+   543→    <header class="topbar">
+   544→      <button class="menu-toggle" id="menuToggle"><i class="fa-solid fa-bars"></i></button>
+   545→      <div class="topbar-title" id="topbarTitle">Dashboard</div>
+   546→      <div class="store-selector" id="storeSelectorWrap">
+   547→        <i class="fa-solid fa-store" style="color:var(--crimson)"></i>
+   548→        <select id="storeSelect"></select>
+   549→      </div>
+   550→      <div class="offline-pill online" id="offlinePill"><i class="fa-solid fa-wifi"></i> Online</div>
+   551→      <div class="topbar-actions">
+   552→        <button class="icon-btn" id="scanBtn" title="Scan Barcode"><i class="fa-solid fa-barcode"></i></button>
+   553→        <button class="icon-btn essential" id="homeBtn" title="Home"><i class="fa-solid fa-house"></i></button>
+   554→        <button class="icon-btn" id="backupBtn" title="Backup"><i class="fa-solid fa-cloud-arrow-up"></i></button>
+   555→      </div>
+   556→    </header>
+   557→    <main class="content" id="content"></main>
+   558→  </div>
+   559→
+   560→  <nav class="bottom-nav" id="bottomNav">
+   561→    <div class="bottom-nav-items">
+   562→      <button class="bottom-nav-item" data-nav="inventory"><i class="fa-solid fa-boxes-stacked"></i><span>Stock</span></button>
+   563→      <button class="bottom-nav-item" data-nav="pos"><i class="fa-solid fa-cash-register"></i><span>POS</span></button>
+   564→      <button class="bottom-nav-item" data-nav="stocktake"><i class="fa-solid fa-clipboard-check"></i><span>Count</span></button>
+   565→      <button class="bottom-nav-item" data-nav="reconciliation"><i class="fa-solid fa-scale-balanced"></i><span>Daily</span></button>
+   566→      <button class="bottom-nav-item more" id="moreNavBtn"><i class="fa-solid fa-ellipsis"></i><span>More</span>
+   567→        <div class="more-menu" id="moreMenu"></div>
+   568→      </button>
+   569→    </div>
+   570→  </nav>
+   571→</div>
+   572→
+   573→<!-- Modal -->
+   574→<div class="modal-backdrop" id="modalBackdrop">
+   575→  <div class="modal" id="modal">
+   576→    <div class="modal-header">
+   577→      <h3 id="modalTitle">Title</h3>
+   578→      <button class="modal-close" id="modalClose"><i class="fa-solid fa-xmark"></i></button>
+   579→    </div>
+   580→    <div class="modal-body" id="modalBody"></div>
+   581→    <div class="modal-footer" id="modalFooter"></div>
+   582→  </div>
+   583→</div>
+   584→
+   585→<!-- Scanner -->
+   586→<div class="scanner-overlay" id="scannerOverlay">
+   587→  <video id="scannerVideo" autoplay playsinline muted></video>
+   588→  <div class="scanner-box"></div>
+   589→  <div class="scan-hint">Point camera at barcode</div>
+   590→  <button class="scan-close" id="scannerClose"><i class="fa-solid fa-xmark"></i></button>
+   591→</div>
+   592→
+   593→<!-- Toast -->
+   594→<div id="toastContainer"></div>
+   595→
+   596→<script>
+   597→/* ================== STATE ================== */
+   598→const LS_KEY = 'vinocellar_pro_v1';
+   599→let state = loadState();
+   600→let currentUser = null;
+   601→let currentPage = 'dashboard';
+   602→let cart = [];
+   603→let charts = {};
+   604→let pinBuffer = '';
+   605→let pendingStockTake = null;
+   606→let scannerStream = null;
+   607→
+   608→function loadState(){
+   609→  try{
+   610→    const s = JSON.parse(localStorage.getItem(LS_KEY));
+   611→    if(s && s.inventory && Array.isArray(s.inventory)){
+   612→      // schema migration: ensure all required fields exist AND are arrays (handles upgrades + null/corruption)
+   613→      const seed = seedState();
+   614→      const arrFields = {inventory:seed.inventory,sales:[],stockTakes:[],reconciliation:[],expenses:[]};
+   615→      const objFields = {stores:seed.stores,suppliers:seed.suppliers,staff:seed.staff};
+   616→      const scalarFields = {currentStoreId:seed.currentStoreId,lastBackup:null};
+   617→      Object.keys(arrFields).forEach(k=>{ if(!Array.isArray(s[k])) s[k]=arrFields[k] });
+   618→      Object.keys(objFields).forEach(k=>{ if(!Array.isArray(s[k])) s[k]=objFields[k] });
+   619→      Object.keys(scalarFields).forEach(k=>{ if(s[k]===undefined||s[k]===null) s[k]=scalarFields[k] });
+   620→      // make sure currentStoreId still points to a valid store
+   621→      if(!s.stores.find(st=>st.id===s.currentStoreId)) s.currentStoreId=s.stores[0]?.id;
+   622→      return s;
+   623→    }
+   624→  }catch(e){}
+   625→  return seedState();
+   626→}
+   627→function saveState(){
+   628→  localStorage.setItem(LS_KEY, JSON.stringify(state));
+   629→  localStorage.setItem(LS_KEY+'_lastbackup', new Date().toISOString());
+   630→}
+   631→function seedState(){
+   632→  const stores = [
+   633→    {id:'s1',name:'Downtown Flagship',location:'Nairobi CBD'},
+   634→    {id:'s2',name:'Westlands Branch',location:'Westlands'}
+   635→  ];
+   636→  const suppliers = [
+   637→    {id:'sup1',name:'East African Wines Ltd',contact:'John Mwangi',phone:'+254712345678',email:'sales@eawines.co.ke',products:'Wine,Champagne'},
+   638→    {id:'sup2',name:'Spirits Distributors KE',contact:'Aisha Hassan',phone:'+254722987654',email:'info@spiritske.com',products:'Whisky,Vodka,Gin'},
+   639→    {id:'sup3',name:'Premium Beverages',contact:'Peter Kamau',phone:'+254733456789',email:'orders@premiumbev.co.ke',products:'Beer,Cider'}
+   640→  ];
+   641→  const cats = ['Wine','Whisky','Vodka','Gin','Rum','Champagne','Beer','Cognac','Tequila','Liqueur'];
+   642→  const sizes = ['750ml','1L','700ml','375ml','1.75L','330ml','500ml'];
+   643→  const inv = [
+   644→    {id:'p1',name:'Jameson Caskmates 750ml',sku:'JMS-CSK-750',barcode:'6001234500011',category:'Whisky',size:'750ml',storeId:'s1',opening:30,current:25,reorder:8,cost:3200,sell:4800,supplierId:'sup2'},
+   645→    {id:'p2',name:'Cabernet Sauvignon 750ml',sku:'CAB-SAV-750',barcode:'6001234500028',category:'Wine',size:'750ml',storeId:'s1',opening:48,current:6,reorder:12,cost:1800,sell:2900,supplierId:'sup1'},
+   646→    {id:'p3',name:'Smirnoff Red 1L',sku:'SMR-RED-1L',barcode:'6001234500035',category:'Vodka',size:'1L',storeId:'s1',opening:24,current:18,reorder:6,cost:1900,sell:2800,supplierId:'sup2'},
+   647→    {id:'p4',name:'Tanqueray Gin 750ml',sku:'TNQ-750',barcode:'6001234500042',category:'Gin',size:'750ml',storeId:'s1',opening:18,current:14,reorder:5,cost:3500,sell:5200,supplierId:'sup2'},
+   648→    {id:'p5',name:'Moët & Chandon 750ml',sku:'MOET-750',barcode:'6001234500059',category:'Champagne',size:'750ml',storeId:'s1',opening:12,current:9,reorder:4,cost:8500,sell:12500,supplierId:'sup1'},
+   649→    {id:'p6',name:'Hennessy VS 700ml',sku:'HNY-VS-700',barcode:'6001234500066',category:'Cognac',size:'700ml',storeId:'s1',opening:15,current:3,reorder:5,cost:6800,sell:9800,supplierId:'sup2'},
+   650→    {id:'p7',name:'Bacardi Carta Blanca 1L',sku:'BCR-CB-1L',barcode:'6001234500073',category:'Rum',size:'1L',storeId:'s1',opening:20,current:16,reorder:6,cost:2100,sell:3200,supplierId:'sup2'},
+   651→    {id:'p8',name:'Heineken 330ml',sku:'HEK-330',barcode:'6001234500080',category:'Beer',size:'330ml',storeId:'s1',opening:144,current:96,reorder:48,cost:180,sell:350,supplierId:'sup3'},
+   652→    {id:'p9',name:'Jose Cuervo 750ml',sku:'JSR-CV-750',barcode:'6001234500097',category:'Tequila',size:'750ml',storeId:'s1',opening:10,current:7,reorder:4,cost:2900,sell:4500,supplierId:'sup2'},
+   653→    {id:'p10',name:'Baileys 750ml',sku:'BLY-750',barcode:'6001234500103',category:'Liqueur',size:'750ml',storeId:'s1',opening:16,current:11,reorder:5,cost:3100,sell:4700,supplierId:'sup2'},
+   654→    {id:'p11',name:'Glenfiddich 12 700ml',sku:'GLF-12-700',barcode:'6001234500110',category:'Whisky',size:'700ml',storeId:'s2',opening:12,current:8,reorder:4,cost:5200,sell:7800,supplierId:'sup2'},
+   655→    {id:'p12',name:'Yellow Tail Chardonnay',sku:'YT-CHD-750',barcode:'6001234500127',category:'Wine',size:'750ml',storeId:'s2',opening:36,current:22,reorder:10,cost:1500,sell:2400,supplierId:'sup1'}
+   656→  ];
+   657→  const staff = [
+   658→    {id:'u1',name:'Manager',pin:'1234',role:'manager',storeId:'s1'},
+   659→    {id:'u2',name:'James Staff',pin:'5678',role:'staff',storeId:'s1'},
+   660→    {id:'u3',name:'Mary Clerk',pin:'4321',role:'staff',storeId:'s2'}
+   661→  ];
+   662→  // seed some sales history (last 7 days)
+   663→  const sales = [];
+   664→  const now = Date.now();
+   665→  for(let d=6;d>=0;d--){
+   666→    const dayStart = new Date(now - d*86400000);dayStart.setHours(9,0,0,0);
+   667→    const n = 2 + Math.floor(Math.random()*5);
+   668→    for(let i=0;i<n;i++){
+   669→      const p = inv[Math.floor(Math.random()*inv.length)];
+   670→      const qty = 1 + Math.floor(Math.random()*3);
+   671→      sales.push({id:'sale_'+Math.random().toString(36).slice(2,9),items:[{id:p.id,name:p.name,qty,price:p.sell,cost:p.cost}],total:p.sell*qty,staffId:'u2',storeId:p.storeId,timestamp:dayStart.getTime()+Math.random()*50000000,paymentMethod:['cash','card','mpesa'][Math.floor(Math.random()*3)]});
+   672→    }
+   673→  }
+   674→  const expenses=[
+   675→    {id:'e1',date:todayKey(),category:'Rent',description:'Monthly store rent',amount:85000,storeId:'s1',recordedBy:'u1'},
+   676→    {id:'e2',date:todayKey(),category:'Utilities',description:'Electricity & water',amount:12400,storeId:'s1',recordedBy:'u1'},
+   677→    {id:'e3',date:new Date(Date.now()-86400000).toISOString().slice(0,10),category:'Inventory',description:'Wine restock from East African Wines',amount:68000,storeId:'s1',recordedBy:'u1'},
+   678→    {id:'e4',date:new Date(Date.now()-2*86400000).toISOString().slice(0,10),category:'Salaries',description:'Staff weekly pay',amount:42000,storeId:'s1',recordedBy:'u1'},
+   679→    {id:'e5',date:new Date(Date.now()-3*86400000).toISOString().slice(0,10),category:'Marketing',description:'Social media ads',amount:8500,storeId:'s1',recordedBy:'u1'},
+   680→    {id:'e6',date:new Date(Date.now()-4*86400000).toISOString().slice(0,10),category:'Maintenance',description:'Fridge repair',amount:5600,storeId:'s1',recordedBy:'u1'},
+   681→    {id:'e7',date:new Date(Date.now()-5*86400000).toISOString().slice(0,10),category:'Other',description:'Cleaning supplies',amount:2300,storeId:'s1',recordedBy:'u1'}
+   682→  ];
+   683→  return {stores,currentStoreId:'s1',inventory:inv,suppliers,staff,sales,stockTakes:[],reconciliation:[],expenses,lastBackup:null};
+   684→}
+   685→
+   686→/* ================== HELPERS ================== */
+   687→const $ = (s,el=document)=>el.querySelector(s);
+   688→const $$ = (s,el=document)=>Array.from(el.querySelectorAll(s));
+   689→const fmt = n => 'KSh '+Number(n||0).toLocaleString('en-KE',{maximumFractionDigits:0});
+   690→const fmtN = n => Number(n||0).toLocaleString('en-KE');
+   691→function todayKey(){return new Date().toISOString().slice(0,10)}
+   692→function uid(p){return p+'_'+Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3)}
+   693→function toast(msg,type='info'){
+   694→  const icons={success:'fa-circle-check',error:'fa-circle-exclamation',warn:'fa-triangle-exclamation',info:'fa-circle-info'};
+   695→  const t=document.createElement('div');t.className='toast '+type;
+   696→  t.innerHTML='<i class="fa-solid '+icons[type]+'"></i><span>'+msg+'</span>';
+   697→  $('#toastContainer').appendChild(t);
+   698→  setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(100%)';setTimeout(()=>t.remove(),300)},3500);
+   699→}
+   700→function openModal(title,body,footer,lg){
+   701→  $('#modalTitle').textContent=title;
+   702→  $('#modalBody').innerHTML=body;
+   703→  $('#modalFooter').innerHTML=footer||'';
+   704→  $('#modal').classList.toggle('lg',!!lg);
+   705→  $('#modalBackdrop').classList.add('show');
+   706→}
+   707→function closeModal(){$('#modalBackdrop').classList.remove('show')}
+   708→$('#modalClose').addEventListener('click',closeModal);
+   709→$('#modalBackdrop').addEventListener('click',e=>{if(e.target===$('#modalBackdrop'))closeModal()});
+   710→
+   711→function currentStoreInv(){return state.inventory.filter(p=>p.storeId===state.currentStoreId)}
+   712→function supplierName(id){const s=state.suppliers.find(x=>x.id===id);return s?s.name:'—'}
+   713→function staffName(id){const s=state.staff.find(x=>x.id===id);return s?s.name:'—'}
+   714→
+   715→/* ================== LOGIN ================== */
+   716→function renderPinDots(){
+   717→  $$('#pinDisplay .pin-dot').forEach((d,i)=>d.classList.toggle('filled',i<pinBuffer.length));
+   718→}
+   719→function handlePin(val){
+   720→  if(pinBuffer.length<4){pinBuffer+=val;renderPinDots()}
+   721→  if(pinBuffer.length===4){setTimeout(attemptLogin,150)}
+   722→}
+   723→$('#pinKeypad').addEventListener('click',e=>{
+   724→  const b=e.target.closest('.pin-key');if(!b)return;
+   725→  if(b.dataset.act==='clear'){pinBuffer='';renderPinDots();$('#loginError').textContent='';return}
+   726→  if(b.dataset.act==='enter'){if(pinBuffer.length>0)attemptLogin();return}
+   727→  handlePin(b.dataset.val);
+   728→});
+   729→document.addEventListener('keydown',e=>{
+   730→  if($('#loginScreen').style.display==='none'||$('#loginScreen').style.display==='')return;
+   731→  if(/^[0-9]$/.test(e.key)){handlePin(e.key)}
+   732→  else if(e.key==='Backspace'){pinBuffer=pinBuffer.slice(0,-1);renderPinDots()}
+   733→  else if(e.key==='Enter'&&pinBuffer.length>0)attemptLogin();
+   734→});
+   735→function attemptLogin(){
+   736→  const user=state.staff.find(s=>s.pin===pinBuffer);
+   737→  pinBuffer='';renderPinDots();
+   738→  if(!user){$('#loginError').textContent='Invalid PIN. Try 1234 or 5678';return}
+   739→  currentUser=user;
+   740→  $('#loginScreen').style.display='none';
+   741→  $('#app').classList.add('ready');
+   742→  $('#userName').textContent=user.name;
+   743→  $('#userRole').textContent=user.role.charAt(0).toUpperCase()+user.role.slice(1);
+   744→  $('#userAvatar').textContent=user.name.charAt(0).toUpperCase();
+   745→  // staff: respect their store; manager: keep current
+   746→  if(user.role==='staff')state.currentStoreId=user.storeId;
+   747→  buildSidebar();
+   748→  buildStoreSelector();
+   749→  navigate(user.role==='manager'?'dashboard':'inventory');
+   750→  toast('Welcome back, '+user.name.split(' ')[0],'success');
+   751→}
+   752→$('#logoutBtn').addEventListener('click',()=>{
+   753→  currentUser=null;
+   754→  $('#app').classList.remove('ready');
+   755→  $('#loginScreen').style.display='flex';
+   756→  pinBuffer='';renderPinDots();
+   757→});
+   758→
+   759→/* ================== NAVIGATION ================== */
+   760→const PAGES=[
+   761→  {id:'dashboard',icon:'fa-chart-line',label:'Dashboard',roles:['manager'],section:'Overview'},
+   762→  {id:'inventory',icon:'fa-boxes-stacked',label:'Inventory',roles:['manager','staff'],section:'Operations'},
+   763→  {id:'pos',icon:'fa-cash-register',label:'Point of Sale',roles:['manager','staff'],section:'Operations'},
+   764→  {id:'stocktake',icon:'fa-clipboard-check',label:'Stock Counting',roles:['manager','staff'],section:'Operations'},
+   765→  {id:'reconciliation',icon:'fa-scale-balanced',label:'Daily Reconciliation',roles:['manager','staff'],section:'Operations'},
+   766→  {id:'suppliers',icon:'fa-truck',label:'Suppliers',roles:['manager'],section:'Management'},
+   767→  {id:'expenses',icon:'fa-receipt',label:'Expenses',roles:['manager'],section:'Management'},
+   768→  {id:'analytics',icon:'fa-chart-bar',label:'Sales Analytics',roles:['manager'],section:'Insights'},
+   769→  {id:'profit',icon:'fa-coins',label:'Profit Analytics',roles:['manager'],section:'Insights'},
+   770→  {id:'reports',icon:'fa-file-pdf',label:'PDF Reports',roles:['manager'],section:'Insights'},
+   771→  {id:'staff',icon:'fa-users',label:'Staff Management',roles:['manager'],section:'Management'},
+   772→  {id:'stores',icon:'fa-store',label:'Multi-Store',roles:['manager'],section:'Management'},
+   773→  {id:'settings',icon:'fa-gear',label:'Settings',roles:['manager'],section:'System'}
+   774→];
+   775→function buildSidebar(){
+   776→  const nav=$('#sidebarNav');nav.innerHTML='';
+   777→  let lastSec='';
+   778→  PAGES.forEach(p=>{
+   779→    if(!p.roles.includes(currentUser.role))return;
+   780→    if(p.section!==lastSec){lastSec=p.section;const lbl=document.createElement('div');lbl.className='nav-section-label';lbl.textContent=p.section;nav.appendChild(lbl)}
+   781→    const b=document.createElement('button');
+   782→    b.className='nav-item';b.dataset.page=p.id;
+   783→    b.innerHTML='<i class="fa-solid '+p.icon+'"></i> '+p.label;
+   784→    b.addEventListener('click',()=>{closeDrawer();navigate(p.id)});
+   785→    nav.appendChild(b);
+   786→  });
+   787→  // bottom nav + more menu
+   788→  buildBottomNav();
+   789→}
+   790→function buildBottomNav(){
+   791→  const main=['inventory','pos','stocktake','reconciliation'];
+   792→  const items=$('#bottomNav .bottom-nav-items');
+   793→  // re-render main 4 + more
+   794→  items.querySelectorAll('.bottom-nav-item:not(#moreNavBtn)').forEach(n=>n.remove());
+   795→  const moreBtn=items.querySelector('#moreNavBtn');
+   796→  main.forEach(id=>{
+   797→    const p=PAGES.find(x=>x.id===id);if(!p||!p.roles.includes(currentUser.role))return;
+   798→    const b=document.createElement('button');b.className='bottom-nav-item';b.dataset.nav=id;
+   799→    b.innerHTML='<i class="fa-solid '+p.icon+'"></i><span>'+p.label.split(' ')[0]+'</span>';
+   800→    b.addEventListener('click',()=>navigate(id));
+   801→    items.insertBefore(b,moreBtn);
+   802→  });
+   803→  // more menu: all other pages available to role
+   804→  const more=$('#moreMenu');more.innerHTML='';
+   805→  PAGES.filter(p=>!main.includes(p.id)&&p.roles.includes(currentUser.role)).forEach(p=>{
+   806→    const b=document.createElement('button');b.dataset.nav=p.id;
+   807→    b.innerHTML='<i class="fa-solid '+p.icon+'"></i><span>'+p.label.split(' ')[0]+'</span>';
+   808→    b.addEventListener('click',()=>{more.classList.remove('show');navigate(p.id)});
+   809→    more.appendChild(b);
+   810→  });
+   811→  if(!more.children.length){moreBtn.style.display='none'}else{moreBtn.style.display='flex'}
+   812→}
+   813→$('#moreNavBtn').addEventListener('click',e=>{e.stopPropagation();$('#moreMenu').classList.toggle('show')});
+   814→document.addEventListener('click',e=>{if(!e.target.closest('#moreNavBtn'))$('#moreMenu').classList.remove('show')});
+   815→
+   816→function navigate(pageId){
+   817→  if(!PAGES.find(p=>p.id===pageId&&p.roles.includes(currentUser.role))){pageId=currentUser.role==='manager'?'dashboard':'inventory'}
+   818→  currentPage=pageId;
+   819→  $$('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===pageId));
+   820→  $$('.bottom-nav-item').forEach(n=>n.classList.toggle('active',n.dataset.nav===pageId));
+   821→  const p=PAGES.find(x=>x.id===pageId);
+   822→  $('#topbarTitle').textContent=p?p.label:'';
+   823→  // destroy charts
+   824→  Object.values(charts).forEach(c=>{try{c.destroy()}catch(e){}});charts={};
+   825→  const renderer=RENDERERS[pageId]||RENDERERS.dashboard;
+   826→  try{
+   827→    renderer();
+   828→  }catch(err){
+   829→    console.error('Page render error:',err);
+   830→    $('#content').innerHTML='<div class="empty-state"><i class="fa-solid fa-triangle-exclamation" style="color:var(--crimson)"></i><h3>Could not load this page</h3><p>'+err.message+'</p><button class="btn btn-primary mt-12" onclick="navigate(\'dashboard\')"><i class="fa-solid fa-house"></i> Back to Dashboard</button></div>';
+   831→    toast('Page failed to load: '+err.message,'error');
+   832→  }
+   833→  $('#content').scrollTop=0;
+   834→}
+   835→$('#homeBtn').addEventListener('click',()=>navigate(currentUser.role==='manager'?'dashboard':'inventory'));
+   836→
+   837→/* DRAWER */
+   838→$('#menuToggle').addEventListener('click',()=>{$('#sidebar').classList.add('open');$('#drawerBackdrop').classList.add('show')});
+   839→$('#drawerBackdrop').addEventListener('click',closeDrawer);
+   840→function closeDrawer(){$('#sidebar').classList.remove('open');$('#drawerBackdrop').classList.remove('show')}
+   841→
+   842→/* STORE SELECTOR */
+   843→function buildStoreSelector(){
+   844→  const sel=$('#storeSelect');sel.innerHTML='';
+   845→  state.stores.forEach(s=>{
+   846→    const o=document.createElement('option');o.value=s.id;o.textContent=s.name;
+   847→    if(s.id===state.currentStoreId)o.selected=true;
+   848→    sel.appendChild(o);
+   849→  });
+   850→  if(currentUser&&currentUser.role==='staff'){sel.disabled=true}
+   851→}
+   852→$('#storeSelect').addEventListener('change',e=>{
+   853→  state.currentStoreId=e.target.value;
+   854→  if(currentPage==='inventory'||currentPage==='pos'||currentPage==='stocktake'||currentPage==='reconciliation')navigate(currentPage);
+   855→});
+   856→
+   857→/* ================== RENDERERS ================== */
+   858→const RENDERERS={};
+   859→
+   860→/* ----- DASHBOARD ----- */
+   861→RENDERERS.dashboard=function(){
+   862→  const inv=currentStoreInv();
+   863→  const todaySales=state.sales.filter(s=>s.storeId===state.currentStoreId&&new Date(s.timestamp).toDateString()===new Date().toDateString());
+   864→  const todayRev=todaySales.reduce((a,b)=>a+b.total,0);
+   865→  const weekRev=state.sales.filter(s=>s.storeId===state.currentStoreId&&s.timestamp>Date.now()-7*86400000).reduce((a,b)=>a+b.total,0);
+   866→  const lowStock=inv.filter(p=>p.current<=p.reorder);
+   867→  const stockVal=inv.reduce((a,b)=>a+b.current*b.cost,0);
+   868→  const items=inv.length;
+   869→  const totalUnits=inv.reduce((a,b)=>a+b.current,0);
+   870→
+   871→  const health=computeHealthScore(inv);
+   872→
+   873→  let html=`
+   874→  <div class="page-header"><div><h2>Dashboard</h2><p>Live overview of ${state.stores.find(s=>s.id===state.currentStoreId).name}</p></div>
+   875→    <div class="page-actions"><button class="btn btn-outline btn-sm" onclick="navigate('analytics')"><i class="fa-solid fa-chart-line"></i> Analytics</button>
+   876→    <button class="btn btn-amber btn-sm" onclick="navigate('reconciliation')"><i class="fa-solid fa-scale-balanced"></i> Daily Reconciliation</button>
+   877→    <button class="btn btn-emerald btn-sm" onclick="navigate('reports')"><i class="fa-solid fa-file-pdf"></i> PDF Reports</button></div>
+   878→  </div>
+   879→
+   880→  <div class="stat-grid">
+   881→    <div class="stat-card stat-crimson"><div class="label">Today's Revenue</div><div class="value">${fmt(todayRev)}</div><div class="delta">${todaySales.length} transactions</div><i class="fa-solid fa-money-bill-trend-up icon"></i></div>
+   882→    <div class="stat-card stat-emerald"><div class="label">7-Day Revenue</div><div class="value">${fmt(weekRev)}</div><div class="delta">Weekly performance</div><i class="fa-solid fa-calendar-week icon"></i></div>
+   883→    <div class="stat-card stat-blue"><div class="label">Stock Value</div><div class="value">${fmt(stockVal)}</div><div class="delta">${totalUnits} units on hand</div><i class="fa-solid fa-warehouse icon"></i></div>
+   884→    <div class="stat-card stat-amber"><div class="label">Low Stock Alerts</div><div class="value">${lowStock.length}</div><div class="delta">${lowStock.length} items need reorder</div><i class="fa-solid fa-triangle-exclamation icon"></i></div>
+   885→  </div>
+   886→
+   887→  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
+   888→    <div class="card">
+   889→      <div class="card-header"><div><h3>Inventory Health Score</h3><div class="sub">Live composite score</div></div><span class="badge ${health.score>=70?'badge-green':health.score>=40?'badge-gold':'badge-red'}">${health.label}</span></div>
+   890→      <div class="health-score">
+   891→        <div class="health-ring">
+   892→          <svg width="120" height="120" viewBox="0 0 120 120">
+   893→            <defs><linearGradient id="healthGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#F59E0B"/><stop offset="100%" stop-color="#DC2626"/></linearGradient></defs>
+   894→            <circle class="ring-bg" cx="60" cy="60" r="50"/>
+   895→            <circle class="ring-fg" cx="60" cy="60" r="50" stroke-dasharray="${2*Math.PI*50}" stroke-dashoffset="${2*Math.PI*50*(1-health.score/100)}"/>
+   896→          </svg>
+   897→          <div class="score-text"><div class="score-num">${health.score}</div><div class="score-label">out of 100</div></div>
+   898→        </div>
+   899→        <div class="health-details">
+   900→          ${health.details.map(d=>`<div class="h-row"><span>${d.label}</span><span class="${d.good?'text-emerald':'text-crimson'}">${d.value}</span></div>`).join('')}
+   901→        </div>
+   902→      </div>
+   903→    </div>
+   904→    <div class="card">
+   905→      <div class="card-header"><div><h3>Sales This Week</h3><div class="sub">Last 7 days</div></div></div>
+   906→      <canvas id="weekChart" height="180"></canvas>
+   907→    </div>
+   908→  </div>
+   909→
+   910→  <div class="ai-panel mt-16">
+   911→    <div class="ai-header">
+   912→      <div class="ai-icon"><i class="fa-solid fa-brain"></i></div>
+   913→      <div><h3>AI Business Insights</h3><div class="sub">Generated from your live data</div></div>
+   914→    </div>
+   915→    <div id="aiInsights"></div>
+   916→  </div>
+   917→
+   918→  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
+   919→    <div class="card">
+   920→      <div class="card-header"><div><h3>Low Stock Items</h3><div class="sub">Need reorder soon</div></div><button class="btn btn-ghost btn-sm" onclick="navigate('inventory')">View all</button></div>
+   921→      ${lowStock.length?`<div class="table-wrap"><table><thead><tr><th>Product</th><th>Current</th><th>Reorder At</th><th>Action</th></tr></thead><tbody>
+   922→        ${lowStock.map(p=>`<tr><td><b>${p.name}</b><br><small class="text-muted">${p.category} · ${p.size}</small></td><td><span class="badge badge-red">${p.current}</span></td><td>${p.reorder}</td><td><button class="btn btn-amber btn-sm" onclick="quickReorder('${p.id}')"><i class="fa-solid fa-truck"></i> Reorder</button></td></tr>`).join('')}
+   923→      </tbody></table></div>`:'<div class="empty-state"><i class="fa-solid fa-circle-check"></i><h3>All stock healthy</h3><p>No items below reorder level.</p></div>'}
+   924→    </div>
+   925→    <div class="card">
+   926→      <div class="card-header"><div><h3>Top Sellers</h3><div class="sub">By revenue this week</div></div></div>
+   927→      <canvas id="topChart" height="180"></canvas>
+   928→    </div>
+   929→  </div>
+   930→  `;
+   931→  $('#content').innerHTML=html;
+   932→
+   933→  // apply responsive grid
+   934→  if(window.innerWidth<=1024){
+   935→    $$('.dash-grid').forEach(g=>g.style.gridTemplateColumns='1fr');
+   936→  }
+   937→
+   938→  // week chart
+   939→  const days=[];const revs=[];
+   940→  for(let d=6;d>=0;d--){
+   941→    const dt=new Date(Date.now()-d*86400000);
+   942→    days.push(['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()]);
+   943→    revs.push(state.sales.filter(s=>s.storeId===state.currentStoreId&&new Date(s.timestamp).toDateString()===dt.toDateString()).reduce((a,b)=>a+b.total,0));
+   944→  }
+   945→  charts.week=new Chart($('#weekChart'),{type:'line',data:{labels:days,datasets:[{label:'Revenue',data:revs,borderColor:'#DC2626',backgroundColor:'rgba(220,38,38,.12)',fill:true,tension:.35,pointBackgroundColor:'#F59E0B',pointRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+   946→
+   947→  // top sellers
+   948→  const sellerMap={};
+   949→  state.sales.filter(s=>s.storeId===state.currentStoreId&&s.timestamp>Date.now()-7*86400000).forEach(s=>s.items.forEach(it=>{sellerMap[it.name]=(sellerMap[it.name]||0)+it.price*it.qty}));
+   950→  const top=Object.entries(sellerMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
+   951→  charts.top=new Chart($('#topChart'),{type:'bar',data:{labels:top.map(t=>t[0].split(' ').slice(0,2).join(' ')),datasets:[{data:top.map(t=>t[1]),backgroundColor:['#DC2626','#F59E0B','#10B981','#3B82F6','#8B5CF6'],borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+   952→
+   953→  // AI insights
+   954→  renderAIInsights(inv,todaySales,health);
+   955→};
+   956→
+   957→function computeHealthScore(inv){
+   958→  if(!inv.length)return{score:0,label:'No Data',details:[]};
+   959→  const totalItems=inv.length;
+   960→  const lowStock=inv.filter(p=>p.current<=p.reorder).length;
+   961→  const outOfStock=inv.filter(p=>p.current===0).length;
+   962→  const stockVal=inv.reduce((a,b)=>a+b.current*b.cost,0);
+   963→  const avgCoverage=inv.reduce((a,b)=>a+(b.current>0?b.current/b.reorder*7:0),0)/totalItems;
+   964→  const variety=totalItems;
+   965→  const lowPct=lowStock/totalItems;
+   966→  const outPct=outOfStock/totalItems;
+   967→  let score=Math.round(100 - lowPct*30 - outPct*40 - Math.max(0,(7-avgCoverage)/7*20));
+   968→  score=Math.max(0,Math.min(100,score));
+   969→  let label=score>=80?'Excellent':score>=60?'Good':score>=40?'Fair':score>=20?'Poor':'Critical';
+   970→  return {score,label,details:[
+   971→    {label:'Total SKUs',value:variety,good:true},
+   972→    {label:'Low stock items',value:lowStock,good:lowStock===0},
+   973→    {label:'Out of stock',value:outOfStock,good:outOfStock===0},
+   974→    {label:'Avg coverage (days)',value:avgCoverage.toFixed(1),good:avgCoverage>=7},
+   975→    {label:'Stock value',value:fmt(stockVal),good:true}
+   976→  ]};
+   977→}
+   978→
+   979→function renderAIInsights(inv,todaySales,health){
+   980→  const insights=[];
+   981→  // low stock
+   982→  inv.filter(p=>p.current<=p.reorder).slice(0,3).forEach(p=>{
+   983→    insights.push({type:'danger',icon:'fa-triangle-exclamation',text:`<b>${p.name}</b> is at ${p.current} units (reorder level: ${p.reorder}). Projected stockout in ~${p.current>0?Math.ceil(p.current/2):0} days at current pace. Suggested reorder qty: ${p.reorder*2} units from ${supplierName(p.supplierId)}.`});
+   984→  });
+   985→  // sales trend
+   986→  const todayRev=todaySales.reduce((a,b)=>a+b.total,0);
+   987→  const yesterday=state.sales.filter(s=>s.storeId===state.currentStoreId&&new Date(s.timestamp).toDateString()===new Date(Date.now()-86400000).toDateString()).reduce((a,b)=>a+b.total,0);
+   988→  if(yesterday>0){
+   989→    const chg=((todayRev-yesterday)/yesterday*100).toFixed(0);
+   990→    insights.push({type:chg>=0?'success':'warn',icon:chg>=0?'fa-arrow-trend-up':'fa-arrow-trend-down',text:`Today's revenue is ${chg>=0?'+':''}${chg}% vs yesterday. ${chg>=0?'Strong momentum — consider promoting top sellers.':'Slow day — try a happy hour push on slow movers.'}`});
+   991→  }
+   992→  // profit opportunity
+   993→  const profitItems=inv.map(p=>({p,margin:p.sell-p.cost,margPct:(p.sell-p.cost)/p.sell*100})).sort((a,b)=>b.margPct-a.margPct);
+   994→  if(profitItems.length){
+   995→    const top=profitItems[0];
+   996→    insights.push({type:'info',icon:'fa-lightbulb',text:`<b>${top.p.name}</b> has your highest margin at ${top.margPct.toFixed(0)}% (KSh ${top.margin} per unit). Consider featuring it prominently to boost profitability.`});
+   997→  }
+   998→  // dead stock
+   999→  const slowMovers=inv.filter(p=>{const sold=state.sales.filter(s=>s.storeId===state.currentStoreId&&s.items.some(i=>i.id===p.id)).reduce((a,b)=>a+b.items.find(i=>i.id===p.id).qty,0);return sold===0&&p.current>10});
+  1000→  if(slowMovers.length){
+  1001→    insights.push({type:'warn',icon:'fa-hourglass-half',text:`<b>${slowMovers[0].name}</b> hasn't sold this week but you have ${slowMovers[0].current} units. Consider a discount bundle or staff recommendation push.`});
+  1002→  }
+  1003→  // health
+  1004→  if(health.score<60){
+  1005→    insights.push({type:'warn',icon:'fa-heart-pulse',text:`Inventory Health Score is ${health.score}/100 (${health.label}). Address ${inv.filter(p=>p.current<=p.reorder).length} low-stock items to improve coverage.`});
+  1006→  }else{
+  1007→    insights.push({type:'success',icon:'fa-heart-pulse',text:`Inventory Health Score is ${health.score}/100 (${health.label}). Stock levels are well balanced.`});
+  1008→  }
+  1009→  if(!insights.length)insights.push({type:'info',icon:'fa-circle-info',text:'Not enough data for insights yet. Make a few sales and check back.'});
+  1010→  $('#aiInsights').innerHTML=insights.map(i=>`<div class="ai-insight ${i.type}"><i class="fa-solid ${i.icon}"></i><div>${i.text}</div></div>`).join('');
+  1011→}
+  1012→
+  1013→window.quickReorder=function(pid){
+  1014→  const p=currentStoreInv().find(x=>x.id===pid);if(!p)return;
+  1015→  openModal('Reorder: '+p.name,
+  1016→    `<div class="form-group"><label>Supplier</label><input class="form-control" value="${supplierName(p.supplierId)}" disabled></div>
+  1017→     <div class="form-group"><label>Quantity to order</label><input type="number" id="roQty" class="form-control" value="${p.reorder*2}" min="1"></div>
+  1018→     <div class="form-group"><label>Estimated cost</label><input class="form-control" id="roCost" disabled></div>`,
+  1019→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmReorder('${pid}')"><i class="fa-solid fa-check"></i> Place Order</button>`);
+  1020→  const calc=()=>{$('#roCost').value=fmt(($('#roQty').value||0)*p.cost)};
+  1021→  $('#roQty').addEventListener('input',calc);calc();
+  1022→};
+  1023→window.confirmReorder=function(pid){
+  1024→  const qty=parseInt($('#roQty').value);if(!qty||qty<1){toast('Enter valid quantity','error');return}
+  1025→  const p=currentStoreInv().find(x=>x.id===pid);
+  1026→  p.current+=qty;p.opening=p.current;
+  1027→  saveState();
+  1028→  closeModal();toast('Order received. '+qty+' units of '+p.name+' added.','success');
+  1029→  navigate('inventory');
+  1030→};
+  1031→
+  1032→/* ----- INVENTORY ----- */
+  1033→RENDERERS.inventory=function(){
+  1034→  const inv=currentStoreInv();
+  1035→  const cats=['All',...new Set(inv.map(p=>p.category))];
+  1036→  let html=`
+  1037→  <div class="page-header"><div><h2>Inventory Management</h2><p>${inv.length} products in ${state.stores.find(s=>s.id===state.currentStoreId).name}</p></div>
+  1038→    <div class="page-actions">
+  1039→      <button class="btn btn-outline btn-sm" id="invScanBtn"><i class="fa-solid fa-barcode"></i> Scan</button>
+  1040→      <button class="btn btn-amber btn-sm" onclick="navigate('stocktake')"><i class="fa-solid fa-clipboard-check"></i> Stock Count</button>
+  1041→      <button class="btn btn-primary btn-sm" onclick="openProductModal()"><i class="fa-solid fa-plus"></i> Add Product</button>
+  1042→    </div>
+  1043→  </div>
+  1044→  <div class="flex gap-8 items-center mb-12 flex-wrap">
+  1045→    <div class="search-bar"><i class="fa-solid fa-magnifying-glass"></i><input id="invSearch" placeholder="Search by name, SKU, barcode..."></div>
+  1046→    <div class="filter-chips" id="catChips">${cats.map((c,i)=>`<button class="chip ${i===0?'active':''}" data-cat="${c}">${c}</button>`).join('')}</div>
+  1047→  </div>
+  1048→  <div class="card" style="padding:0">
+  1049→    <div class="table-wrap"><table><thead><tr><th>Product</th><th>Category</th><th>SKU</th><th>Stock</th><th>Cost</th><th>Price</th><th>Margin</th><th>Status</th><th>Actions</th></tr></thead><tbody id="invBody"></tbody></table></div>
+  1050→  </div>`;
+  1051→  $('#content').innerHTML=html;
+  1052→  let curCat='All',curSearch='';
+  1053→  function draw(){
+  1054→    let rows=inv.filter(p=>(curCat==='All'||p.category===curCat)&&(p.name+p.sku+p.barcode).toLowerCase().includes(curSearch.toLowerCase()));
+  1055→    $('#invBody').innerHTML=rows.length?rows.map(p=>{
+  1056→      const margin=p.sell-p.cost;const pct=(margin/p.sell*100).toFixed(0);
+  1057→      const status=p.current===0?'<span class="badge badge-red">Out</span>':p.current<=p.reorder?'<span class="badge badge-gold">Low</span>':'<span class="badge badge-green">OK</span>';
+  1058→      return `<tr><td><b>${p.name}</b><br><small class="text-muted">${p.barcode}</small></td><td><span class="badge badge-purple">${p.category}</span></td><td>${p.sku}</td><td><b style="font-size:15px;color:${p.current<=p.reorder?'var(--crimson)':'var(--sidebar)'}">${p.current}</b><br><small class="text-muted">min ${p.reorder}</small></td><td>${fmt(p.cost)}</td><td>${fmt(p.sell)}</td><td><b class="text-emerald">${fmt(margin)}</b><br><small class="text-muted">${pct}%</small></td><td>${status}</td><td><div class="row-actions"><button onclick="openProductModal('${p.id}')" title="Edit"><i class="fa-solid fa-pen"></i></button><button class="delete" onclick="deleteProduct('${p.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button></div></td></tr>`;
+  1059→    }).join(''):'<tr><td colspan="9"><div class="empty-state"><i class="fa-solid fa-box-open"></i><h3>No products found</h3></div></td></tr>';
+  1060→  }
+  1061→  draw();
+  1062→  $('#invSearch').addEventListener('input',e=>{curSearch=e.target.value;draw()});
+  1063→  $$('#catChips .chip').forEach(c=>c.addEventListener('click',()=>{$$('#catChips .chip').forEach(x=>x.classList.remove('active'));c.classList.add('active');curCat=c.dataset.cat;draw()}));
+  1064→  $('#invScanBtn').addEventListener('click',startScanner);
+  1065→};
+  1066→
+  1067→window.openProductModal=function(id){
+  1068→  const p=id?currentStoreInv().find(x=>x.id===id):null;
+  1069→  const cats=['Wine','Whisky','Vodka','Gin','Rum','Champagne','Beer','Cognac','Tequila','Liqueur','Other'];
+  1070→  const sizes=['750ml','1L','700ml','375ml','1.75L','330ml','500ml','50ml'];
+  1071→  openModal(p?'Edit Product':'Add Product',
+  1072→    `<div class="form-grid">
+  1073→      <div class="form-group"><label>Product Name</label><input id="pName" class="form-control" value="${p?p.name:''}"></div>
+  1074→      <div class="form-group"><label>SKU</label><input id="pSku" class="form-control" value="${p?p.sku:''}"></div>
+  1075→      <div class="form-group"><label>Barcode</label><div style="display:flex;gap:6px"><input id="pBarcode" class="form-control" value="${p?p.barcode:''}"><button class="btn btn-ghost" onclick="document.getElementById('pBarcode').value=generateBarcode()"><i class="fa-solid fa-dice"></i></button></div></div>
+  1076→      <div class="form-group"><label>Category</label><select id="pCategory" class="form-control">${cats.map(c=>`<option ${p&&p.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+  1077→      <div class="form-group"><label>Size</label><select id="pSize" class="form-control">${sizes.map(s=>`<option ${p&&p.size===s?'selected':''}>${s}</option>`).join('')}</select></div>
+  1078→      <div class="form-group"><label>Supplier</label><select id="pSupplier" class="form-control">${state.suppliers.map(s=>`<option value="${s.id}" ${p&&p.supplierId===s.id?'selected':''}>${s.name}</option>`).join('')}</select></div>
+  1079→      <div class="form-group"><label>Opening Stock</label><input type="number" id="pOpening" class="form-control" value="${p?p.opening:0}"></div>
+  1080→      <div class="form-group"><label>Current Stock</label><input type="number" id="pCurrent" class="form-control" value="${p?p.current:0}"></div>
+  1081→      <div class="form-group"><label>Reorder Level</label><input type="number" id="pReorder" class="form-control" value="${p?p.reorder:5}"></div>
+  1082→      <div class="form-group"><label>Cost Price (KSh)</label><input type="number" id="pCost" class="form-control" value="${p?p.cost:0}"></div>
+  1083→      <div class="form-group"><label>Sell Price (KSh)</label><input type="number" id="pSell" class="form-control" value="${p?p.sell:0}"></div>
+  1084→    </div>`,
+  1085→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveProduct('${id||''}')"><i class="fa-solid fa-check"></i> ${p?'Save Changes':'Add Product'}</button>`,true);
+  1086→};
+  1087→window.generateBarcode=function(){return '600'+Math.floor(Math.random()*9000000000+1000000000)};
+  1088→window.saveProduct=function(id){
+  1089→  const get=v=>$('#'+v).value.trim();
+  1090→  if(!get('pName')||!get('pSku')){toast('Name and SKU required','error');return}
+  1091→  const data={name:get('pName'),sku:get('pSku'),barcode:get('pBarcode')||generateBarcode(),category:get('pCategory'),size:get('pSize'),supplierId:get('pSupplier'),opening:parseInt(get('pOpening'))||0,current:parseInt(get('pCurrent'))||0,reorder:parseInt(get('pReorder'))||5,cost:parseInt(get('pCost'))||0,sell:parseInt(get('pSell'))||0};
+  1092→  if(id){Object.assign(currentStoreInv().find(x=>x.id===id),data);toast('Product updated','success')}
+  1093→  else{data.id=uid('p');data.storeId=state.currentStoreId;state.inventory.push(data);toast('Product added','success')}
+  1094→  saveState();closeModal();navigate('inventory');
+  1095→};
+  1096→window.deleteProduct=function(id){
+  1097→  if(!confirm('Delete this product?'))return;
+  1098→  state.inventory=state.inventory.filter(p=>p.id!==id);saveState();toast('Product deleted','success');navigate('inventory');
+  1099→};
+  1100→
+  1101→/* ----- STOCK TAKE ----- */
+  1102→RENDERERS.stocktake=function(){
+  1103→  const myTakes=state.stockTakes.filter(t=>t.storeId===state.currentStoreId).sort((a,b)=>b.startedAt-a.startedAt);
+  1104→  let html=`
+  1105→  <div class="page-header"><div><h2>Stock Counting</h2><p>Physical count with variance tracking and manager approval</p></div>
+  1106→    <div class="page-actions"><button class="btn btn-primary btn-sm" onclick="startStockTake()"><i class="fa-solid fa-play"></i> Start New Count</button></div>
+  1107→  </div>`;
+  1108→  if(pendingStockTake){
+  1109→    const inv=currentStoreInv();
+  1110→    html+=`<div class="card" style="background:linear-gradient(135deg,#FFFBEB,#FEF3C7);border-left:4px solid var(--amber)">
+  1111→      <div class="flex items-center justify-between flex-wrap gap-8">
+  1112→        <div><h3 style="color:#92400E"><i class="fa-solid fa-clipboard-list"></i> Count in Progress</h3><p class="text-muted" style="font-size:12px">Started ${new Date(pendingStockTake.startedAt).toLocaleString()} by ${staffName(pendingStockTake.startedBy)}</p></div>
+  1113→        <div class="flex gap-8"><button class="btn btn-ghost btn-sm" onclick="cancelStockTake()">Cancel</button><button class="btn btn-emerald btn-sm" onclick="submitStockTake()"><i class="fa-solid fa-paper-plane"></i> Submit for Approval</button></div>
+  1114→      </div>
+  1115→    </div>
+  1116→    <div class="search-bar mb-12"><i class="fa-solid fa-magnifying-glass"></i><input id="stSearch" placeholder="Search items to count..."></div>
+  1117→    <div id="stItems"></div>`;
+  1118→  }
+  1119→  html+=`<div class="card"><div class="card-header"><h3>Count History</h3></div>
+  1120→    ${myTakes.length?`<div class="table-wrap"><table><thead><tr><th>Date</th><th>Started By</th><th>Items</th><th>Variance</th><th>Status</th><th>Action</th></tr></thead><tbody>
+  1121→      ${myTakes.map(t=>{const v=t.items.reduce((a,b)=>a+(b.counted-b.expected),0);return `<tr><td>${new Date(t.startedAt).toLocaleString()}</td><td>${staffName(t.startedBy)}</td><td>${t.items.length}</td><td><b class="${v===0?'text-emerald':v>0?'text-amber':'text-crimson'}">${v>0?'+':''}${v}</b></td><td><span class="badge ${t.status==='approved'?'badge-green':t.status==='pending'?'badge-gold':'badge-gray'}">${t.status}</span></td><td>${t.status==='pending'&&currentUser.role==='manager'?'<button class="btn btn-amber btn-sm" onclick="approveStockTake(\''+t.id+'\')"><i class="fa-solid fa-check"></i> Approve</button>':'<button class="btn btn-ghost btn-sm" onclick="viewStockTake(\''+t.id+'\')">View</button>'}</td></tr>`}).join('')}
+  1122→    </tbody></table></div>`:'<div class="empty-state"><i class="fa-solid fa-clipboard-check"></i><h3>No counts yet</h3><p>Start a new physical count above.</p></div>'}
+  1123→  </div>`;
+  1124→  $('#content').innerHTML=html;
+  1125→  if(pendingStockTake){
+  1126→    drawStockTakeItems();
+  1127→    $('#stSearch').addEventListener('input',drawStockTakeItems);
+  1128→  }
+  1129→};
+  1130→function drawStockTakeItems(){
+  1131→  const inv=currentStoreInv();
+  1132→  const q=($('#stSearch')?.value||'').toLowerCase();
+  1133→  const rows=inv.filter(p=>(p.name+p.sku).toLowerCase().includes(q));
+  1134→  $('#stItems').innerHTML=rows.map(p=>{
+  1135→    const item=pendingStockTake.items.find(i=>i.inventoryId===p.id)||{expected:p.current,counted:null};
+  1136→    const v=item.counted===null?null:item.counted-item.expected;
+  1137→    return `<div class="stocktake-item">
+  1138→      <div><div class="st-name">${p.name}</div><div class="st-meta">${p.category} · ${p.size} · SKU ${p.sku}</div></div>
+  1139→      <div style="text-align:center"><div style="font-size:10px;color:var(--text-muted)">EXPECTED</div><div style="font-weight:700;font-size:16px">${item.expected}</div></div>
+  1140→      <input type="number" class="stocktake-input" placeholder="0" value="${item.counted??''}" data-id="${p.id}" onchange="updateStockTakeCount('${p.id}',this.value)">
+  1141→      <div class="st-variance ${v===null?'':v===0?'zero':v>0?'pos':'neg'}">${v===null?'—':(v>0?'+':'')+v}</div>
+  1142→    </div>`;
+  1143→  }).join('');
+  1144→}
+  1145→window.startStockTake=function(){
+  1146→  const inv=currentStoreInv();
+  1147→  if(!inv.length){toast('No inventory to count','warn');return}
+  1148→  pendingStockTake={id:uid('st'),storeId:state.currentStoreId,startedBy:currentUser.id,startedAt:Date.now(),status:'in_progress',items:inv.map(p=>({inventoryId:p.id,expected:p.current,counted:null})),approvedBy:null};
+  1149→  toast('Stock count started','success');navigate('stocktake');
+  1150→};
+  1151→window.updateStockTakeCount=function(id,val){
+  1152→  const item=pendingStockTake.items.find(i=>i.inventoryId===id);
+  1153→  if(item)item.counted=val===''?null:parseInt(val);
+  1154→  // refresh just that row's variance
+  1155→  drawStockTakeItems();
+  1156→};
+  1157→window.cancelStockTake=function(){
+  1158→  if(!confirm('Cancel this stock count? Progress will be lost.'))return;
+  1159→  pendingStockTake=null;navigate('stocktake');
+  1160→};
+  1161→window.submitStockTake=function(){
+  1162→  const counted=pendingStockTake.items.filter(i=>i.counted!==null).length;
+  1163→  if(!counted){toast('Count at least one item before submitting','warn');return}
+  1164→  pendingStockTake.status='pending';
+  1165→  pendingStockTake.submittedAt=Date.now();
+  1166→  state.stockTakes.push(pendingStockTake);
+  1167→  pendingStockTake=null;
+  1168→  saveState();
+  1169→  toast('Stock count submitted for approval','success');
+  1170→  navigate('stocktake');
+  1171→};
+  1172→window.approveStockTake=function(id){
+  1173→  const t=state.stockTakes.find(x=>x.id===id);if(!t)return;
+  1174→  openModal('Approve Stock Count',
+  1175→    `<p>This will update system stock levels with counted quantities.</p>
+  1176→     <div class="table-wrap mt-12"><table><thead><tr><th>Product</th><th>Expected</th><th>Counted</th><th>Variance</th></tr></thead><tbody>
+  1177→     ${t.items.filter(i=>i.counted!==null).map(i=>{const p=state.inventory.find(x=>x.id===i.inventoryId);const v=i.counted-i.expected;return `<tr><td>${p?p.name:'?'}</td><td>${i.expected}</td><td><b>${i.counted}</b></td><td class="${v===0?'text-emerald':v>0?'text-amber':'text-crimson'}">${v>0?'+':''}${v}</td></tr>`}).join('')}
+  1178→     </tbody></table></div>`,
+  1179→    `<button class="btn btn-ghost" onclick="closeModal()">Reject</button><button class="btn btn-emerald" onclick="confirmApproveStockTake('${id}')"><i class="fa-solid fa-check"></i> Approve & Apply</button>`,true);
+  1180→};
+  1181→window.confirmApproveStockTake=function(id){
+  1182→  const t=state.stockTakes.find(x=>x.id===id);
+  1183→  t.items.filter(i=>i.counted!==null).forEach(i=>{const p=state.inventory.find(x=>x.id===i.inventoryId);if(p){p.current=i.counted;p.opening=i.counted}});
+  1184→  t.status='approved';t.approvedBy=currentUser.id;t.approvedAt=Date.now();
+  1185→  saveState();closeModal();toast('Stock count approved and applied','success');navigate('stocktake');
+  1186→};
+  1187→window.viewStockTake=function(id){
+  1188→  const t=state.stockTakes.find(x=>x.id===id);
+  1189→  openModal('Stock Count Detail',
+  1190→    `<p class="text-muted">${new Date(t.startedAt).toLocaleString()} · ${staffName(t.startedBy)}</p>
+  1191→     <div class="table-wrap mt-12"><table><thead><tr><th>Product</th><th>Expected</th><th>Counted</th><th>Variance</th></tr></thead><tbody>
+  1192→     ${t.items.filter(i=>i.counted!==null).map(i=>{const p=state.inventory.find(x=>x.id===i.inventoryId);const v=i.counted-i.expected;return `<tr><td>${p?p.name:'?'}</td><td>${i.expected}</td><td>${i.counted}</td><td class="${v===0?'text-emerald':v>0?'text-amber':'text-crimson'}">${v>0?'+':''}${v}</td></tr>`}).join('')}
+  1193→     </tbody></table></div>`,
+  1194→    `<button class="btn btn-ghost" onclick="closeModal()">Close</button>`,true);
+  1195→};
+  1196→
+  1197→/* ----- DAILY RECONCILIATION ----- */
+  1198→RENDERERS.reconciliation=function(){
+  1199→  // defensive: ensure arrays exist
+  1200→  if(!Array.isArray(state.reconciliation))state.reconciliation=[];
+  1201→  if(!Array.isArray(state.sales))state.sales=[];
+  1202→  if(!Array.isArray(state.inventory))state.inventory=[];
+  1203→  const inv=currentStoreInv();
+  1204→  const today=todayKey();
+  1205→  let rec=state.reconciliation.find(r=>r.storeId===state.currentStoreId&&r.date===today);
+  1206→
+  1207→  if(!rec){
+  1208→    // auto-build today's record from sales + inventory opening
+  1209→    rec={id:uid('rec'),storeId:state.currentStoreId,date:today,items:inv.map(p=>buildRecItem(p))};
+  1210→    state.reconciliation.push(rec);saveState();
+  1211→  } else {
+  1212→    // sync: add any new inventory items not yet in today's reconciliation
+  1213→    inv.forEach(p=>{
+  1214→      if(!rec.items.find(it=>it.inventoryId===p.id)){
+  1215→        rec.items.push(buildRecItem(p));
+  1216→      }
+  1217→    });
+  1218→    // remove items whose inventory has been deleted
+  1219→    rec.items=rec.items.filter(it=>inv.find(p=>p.id===it.inventoryId));
+  1220→    saveState();
+  1221→  }
+  1222→
+  1223→  // history (excluding today)
+  1224→  const history=state.reconciliation.filter(r=>r.storeId===state.currentStoreId&&r.date!==today).sort((a,b)=>b.date.localeCompare(a.date));
+  1225→
+  1226→  let html=`
+  1227→  <div class="page-header"><div><h2>Daily Reconciliation</h2><p>${new Date().toLocaleDateString('en-KE',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p></div>
+  1228→    <div class="page-actions"><button class="btn btn-emerald btn-sm" onclick="saveReconciliation()"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+  1229→    <button class="btn btn-outline btn-sm" onclick="exportReconciliationReport()"><i class="fa-solid fa-file-pdf"></i> PDF</button></div>
+  1230→  </div>
+  1231→  <div class="stat-grid">
+  1232→    <div class="stat-card stat-blue"><div class="label">Total Opening Stock</div><div class="value">${rec.items.reduce((a,b)=>a+(b.opening||0),0)}</div><div class="delta">units</div><i class="fa-solid fa-door-open icon"></i></div>
+  1233→    <div class="stat-card stat-crimson"><div class="label">Units Sold Today</div><div class="value">${rec.items.reduce((a,b)=>a+(b.salesToday||0),0)}</div><div class="delta">units</div><i class="fa-solid fa-cart-shopping icon"></i></div>
+  1234→    <div class="stat-card stat-emerald"><div class="label">Units Added</div><div class="value">${rec.items.reduce((a,b)=>a+(b.stockAdded||0),0)}</div><div class="delta">units</div><i class="fa-solid fa-truck icon"></i></div>
+  1235→    <div class="stat-card stat-amber"><div class="label">Total Variance</div><div class="value" id="totalVariance">0</div><div class="delta">units</div><i class="fa-solid fa-scale-balanced icon"></i></div>
+  1236→  </div>`;
+  1237→  if(!rec.items.length){
+  1238→    html+=`<div class="card"><div class="empty-state"><i class="fa-solid fa-box-open"></i><h3>No inventory to reconcile</h3><p>Add products to your inventory first, then come back here.</p>
+  1239→      <button class="btn btn-primary mt-12" onclick="navigate('inventory')"><i class="fa-solid fa-plus"></i> Go to Inventory</button></div></div>`;
+  1240→  } else {
+  1241→    html+=`<div class="card" style="padding:0">
+  1242→      <div class="table-wrap"><table><thead><tr><th>Product</th><th>Opening</th><th>Sales</th><th>Added</th><th>Expected Closing</th><th>Actual Closing</th><th>Variance</th></tr></thead><tbody>
+  1243→        ${rec.items.map((it,i)=>`<tr><td><b>${it.name||'—'}</b></td><td>${it.opening||0}</td><td>${it.salesToday||0}</td><td><input type="number" value="${it.stockAdded||0}" style="width:60px;padding:5px;border:1px solid var(--border);border-radius:6px;text-align:center" onchange="updateRecField(${i},'stockAdded',this.value);updateRecExpected(${i})"></td><td id="recExp${i}">${it.expectedClosing||0}</td><td><input type="number" value="${it.actualClosing===null?'':it.actualClosing}" placeholder="—" style="width:70px;padding:5px;border:1px solid var(--border);border-radius:6px;text-align:center;font-weight:700" onchange="updateRecField(${i},'actualClosing',this.value);updateRecVar(${i})"></td><td id="recVar${i}" style="font-weight:700">—</td></tr>`).join('')}
+  1244→      </tbody></table></div>
+  1245→    </div>`;
+  1246→  }
+  1247→  // history section
+  1248→  html+=`<div class="card"><div class="card-header"><h3>Reconciliation History</h3><div class="sub">${history.length} past record(s)</div></div>
+  1249→    ${history.length?`<div class="table-wrap"><table><thead><tr><th>Date</th><th>Items</th><th>Opening</th><th>Sold</th><th>Added</th><th>Counted</th><th>Variance</th><th>Action</th></tr></thead><tbody>
+  1250→      ${history.map(r=>{const items=r.items||[];const opening=items.reduce((a,b)=>a+(b.opening||0),0);const sold=items.reduce((a,b)=>a+(b.salesToday||0),0);const added=items.reduce((a,b)=>a+(b.stockAdded||0),0);const counted=items.filter(it=>it.actualClosing!==null).length;const variance=items.filter(it=>it.actualClosing!==null).reduce((a,b)=>a+((b.actualClosing||0)-(b.expectedClosing||0)),0);return `<tr><td>${new Date(r.date).toLocaleDateString('en-KE',{day:'numeric',month:'short',year:'numeric'})}</td><td>${items.length}</td><td>${opening}</td><td>${sold}</td><td>${added}</td><td>${counted}/${items.length}</td><td><b class="${variance===0?'text-emerald':variance>0?'text-amber':'text-crimson'}">${variance>0?'+':''}${variance}</b></td><td><button class="btn btn-ghost btn-sm" onclick="viewReconciliation('${r.id}')"><i class="fa-solid fa-eye"></i> View</button></td></tr>`}).join('')}
+  1251→    </tbody></table></div>`:'<div class="empty-state" style="padding:30px"><i class="fa-solid fa-clock-rotate-left"></i><h3>No past records</h3><p>Previous reconciliations will appear here.</p></div>'}
+  1252→  </div>`;
+  1253→  $('#content').innerHTML=html;
+  1254→  rec.items.forEach((it,i)=>updateRecVar(i));
+  1255→  updateTotalVariance(rec);
+  1256→  window._currentRec=rec;
+  1257→};
+  1258→function buildRecItem(p){
+  1259→  const soldToday=state.sales.filter(s=>s.storeId===state.currentStoreId&&new Date(s.timestamp).toDateString()===new Date().toDateString()&&s.items.some(i=>i.id===p.id)).reduce((a,b)=>{const it=b.items.find(i=>i.id===p.id);return a+(it?it.qty:0)},0);
+  1260→  return {inventoryId:p.id,name:p.name,opening:p.opening||0,salesToday:soldToday,stockAdded:0,expectedClosing:(p.opening||0)-soldToday,actualClosing:null};
+  1261→}
+  1262→window.updateRecField=function(i,field,val){if(!window._currentRec)return;window._currentRec.items[i][field]=val===''?null:parseInt(val);saveState()};
+  1263→window.updateRecExpected=function(i){if(!window._currentRec)return;const it=window._currentRec.items[i];it.expectedClosing=(it.opening||0)-(it.salesToday||0)+(it.stockAdded||0);const c=$('#recExp'+i);if(c)c.textContent=it.expectedClosing;updateRecVar(i);updateTotalVariance(window._currentRec)};
+  1264→window.updateRecVar=function(i){if(!window._currentRec)return;const it=window._currentRec.items[i];const cell=$('#recVar'+i);if(!cell)return;if(it.actualClosing===null){cell.textContent='—';cell.className='';return}const v=it.actualClosing-(it.expectedClosing||0);cell.textContent=(v>0?'+':'')+v;cell.className=v===0?'text-emerald':v>0?'text-amber':'text-crimson';cell.style.fontWeight='700';updateTotalVariance(window._currentRec)};
+  1265→window.updateTotalVariance=function(rec){const v=(rec.items||[]).filter(it=>it.actualClosing!==null).reduce((a,b)=>a+((b.actualClosing||0)-(b.expectedClosing||0)),0);const cell=$('#totalVariance');if(cell)cell.textContent=(v>0?'+':'')+v};
+  1266→window.saveReconciliation=function(){saveState();toast('Daily reconciliation saved','success')};
+  1267→window.viewReconciliation=function(id){
+  1268→  const r=state.reconciliation.find(x=>x.id===id);if(!r)return;
+  1269→  const items=r.items||[];
+  1270→  const variance=items.filter(it=>it.actualClosing!==null).reduce((a,b)=>a+((b.actualClosing||0)-(b.expectedClosing||0)),0);
+  1271→  openModal('Reconciliation · '+new Date(r.date).toLocaleDateString('en-KE',{weekday:'long',day:'numeric',month:'long',year:'numeric'}),
+  1272→    `<div class="kpi-row mb-12">
+  1273→      <div class="mini-kpi"><div class="l">Items</div><div class="v">${items.length}</div></div>
+  1274→      <div class="mini-kpi"><div class="l">Counted</div><div class="v">${items.filter(it=>it.actualClosing!==null).length}/${items.length}</div></div>
+  1275→      <div class="mini-kpi"><div class="l">Variance</div><div class="v ${variance===0?'pos':variance<0?'neg':''}">${variance>0?'+':''}${variance}</div></div>
+  1276→    </div>
+  1277→    <div class="table-wrap"><table><thead><tr><th>Product</th><th>Opening</th><th>Sales</th><th>Added</th><th>Expected</th><th>Actual</th><th>Variance</th></tr></thead><tbody>
+  1278→      ${items.map(it=>{const v=it.actualClosing===null?null:(it.actualClosing||0)-(it.expectedClosing||0);return `<tr><td><b>${it.name||'—'}</b></td><td>${it.opening||0}</td><td>${it.salesToday||0}</td><td>${it.stockAdded||0}</td><td>${it.expectedClosing||0}</td><td>${it.actualClosing===null?'<span class="text-muted">—</span>':it.actualClosing}</td><td>${v===null?'<span class="text-muted">—</span>':`<b class="${v===0?'text-emerald':v>0?'text-amber':'text-crimson'}">${v>0?'+':''}${v}</b>`}</td></tr>`}).join('')}
+  1279→    </tbody></table></div>`,
+  1280→    `<button class="btn btn-outline" onclick="exportPastReconciliation('${r.id}')"><i class="fa-solid fa-file-pdf"></i> Export PDF</button><button class="btn btn-ghost" onclick="closeModal()">Close</button>`,true);
+  1281→};
+  1282→window.exportPastReconciliation=function(id){
+  1283→  const r=state.reconciliation.find(x=>x.id===id);if(!r)return;
+  1284→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+  1285→  const items=r.items||[];
+  1286→  const variance=items.filter(it=>it.actualClosing!==null).reduce((a,b)=>a+((b.actualClosing||0)-(b.expectedClosing||0)),0);
+  1287→  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+  1288→  pdfHeader(doc,'Daily Reconciliation Report',store.name+' · '+new Date(r.date).toLocaleDateString('en-KE',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+' · Variance: '+(variance>0?'+':'')+variance);
+  1289→  doc.autoTable({startY:58,head:[['Product','Opening','Sales','Added','Expected','Actual','Variance']],body:items.map(it=>[it.name||'—',it.opening||0,it.salesToday||0,it.stockAdded||0,it.expectedClosing||0,it.actualClosing===null?'—':it.actualClosing,it.actualClosing===null?'—':((it.actualClosing-it.expectedClosing>0?'+':'')+(it.actualClosing-(it.expectedClosing||0)))]),headStyles:{fillColor:[139,92,246]},didParseCell:function(d){if(d.section==='body'&&d.column.index===6&&d.cell.raw!=='—'){const v=parseInt(d.cell.raw);d.cell.styles.textColor=v===0?[16,185,129]:v>0?[245,158,11]:[220,38,38];d.cell.styles.fontStyle='bold'}},styles:{fontSize:9}});
+  1290→  downloadPdf(doc,'reconciliation-'+r.date+'.pdf');
+  1291→};
+  1292→
+  1293→/* ----- POS ----- */
+  1294→RENDERERS.pos=function(){
+  1295→  const inv=currentStoreInv();
+  1296→  const cats=['All',...new Set(inv.map(p=>p.category))];
+  1297→  $('#content').innerHTML=`
+  1298→  <div class="page-header"><div><h2>Point of Sale</h2><p>Ring up sales — stock updates automatically</p></div></div>
+  1299→  <div class="pos-grid">
+  1300→    <div>
+  1301→      <div class="search-bar mb-12"><i class="fa-solid fa-magnifying-glass"></i><input id="posSearch" placeholder="Search products..."></div>
+  1302→      <div class="filter-chips" id="posCats">${cats.map((c,i)=>`<button class="chip ${i===0?'active':''}" data-cat="${c}">${c}</button>`).join('')}</div>
+  1303→      <div class="pos-products" id="posProducts"></div>
+  1304→    </div>
+  1305→    <div class="cart" id="cartPanel">
+  1306→      <div class="cart-header"><h3><i class="fa-solid fa-cart-shopping"></i> Current Sale</h3><button class="btn btn-ghost btn-sm" onclick="clearCart()">Clear</button></div>
+  1307→      <div class="cart-items" id="cartItems"></div>
+  1308→      <div class="cart-footer">
+  1309→        <div class="cart-total"><span>Total</span><span id="cartTotal">KSh 0</span></div>
+  1310→        <div class="form-row mb-8"><select id="payMethod" class="form-control"><option value="cash">Cash</option><option value="card">Card</option><option value="mpesa">M-Pesa</option></select></div>
+  1311→        <button class="btn btn-emerald btn-block" onclick="checkout()"><i class="fa-solid fa-cash-register"></i> Complete Sale</button>
+  1312→      </div>
+  1313→    </div>
+  1314→  </div>`;
+  1315→  let curCat='All',curSearch='';
+  1316→  function drawProducts(){
+  1317→    let rows=inv.filter(p=>(curCat==='All'||p.category===curCat)&&(p.name+p.sku).toLowerCase().includes(curSearch.toLowerCase()));
+  1318→    const colors={Wine:'#DC2626',Whisky:'#92400E',Vodka:'#3B82F6',Gin:'#10B981',Rum:'#F59E0B',Champagne:'#EC4899',Beer:'#F97316',Cognac:'#8B5CF6',Tequila:'#14B8A6',Liqueur:'#A78BFA'};
+  1319→    $('#posProducts').innerHTML=rows.length?rows.map(p=>{
+  1320→      const c=colors[p.category]||'#6B7280';
+  1321→      return `<div class="pos-product ${p.current===0?'out':''}" onclick="${p.current>0?`addToCart('${p.id}')`:''}">
+  1322→        <div class="pp-icon" style="color:${c}"><i class="fa-solid fa-wine-bottle"></i></div>
+  1323→        <div class="pp-name">${p.name}</div><div class="pp-price">${fmt(p.sell)}</div><div class="pp-stock">${p.current} in stock</div></div>`;
+  1324→    }).join(''):'<div class="empty-state" style="grid-column:1/-1"><i class="fa-solid fa-box-open"></i><h3>No products</h3></div>';
+  1325→  }
+  1326→  drawProducts();drawCart();
+  1327→  $('#posSearch').addEventListener('input',e=>{curSearch=e.target.value;drawProducts()});
+  1328→  $$('#posCats .chip').forEach(c=>c.addEventListener('click',()=>{$$('#posCats .chip').forEach(x=>x.classList.remove('active'));c.classList.add('active');curCat=c.dataset.cat;drawProducts()}));
+  1329→};
+  1330→window.addToCart=function(id){
+  1331→  const p=currentStoreInv().find(x=>x.id===id);if(!p||p.current===0)return;
+  1332→  const ex=cart.find(c=>c.id===id);
+  1333→  if(ex){if(ex.qty>=p.current){toast('Not enough stock','warn');return}ex.qty++}
+  1334→  else cart.push({id,name:p.name,price:p.sell,qty:1,maxStock:p.current});
+  1335→  drawCart();
+  1336→};
+  1337→window.removeFromCart=function(id){cart=cart.filter(c=>c.id!==id);drawCart()};
+  1338→window.changeQty=function(id,d){
+  1339→  const c=cart.find(x=>x.id===id);if(!c)return;
+  1340→  c.qty+=d;if(c.qty<=0)cart=cart.filter(x=>x.id!==id);
+  1341→  else if(c.qty>c.maxStock){c.qty=c.maxStock;toast('Reached stock limit','warn')}
+  1342→  drawCart();
+  1343→};
+  1344→window.clearCart=function(){cart=[];drawCart()};
+  1345→function drawCart(){
+  1346→  const el=$('#cartItems');if(!el)return;
+  1347→  el.innerHTML=cart.length?cart.map(c=>`<div class="cart-item">
+  1348→    <div class="ci-name">${c.name}<br><small class="text-muted">${fmt(c.price)}</small></div>
+  1349→    <div class="qty-ctrl"><button onclick="changeQty('${c.id}',-1)">−</button><span>${c.qty}</span><button onclick="changeQty('${c.id}',1)">+</button></div>
+  1350→    <div class="ci-price">${fmt(c.price*c.qty)}</div>
+  1351→    <button class="icon-btn" onclick="removeFromCart('${c.id}')"><i class="fa-solid fa-xmark"></i></button>
+  1352→  </div>`).join(''):'<div class="empty-state" style="padding:30px 10px"><i class="fa-solid fa-cart-shopping"></i><h3>Cart empty</h3><p>Tap products to add</p></div>';
+  1353→  const total=cart.reduce((a,b)=>a+b.price*b.qty,0);
+  1354→  $('#cartTotal').textContent=fmt(total);
+  1355→}
+  1356→window.checkout=function(){
+  1357→  if(!cart.length){toast('Cart is empty','warn');return}
+  1358→  const total=cart.reduce((a,b)=>a+b.price*b.qty,0);
+  1359→  openModal('Complete Sale',
+  1360→    `<div class="text-center" style="padding:14px 0">
+  1361→      <div style="font-size:13px;color:var(--text-muted)">Total Due</div>
+  1362→      <div style="font-size:34px;font-weight:800;color:var(--crimson)">${fmt(total)}</div>
+  1363→      <div style="margin-top:10px"><span class="badge badge-blue">${($('#payMethod').value||'cash').toUpperCase()}</span></div>
+  1364→      <div style="margin-top:14px;font-size:12px;color:var(--text-muted)">${cart.length} item(s) · ${cart.reduce((a,b)=>a+b.qty,0)} units</div>
+  1365→    </div>`,
+  1366→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-emerald" onclick="confirmCheckout()"><i class="fa-solid fa-check"></i> Confirm Sale</button>`);
+  1367→};
+  1368→window.confirmCheckout=function(){
+  1369→  const total=cart.reduce((a,b)=>a+b.price*b.qty,0);
+  1370→  const sale={id:uid('sale'),items:cart.map(c=>({id:c.id,name:c.name,qty:c.qty,price:c.price,cost:currentStoreInv().find(p=>p.id===c.id).cost})),total,staffId:currentUser.id,storeId:state.currentStoreId,timestamp:Date.now(),paymentMethod:$('#payMethod').value||'cash'};
+  1371→  state.sales.push(sale);
+  1372→  // deduct stock
+  1373→  cart.forEach(c=>{const p=currentStoreInv().find(x=>x.id===c.id);if(p){p.current-=c.qty;if(p.current<0)p.current=0}});
+  1374→  saveState();cart=[];closeModal();
+  1375→  toast('Sale completed: '+fmt(total),'success');
+  1376→  navigate('pos');
+  1377→  // ask whether to print receipt (non-blocking)
+  1378→  setTimeout(()=>{
+  1379→    if(confirm('Sale completed: '+fmt(total)+'\n\nPrint receipt?')) printReceipt(sale);
+  1380→  },100);
+  1381→};
+  1382→function printReceipt(sale){
+  1383→  const w=window.open('','_blank','width=380,height=600');
+  1384→  if(!w)return;
+  1385→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+  1386→  w.document.write(`<html><head><title>Receipt ${sale.id}</title><style>body{font-family:monospace;font-size:12px;padding:14px;color:#000}h2{text-align:center;margin:0;font-size:16px}.ctr{text-align:center}.r{display:flex;justify-content:space-between;border-bottom:1px dashed #000;padding:3px 0}.t{font-size:16px;font-weight:bold;border-top:2px solid #000;margin-top:8px;padding-top:6px}</style></head><body>
+  1387→    <h2>VinoCellar Pro</h2><div class="ctr">${store.name}<br>${store.location}<br>Tel: +254 700 000 000</div><hr>
+  1388→    <div class="r"><span>Receipt:</span><span>${sale.id}</span></div>
+  1389→    <div class="r"><span>Date:</span><span>${new Date(sale.timestamp).toLocaleString()}</span></div>
+  1390→    <div class="r"><span>Cashier:</span><span>${currentUser.name}</span></div>
+  1391→    <hr>${sale.items.map(i=>`<div class="r"><span>${i.qty}× ${i.name}</span><span>${fmt(i.price*i.qty)}</span></div>`).join('')}
+  1392→    <div class="t r"><span>TOTAL (${sale.paymentMethod.toUpperCase()})</span><span>${fmt(sale.total)}</span></div>
+  1393→    <div class="ctr" style="margin-top:18px">Thank you!<br>Powered by VinoCellar Pro</div>
+  1394→    <script>window.print()<\/script></body></html>`);
+  1395→  w.document.close();
+  1396→}
+  1397→
+  1398→/* ----- SUPPLIERS ----- */
+  1399→RENDERERS.suppliers=function(){
+  1400→  let html=`<div class="page-header"><div><h2>Suppliers</h2><p>${state.suppliers.length} suppliers</p></div><div class="page-actions"><button class="btn btn-primary btn-sm" onclick="openSupplierModal()"><i class="fa-solid fa-plus"></i> Add Supplier</button></div></div>
+  1401→  <div class="card" style="padding:0"><div class="table-wrap"><table><thead><tr><th>Name</th><th>Contact</th><th>Phone</th><th>Email</th><th>Products</th><th>Items Supplied</th><th>Actions</th></tr></thead><tbody>
+  1402→    ${state.suppliers.map(s=>{const cnt=state.inventory.filter(p=>p.supplierId===s.id).length;return `<tr><td><b>${s.name}</b></td><td>${s.contact}</td><td>${s.phone}</td><td>${s.email}</td><td><span class="badge badge-purple">${s.products}</span></td><td>${cnt}</td><td><div class="row-actions"><button onclick="openSupplierModal('${s.id}')"><i class="fa-solid fa-pen"></i></button><button class="delete" onclick="deleteSupplier('${s.id}')"><i class="fa-solid fa-trash"></i></button></div></td></tr>`}).join('')}
+  1403→  </tbody></table></div></div>`;
+  1404→  $('#content').innerHTML=html;
+  1405→};
+  1406→window.openSupplierModal=function(id){
+  1407→  const s=id?state.suppliers.find(x=>x.id===id):null;
+  1408→  openModal(s?'Edit Supplier':'Add Supplier',
+  1409→    `<div class="form-grid">
+  1410→      <div class="form-group"><label>Company Name</label><input id="supName" class="form-control" value="${s?s.name:''}"></div>
+  1411→      <div class="form-group"><label>Contact Person</label><input id="supContact" class="form-control" value="${s?s.contact:''}"></div>
+  1412→      <div class="form-group"><label>Phone</label><input id="supPhone" class="form-control" value="${s?s.phone:''}"></div>
+  1413→      <div class="form-group"><label>Email</label><input id="supEmail" class="form-control" value="${s?s.email:''}"></div>
+  1414→      <div class="form-group"><label>Products/Category</label><input id="supProducts" class="form-control" value="${s?s.products:''}"></div>
+  1415→    </div>`,
+  1416→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveSupplier('${id||''}')"><i class="fa-solid fa-check"></i> Save</button>`);
+  1417→};
+  1418→window.saveSupplier=function(id){
+  1419→  const get=v=>$('#'+v).value.trim();
+  1420→  if(!get('supName')){toast('Name required','error');return}
+  1421→  if(id){Object.assign(state.suppliers.find(x=>x.id===id),{name:get('supName'),contact:get('supContact'),phone:get('supPhone'),email:get('supEmail'),products:get('supProducts')})}
+  1422→  else{state.suppliers.push({id:uid('sup'),name:get('supName'),contact:get('supContact'),phone:get('supPhone'),email:get('supEmail'),products:get('supProducts')})}
+  1423→  saveState();closeModal();toast('Supplier saved','success');navigate('suppliers');
+  1424→};
+  1425→window.deleteSupplier=function(id){if(!confirm('Delete supplier?'))return;state.suppliers=state.suppliers.filter(s=>s.id!==id);saveState();toast('Deleted','success');navigate('suppliers')};
+  1426→
+  1427→/* ----- SALES ANALYTICS ----- */
+  1428→RENDERERS.analytics=function(){
+  1429→  const sales=state.sales.filter(s=>s.storeId===state.currentStoreId);
+  1430→  const totalRev=sales.reduce((a,b)=>a+b.total,0);
+  1431→  const totalUnits=sales.reduce((a,b)=>a+b.items.reduce((x,y)=>x+y.qty,0),0);
+  1432→  const avg=sales.length?totalRev/sales.length:0;
+  1433→  let html=`<div class="page-header"><div><h2>Sales Analytics</h2><p>Performance insights for ${state.stores.find(s=>s.id===state.currentStoreId).name}</p></div></div>
+  1434→  <div class="stat-grid">
+  1435→    <div class="stat-card stat-crimson"><div class="label">Total Revenue</div><div class="value">${fmt(totalRev)}</div><div class="delta">All time</div><i class="fa-solid fa-money-bill icon"></i></div>
+  1436→    <div class="stat-card stat-emerald"><div class="label">Units Sold</div><div class="value">${totalUnits}</div><div class="delta">units</div><i class="fa-solid fa-cubes icon"></i></div>
+  1437→    <div class="stat-card stat-blue"><div class="label">Transactions</div><div class="value">${sales.length}</div><div class="delta">total sales</div><i class="fa-solid fa-receipt icon"></i></div>
+  1438→    <div class="stat-card stat-amber"><div class="label">Avg Sale Value</div><div class="value">${fmt(avg)}</div><div class="delta">per transaction</div><i class="fa-solid fa-chart-line icon"></i></div>
+  1439→  </div>
+  1440→  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
+  1441→    <div class="card"><div class="card-header"><h3>30-Day Sales Trend</h3></div><canvas id="trendChart" height="200"></canvas></div>
+  1442→    <div class="card"><div class="card-header"><h3>Sales by Category</h3></div><canvas id="catChart" height="200"></canvas></div>
+  1443→  </div>
+  1444→  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
+  1445→    <div class="card"><div class="card-header"><h3>Top 10 Products (Revenue)</h3></div><canvas id="top10Chart" height="220"></canvas></div>
+  1446→    <div class="card"><div class="card-header"><h3>Payment Methods</h3></div><canvas id="payChart" height="220"></canvas></div>
+  1447→  </div>`;
+  1448→  $('#content').innerHTML=html;
+  1449→  if(window.innerWidth<=1024)$$('.dash-grid').forEach(g=>g.style.gridTemplateColumns='1fr');
+  1450→  // 30-day trend
+  1451→  const days=[];const revs=[];
+  1452→  for(let d=29;d>=0;d--){const dt=new Date(Date.now()-d*86400000);days.push(dt.getDate());revs.push(sales.filter(s=>new Date(s.timestamp).toDateString()===dt.toDateString()).reduce((a,b)=>a+b.total,0))}
+  1453→  charts.trend=new Chart($('#trendChart'),{type:'line',data:{labels:days,datasets:[{label:'Revenue',data:revs,borderColor:'#DC2626',backgroundColor:'rgba(220,38,38,.1)',fill:true,tension:.3}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+  1454→  // category
+  1455→  const catMap={};sales.forEach(s=>s.items.forEach(i=>{const p=state.inventory.find(x=>x.id===i.id);const cat=p?p.category:'Other';catMap[cat]=(catMap[cat]||0)+i.price*i.qty}));
+  1456→  charts.cat=new Chart($('#catChart'),{type:'doughnut',data:{labels:Object.keys(catMap),datasets:[{data:Object.values(catMap),backgroundColor:['#DC2626','#F59E0B','#10B981','#3B82F6','#8B5CF6','#14B8A6','#EC4899','#F97316','#6366F1','#A855F7']}]},options:{responsive:true,plugins:{legend:{position:'right'}}}});
+  1457→  // top 10
+  1458→  const sellerMap={};sales.forEach(s=>s.items.forEach(i=>{sellerMap[i.name]=(sellerMap[i.name]||0)+i.price*i.qty}));
+  1459→  const top10=Object.entries(sellerMap).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  1460→  charts.top10=new Chart($('#top10Chart'),{type:'bar',data:{labels:top10.map(t=>t[0].split(' ').slice(0,2).join(' ')),datasets:[{data:top10.map(t=>t[1]),backgroundColor:'#F59E0B',borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+  1461→  // payment
+  1462→  const payMap={};sales.forEach(s=>payMap[s.paymentMethod]=(payMap[s.paymentMethod]||0)+s.total);
+  1463→  charts.pay=new Chart($('#payChart'),{type:'pie',data:{labels:Object.keys(payMap).map(k=>k.charAt(0).toUpperCase()+k.slice(1)),datasets:[{data:Object.values(payMap),backgroundColor:['#10B981','#3B82F6','#F59E0B']}]},options:{responsive:true,plugins:{legend:{position:'right'}}}});
+  1464→};
+  1465→
+  1466→/* ----- PROFIT ANALYTICS ----- */
+  1467→RENDERERS.profit=function(){
+  1468→  const sales=state.sales.filter(s=>s.storeId===state.currentStoreId);
+  1469→  const exps=state.expenses.filter(e=>e.storeId===state.currentStoreId);
+  1470→  let rev=0,cost=0;
+  1471→  sales.forEach(s=>s.items.forEach(i=>{rev+=i.price*i.qty;cost+=i.cost*i.qty}));
+  1472→  const profit=rev-cost;const pct=rev?(profit/rev*100).toFixed(1):0;
+  1473→  const totalExp=exps.reduce((a,b)=>a+b.amount,0);
+  1474→  const netProfit=profit-totalExp;
+  1475→  const netPct=rev?(netProfit/rev*100).toFixed(1):0;
+  1476→  let html=`<div class="page-header"><div><h2>Profit Analytics</h2><p>Margin and profitability analysis</p></div>
+  1477→    <div class="page-actions"><button class="btn btn-emerald btn-sm" onclick="exportProfitReport()"><i class="fa-solid fa-file-pdf"></i> Export PDF</button></div></div>
+  1478→  <div class="stat-grid">
+  1479→    <div class="stat-card stat-emerald"><div class="label">Gross Profit</div><div class="value">${fmt(profit)}</div><div class="delta">${pct}% margin</div><i class="fa-solid fa-coins icon"></i></div>
+  1480→    <div class="stat-card stat-blue"><div class="label">Revenue</div><div class="value">${fmt(rev)}</div><div class="delta">total sales</div><i class="fa-solid fa-money-bill-trend-up icon"></i></div>
+  1481→    <div class="stat-card stat-crimson"><div class="label">Cost of Goods</div><div class="value">${fmt(cost)}</div><div class="delta">inventory cost</div><i class="fa-solid fa-warehouse icon"></i></div>
+  1482→    <div class="stat-card stat-amber"><div class="label">Operating Expenses</div><div class="value">${fmt(totalExp)}</div><div class="delta">${exps.length} entries</div><i class="fa-solid fa-receipt icon"></i></div>
+  1483→    <div class="stat-card stat-purple"><div class="label">Net Profit</div><div class="value">${fmt(netProfit)}</div><div class="delta">${netPct}% net margin</div><i class="fa-solid fa-piggy-bank icon"></i></div>
+  1484→  </div>
+  1485→  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
+  1486→    <div class="card"><div class="card-header"><h3>Daily Profit Trend (30 days)</h3></div><canvas id="profChart" height="200"></canvas></div>
+  1487→    <div class="card"><div class="card-header"><h3>Top 10 by Profit</h3></div><canvas id="profTopChart" height="200"></canvas></div>
+  1488→  </div>
+  1489→  <div class="card"><div class="card-header"><h3>Expense Breakdown by Category</h3></div>
+  1490→    <div style="display:flex;gap:8px;flex-wrap:wrap">${['Rent','Utilities','Salaries','Inventory','Marketing','Maintenance','Other'].map(c=>{const t=exps.filter(e=>e.category===c).reduce((a,b)=>a+b.amount,0);if(!t)return'';const cls={Rent:'badge-red',Utilities:'badge-gold',Salaries:'badge-blue',Inventory:'badge-green',Marketing:'badge-purple',Maintenance:'badge-teal',Other:'badge-gray'}[c];return `<div style="flex:1;min-width:120px;text-align:center;padding:10px;background:var(--bg-alt);border-radius:10px"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase">${c}</div><div style="font-size:16px;font-weight:800;margin-top:4px">${fmt(t)}</div></div>`}).join('')}</div>
+  1491→  </div>
+  1492→  <div class="card"><div class="card-header"><h3>Profit by Product</h3></div>
+  1493→    <div class="table-wrap"><table><thead><tr><th>Product</th><th>Units Sold</th><th>Revenue</th><th>Cost</th><th>Profit</th><th>Margin</th></tr></thead><tbody>
+  1494→      ${(()=>{const m={};sales.forEach(s=>s.items.forEach(i=>{if(!m[i.id])m[i.id]={name:i.name,units:0,rev:0,cost:0};m[i.id].units+=i.qty;m[i.id].rev+=i.price*i.qty;m[i.id].cost+=i.cost*i.qty}));return Object.values(m).sort((a,b)=>(b.rev-b.cost)-(a.rev-a.cost)).map(x=>{const p=x.rev-x.cost;const pc=x.rev?(p/x.rev*100).toFixed(0):0;return `<tr><td><b>${x.name}</b></td><td>${x.units}</td><td>${fmt(x.rev)}</td><td>${fmt(x.cost)}</td><td><b class="text-emerald">${fmt(p)}</b></td><td><span class="badge ${pc>=40?'badge-green':pc>=20?'badge-gold':'badge-red'}">${pc}%</span></td></tr>`}).join('')})()}
+  1495→    </tbody></table></div></div>`;
+  1496→  $('#content').innerHTML=html;
+  1497→  if(window.innerWidth<=1024)$$('.dash-grid').forEach(g=>g.style.gridTemplateColumns='1fr');
+  1498→  const days=[],profits=[];
+  1499→  for(let d=29;d>=0;d--){const dt=new Date(Date.now()-d*86400000);days.push(dt.getDate());const ss=sales.filter(s=>new Date(s.timestamp).toDateString()===dt.toDateString());profits.push(ss.reduce((a,b)=>a+b.items.reduce((x,y)=>x+(y.price-y.cost)*y.qty,0),0))}
+  1500→  charts.prof=new Chart($('#profChart'),{type:'bar',data:{labels:days,datasets:[{label:'Profit',data:profits,backgroundColor:'#10B981',borderRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+  1501→  const m={};sales.forEach(s=>s.items.forEach(i=>{if(!m[i.id])m[i.id]={name:i.name,profit:0};m[i.id].profit+=(i.price-i.cost)*i.qty}));
+  1502→  const top=Object.values(m).sort((a,b)=>b.profit-a.profit).slice(0,10);
+  1503→  charts.profTop=new Chart($('#profTopChart'),{type:'bar',data:{labels:top.map(t=>t.name.split(' ').slice(0,2).join(' ')),datasets:[{data:top.map(t=>t.profit),backgroundColor:['#10B981','#14B8A6','#3B82F6','#8B5CF6','#DC2626','#F59E0B','#EC4899','#F97316','#6366F1','#A855F7'],borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+  1504→};
+  1505→
+  1506→/* ----- EXPENSES ----- */
+  1507→RENDERERS.expenses=function(){
+  1508→  const exp=state.expenses.filter(e=>e.storeId===state.currentStoreId).sort((a,b)=>b.date.localeCompare(a.date));
+  1509→  const total=exp.reduce((a,b)=>a+b.amount,0);
+  1510→  const thisMonth=exp.filter(e=>e.date.slice(0,7)===todayKey().slice(0,7)).reduce((a,b)=>a+b.amount,0);
+  1511→  const cats=['Rent','Utilities','Salaries','Inventory','Marketing','Maintenance','Other'];
+  1512→  const catTotals=cats.map(c=>({cat:c,total:exp.filter(e=>e.category===c).reduce((a,b)=>a+b.amount,0)})).filter(x=>x.total>0);
+  1513→  let html=`<div class="page-header"><div><h2>Expense Tracking</h2><p>${exp.length} expense records · ${state.stores.find(s=>s.id===state.currentStoreId).name}</p></div>
+  1514→    <div class="page-actions"><button class="btn btn-primary btn-sm" onclick="openExpenseModal()"><i class="fa-solid fa-plus"></i> Add Expense</button></div></div>
+  1515→  <div class="stat-grid">
+  1516→    <div class="stat-card stat-crimson"><div class="label">Total Expenses</div><div class="value">${fmt(total)}</div><div class="delta">All time</div><i class="fa-solid fa-receipt icon"></i></div>
+  1517→    <div class="stat-card stat-amber"><div class="label">This Month</div><div class="value">${fmt(thisMonth)}</div><div class="delta">${new Date().toLocaleDateString('en-KE',{month:'long',year:'numeric'})}</div><i class="fa-solid fa-calendar icon"></i></div>
+  1518→    <div class="stat-card stat-blue"><div class="label">Records</div><div class="value">${exp.length}</div><div class="delta">entries logged</div><i class="fa-solid fa-file-lines icon"></i></div>
+  1519→    <div class="stat-card stat-purple"><div class="label">Avg / Entry</div><div class="value">${fmt(exp.length?total/exp.length:0)}</div><div class="delta">per expense</div><i class="fa-solid fa-chart-pie icon"></i></div>
+  1520→  </div>`;
+  1521→  if(catTotals.length){
+  1522→    html+=`<div class="card"><div class="card-header"><h3>Expenses by Category</h3></div>
+  1523→      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
+  1524→        <canvas id="expCatChart" height="200"></canvas>
+  1525→        <div>${catTotals.sort((a,b)=>b.total-a.total).map(c=>{const pct=total?(c.total/total*100).toFixed(0):0;const colors={Rent:'#DC2626',Utilities:'#F59E0B',Salaries:'#3B82F6',Inventory:'#10B981',Marketing:'#8B5CF6',Maintenance:'#14B8A6',Other:'#6B7280'};return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--border-light)"><div style="width:10px;height:10px;border-radius:50%;background:${colors[c.cat]}"></div><div style="flex:1"><div style="font-size:13px;font-weight:600">${c.cat}</div><div style="font-size:11px;color:var(--text-muted)">${pct}% of total</div></div><div style="font-weight:800">${fmt(c.total)}</div></div>`}).join('')}</div>
+  1526→      </div></div>`;
+  1527→  }
+  1528→  html+=`<div class="card" style="padding:0"><div class="card-header" style="padding:16px"><h3>Expense History</h3></div>
+  1529→    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Recorded By</th><th>Actions</th></tr></thead><tbody>
+  1530→      ${exp.length?exp.map(e=>{const colors={Rent:'badge-red',Utilities:'badge-gold',Salaries:'badge-blue',Inventory:'badge-green',Marketing:'badge-purple',Maintenance:'badge-teal',Other:'badge-gray'};return `<tr><td>${new Date(e.date).toLocaleDateString('en-KE',{day:'numeric',month:'short',year:'numeric'})}</td><td><span class="badge ${colors[e.category]||'badge-gray'}">${e.category}</span></td><td>${e.description}</td><td><b class="text-crimson">${fmt(e.amount)}</b></td><td>${staffName(e.recordedBy)}</td><td><div class="row-actions"><button onclick="openExpenseModal('${e.id}')"><i class="fa-solid fa-pen"></i></button><button class="delete" onclick="deleteExpense('${e.id}')"><i class="fa-solid fa-trash"></i></button></div></td></tr>`}).join(''):'<tr><td colspan="6"><div class="empty-state"><i class="fa-solid fa-receipt"></i><h3>No expenses yet</h3><p>Add your first expense above.</p></div></td></tr>'}
+  1531→    </tbody></table></div></div>`;
+  1532→  $('#content').innerHTML=html;
+  1533→  if(window.innerWidth<=1024)$$('.dash-grid').forEach(g=>g.style.gridTemplateColumns='1fr');
+  1534→  if(catTotals.length){
+  1535→    const colors={Rent:'#DC2626',Utilities:'#F59E0B',Salaries:'#3B82F6',Inventory:'#10B981',Marketing:'#8B5CF6',Maintenance:'#14B8A6',Other:'#6B7280'};
+  1536→    charts.expCat=new Chart($('#expCatChart'),{type:'doughnut',data:{labels:catTotals.map(c=>c.cat),datasets:[{data:catTotals.map(c=>c.total),backgroundColor:catTotals.map(c=>colors[c.cat])}]},options:{responsive:true,plugins:{legend:{position:'bottom'}}}});
+  1537→  }
+  1538→};
+  1539→window.openExpenseModal=function(id){
+  1540→  const e=id?state.expenses.find(x=>x.id===id):null;
+  1541→  const cats=['Rent','Utilities','Salaries','Inventory','Marketing','Maintenance','Other'];
+  1542→  openModal(e?'Edit Expense':'Add Expense',
+  1543→    `<div class="form-grid">
+  1544→      <div class="form-group"><label>Date</label><input type="date" id="expDate" class="form-control" value="${e?e.date:todayKey()}"></div>
+  1545→      <div class="form-group"><label>Category</label><select id="expCategory" class="form-control">${cats.map(c=>`<option ${e&&e.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+  1546→      <div class="form-group"><label>Amount (KSh)</label><input type="number" id="expAmount" class="form-control" value="${e?e.amount:''}" min="0" step="100"></div>
+  1547→      <div class="form-group"><label>Description</label><input id="expDesc" class="form-control" value="${e?e.description:''}"></div>
+  1548→    </div>`,
+  1549→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveExpense('${id||''}')"><i class="fa-solid fa-check"></i> Save</button>`);
+  1550→};
+  1551→window.saveExpense=function(id){
+  1552→  const get=v=>$('#'+v).value.trim();
+  1553→  if(!get('expDate')||!get('expAmount')){toast('Date and amount required','error');return}
+  1554→  const data={date:get('expDate'),category:get('expCategory'),amount:parseFloat(get('expAmount'))||0,description:get('expDesc')||get('expCategory')};
+  1555→  if(id){Object.assign(state.expenses.find(x=>x.id===id),data);toast('Expense updated','success')}
+  1556→  else{data.id=uid('e');data.storeId=state.currentStoreId;data.recordedBy=currentUser.id;state.expenses.push(data);toast('Expense added','success')}
+  1557→  saveState();closeModal();navigate('expenses');
+  1558→};
+  1559→window.deleteExpense=function(id){if(!confirm('Delete this expense?'))return;state.expenses=state.expenses.filter(e=>e.id!==id);saveState();toast('Deleted','success');navigate('expenses')};
+  1560→
+  1561→/* ----- PDF REPORTS ----- */
+  1562→RENDERERS.reports=function(){
+  1563→  let html=`<div class="page-header"><div><h2>PDF Reports</h2><p>Export professional PDF reports for printing, sharing, or accounting</p></div></div>
+  1564→  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px">
+  1565→    <div class="card" style="border-top:4px solid var(--crimson);cursor:pointer" onclick="exportSalesReport()">
+  1566→      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#EF4444,#DC2626);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-chart-line"></i></div><div><h3 style="font-size:15px;font-weight:700">Sales Report</h3><p style="font-size:11px;color:var(--text-muted)">All transactions & revenue</p></div></div>
+  1567→      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Detailed breakdown of all sales including items sold, payment methods, daily totals, and top performers.</p>
+  1568→      <button class="btn btn-primary btn-block btn-sm"><i class="fa-solid fa-file-pdf"></i> Generate PDF</button>
+  1569→    </div>
+  1570→    <div class="card" style="border-top:4px solid var(--amber);cursor:pointer" onclick="exportInventoryReport()">
+  1571→      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#FBBF24,#F59E0B);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-boxes-stacked"></i></div><div><h3 style="font-size:15px;font-weight:700">Inventory Report</h3><p style="font-size:11px;color:var(--text-muted)">Current stock & valuation</p></div></div>
+  1572→      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Full inventory listing with quantities, costs, sell prices, margins, reorder levels, and stock status indicators.</p>
+  1573→      <button class="btn btn-amber btn-block btn-sm"><i class="fa-solid fa-file-pdf"></i> Generate PDF</button>
+  1574→    </div>
+  1575→    <div class="card" style="border-top:4px solid var(--emerald);cursor:pointer" onclick="exportProfitReport()">
+  1576→      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#34D399,#10B981);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-coins"></i></div><div><h3 style="font-size:15px;font-weight:700">Profit & Loss</h3><p style="font-size:11px;color:var(--text-muted)">Revenue, costs & net profit</p></div></div>
+  1577→      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Complete P&L statement with gross profit, operating expenses by category, and net profit margin analysis.</p>
+  1578→      <button class="btn btn-emerald btn-block btn-sm"><i class="fa-solid fa-file-pdf"></i> Generate PDF</button>
+  1579→    </div>
+  1580→    <div class="card" style="border-top:4px solid var(--blue);cursor:pointer" onclick="exportExpenseReport()">
+  1581→      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#60A5FA,#3B82F6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-receipt"></i></div><div><h3 style="font-size:15px;font-weight:700">Expense Report</h3><p style="font-size:11px;color:var(--text-muted)">All recorded expenses</p></div></div>
+  1582→      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Categorized breakdown of all expenses with daily totals, category subtotals, and grand total for the period.</p>
+  1583→      <button class="btn btn-blue btn-block btn-sm"><i class="fa-solid fa-file-pdf"></i> Generate PDF</button>
+  1584→    </div>
+  1585→    <div class="card" style="border-top:4px solid var(--purple);cursor:pointer" onclick="exportReconciliationReport()">
+  1586→      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#A78BFA,#8B5CF6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-scale-balanced"></i></div><div><h3 style="font-size:15px;font-weight:700">Daily Reconciliation</h3><p style="font-size:11px;color:var(--text-muted)">Stock variance audit</p></div></div>
+  1587→      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Today's reconciliation showing opening stock, sales, additions, expected vs actual closing, and variance per item.</p>
+  1588→      <button class="btn btn-block btn-sm" style="background:var(--purple);color:#fff"><i class="fa-solid fa-file-pdf"></i> Generate PDF</button>
+  1589→    </div>
+  1590→    <div class="card" style="border-top:4px solid var(--teal);cursor:pointer" onclick="exportStockTakeReport()">
+  1591→      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#2DD4BF,#14B8A6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-clipboard-check"></i></div><div><h3 style="font-size:15px;font-weight:700">Stock Count Audit</h3><p style="font-size:11px;color:var(--text-muted)">Historical count records</p></div></div>
+  1592→      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">All stock count sessions with expected vs counted quantities, variances, approver, and timestamp for audit trails.</p>
+  1593→      <button class="btn btn-block btn-sm" style="background:var(--teal);color:#fff"><i class="fa-solid fa-file-pdf"></i> Generate PDF</button>
+  1594→    </div>
+  1595→  </div>`;
+  1596→  $('#content').innerHTML=html;
+  1597→};
+  1598→function pdfHeader(doc,title,subtitle){
+  1599→  const w=doc.internal.pageSize.getWidth();
+  1600→  doc.setFillColor(31,17,41);doc.rect(0,0,w,28,'F');
+  1601→  doc.setTextColor(255,255,255);doc.setFontSize(16);doc.setFont('helvetica','bold');
+  1602→  doc.text('VinoCellar Pro',14,13);
+  1603→  doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(245,158,11);
+  1604→  doc.text('Wine & Spirits Inventory Management',14,21);
+  1605→  doc.setTextColor(31,17,41);doc.setFontSize(14);doc.setFont('helvetica','bold');
+  1606→  doc.text(title,14,42);
+  1607→  doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(107,114,128);
+  1608→  doc.text(subtitle,14,49);
+  1609→  doc.setDrawColor(220,38,38);doc.setLineWidth(0.8);doc.line(14,53,w-14,53);
+  1610→}
+  1611→function pdfFooter(doc){
+  1612→  const w=doc.internal.pageSize.getWidth();const h=doc.internal.pageSize.getHeight();
+  1613→  doc.setFontSize(8);doc.setTextColor(156,163,175);doc.setFont('helvetica','normal');
+  1614→  const pages=doc.internal.getNumberOfPages();
+  1615→  for(let i=1;i<=pages;i++){
+  1616→    doc.setPage(i);
+  1617→    doc.text('Generated '+new Date().toLocaleString('en-KE')+'  ·  VinoCellar Pro  ·  Page '+i+' of '+pages,14,h-10);
+  1618→  }
+  1619→}
+  1620→function downloadPdf(doc,filename){
+  1621→  pdfFooter(doc);
+  1622→  doc.save(filename);
+  1623→  toast('PDF downloaded: '+filename,'success');
+  1624→}
+  1625→window.exportSalesReport=function(){
+  1626→  const sales=state.sales.filter(s=>s.storeId===state.currentStoreId).sort((a,b)=>b.timestamp-a.timestamp);
+  1627→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+  1628→  const totalRev=sales.reduce((a,b)=>a+b.total,0);
+  1629→  const totalUnits=sales.reduce((a,b)=>a+b.items.reduce((x,y)=>x+y.qty,0),0);
+  1630→  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+  1631→  pdfHeader(doc,'Sales Report',store.name+' · '+sales.length+' transactions · Total: '+fmt(totalRev));
+  1632→  doc.autoTable({startY:58,head:[['Date','Items','Units','Payment','Total']],body:sales.map(s=>[new Date(s.timestamp).toLocaleString('en-KE'),s.items.length,s.items.reduce((a,b)=>a+b.qty,0),s.paymentMethod.toUpperCase(),fmt(s.total)]),foot:[['','','','','TOTAL: '+fmt(totalRev)]],headStyles:{fillColor:[220,38,38]},footStyles:{fillColor:[31,17,41],textColor:[255,255,255]},styles:{fontSize:9}});
+  1633→  // summary box
+  1634→  const fy=doc.lastAutoTable.finalY+10;
+  1635→  doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(31,17,41);
+  1636→  doc.text('Summary',14,fy);
+  1637→  doc.autoTable({startY:fy+4,theme:'plain',body:[['Total Transactions',String(sales.length)],['Total Revenue',fmt(totalRev)],['Units Sold',String(totalUnits)],['Average Sale Value',fmt(sales.length?totalRev/sales.length:0)]],styles:{fontSize:10}});
+  1638→  downloadPdf(doc,'sales-report-'+todayKey()+'.pdf');
+  1639→};
+  1640→window.exportInventoryReport=function(){
+  1641→  const inv=currentStoreInv();
+  1642→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+  1643→  const totalVal=inv.reduce((a,b)=>a+b.current*b.cost,0);
+  1644→  const totalSellVal=inv.reduce((a,b)=>a+b.current*b.sell,0);
+  1645→  const lowStock=inv.filter(p=>p.current<=p.reorder).length;
+  1646→  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+  1647→  pdfHeader(doc,'Inventory Report',store.name+' · '+inv.length+' products · Stock value: '+fmt(totalVal));
+  1648→  doc.autoTable({startY:58,head:[['Product','Category','SKU','Stock','Reorder','Cost','Price','Margin','Status']],body:inv.map(p=>{const m=p.sell-p.cost;const st=p.current===0?'OUT':p.current<=p.reorder?'LOW':'OK';return[p.name,p.category,p.sku,p.current,p.reorder,fmt(p.cost),fmt(p.sell),fmt(m),st]}),headStyles:{fillColor:[245,158,11]},columnStyles:{0:{cellWidth:50}},styles:{fontSize:8}});
+  1649→  const fy=doc.lastAutoTable.finalY+10;
+  1650→  doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(31,17,41);
+  1651→  doc.text('Inventory Summary',14,fy);
+  1652→  doc.autoTable({startY:fy+4,theme:'plain',body:[['Total Products',String(inv.length)],['Total Units',String(inv.reduce((a,b)=>a+b.current,0))],['Inventory Cost Value',fmt(totalVal)],['Inventory Sell Value',fmt(totalSellVal)],['Low Stock Items',String(lowStock)],['Out of Stock Items',String(inv.filter(p=>p.current===0).length)]],styles:{fontSize:10}});
+  1653→  downloadPdf(doc,'inventory-report-'+todayKey()+'.pdf');
+  1654→};
+  1655→window.exportProfitReport=function(){
+  1656→  const sales=state.sales.filter(s=>s.storeId===state.currentStoreId);
+  1657→  const exps=state.expenses.filter(e=>e.storeId===state.currentStoreId);
+  1658→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+  1659→  let rev=0,cogs=0;
+  1660→  sales.forEach(s=>s.items.forEach(i=>{rev+=i.price*i.qty;cogs+=i.cost*i.qty}));
+  1661→  const grossProfit=rev-cogs;
+  1662→  const totalExp=exps.reduce((a,b)=>a+b.amount,0);
+  1663→  const netProfit=grossProfit-totalExp;
+  1664→  const gPct=rev?(grossProfit/rev*100).toFixed(1):0;
+  1665→  const nPct=rev?(netProfit/rev*100).toFixed(1):0;
+  1666→  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+  1667→  pdfHeader(doc,'Profit & Loss Statement',store.name+' · Generated '+new Date().toLocaleDateString('en-KE'));
+  1668→  // P&L statement
+  1669→  doc.autoTable({startY:58,theme:'plain',body:[
+  1670→    ['REVENUE',''],
+  1671→    ['Gross Sales',fmt(rev)],
+  1672→    ['Cost of Goods Sold (COGS)',fmt(cogs)],
+  1673→    ['Gross Profit',fmt(grossProfit)],
+  1674→    ['Gross Margin %',gPct+'%'],
+  1675→    ['',''],
+  1676→    ['OPERATING EXPENSES',''],
+  1677→    ...['Rent','Utilities','Salaries','Inventory','Marketing','Maintenance','Other'].map(c=>[c,fmt(exps.filter(e=>e.category===c).reduce((a,b)=>a+b.amount,0))]).filter(r=>r[1]!=='KSh 0'),
+  1678→    ['Total Operating Expenses',fmt(totalExp)],
+  1679→    ['',''],
+  1680→    ['NET PROFIT',fmt(netProfit)],
+  1681→    ['Net Margin %',nPct+'%']
+  1682→  ],columnStyles:{0:{fontStyle:'bold',textColor:[31,17,41]},1:{halign:'right',fontStyle:'bold'}},didParseCell:function(d){const lbl=d.cell.raw[0];if(lbl==='Gross Profit'||lbl==='NET PROFIT'||lbl==='Total Operating Expenses'||lbl==='REVENUE'||lbl==='OPERATING EXPENSES'){d.cell.styles.fontStyle='bold';d.cell.styles.fillColor=[243,238,230];if(lbl==='NET PROFIT'){d.cell.styles.textColor=[16,185,129]}if(lbl==='Gross Profit'){d.cell.styles.textColor=[16,185,129]}if(lbl==='Total Operating Expenses'){d.cell.styles.textColor=[220,38,38]}}},styles:{fontSize:10}});
+  1683→  // expense detail table
+  1684→  const fy=doc.lastAutoTable.finalY+14;
+  1685→  if(fy<240){
+  1686→    doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(31,17,41);
+  1687→    doc.text('Expense Detail',14,fy);
+  1688→    doc.autoTable({startY:fy+4,head:[['Date','Category','Description','Amount']],body:exps.sort((a,b)=>b.date.localeCompare(a.date)).map(e=>[new Date(e.date).toLocaleDateString('en-KE'),e.category,e.description,fmt(e.amount)]),foot:[['','','TOTAL',fmt(totalExp)]],headStyles:{fillColor:[220,38,38]},footStyles:{fillColor:[31,17,41],textColor:[255,255,255]},styles:{fontSize:9}});
+  1689→  }
+  1690→  downloadPdf(doc,'profit-loss-'+todayKey()+'.pdf');
+  1691→};
+  1692→window.exportExpenseReport=function(){
+  1693→  const exps=state.expenses.filter(e=>e.storeId===state.currentStoreId).sort((a,b)=>b.date.localeCompare(a.date));
+  1694→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+  1695→  const total=exps.reduce((a,b)=>a+b.amount,0);
+  1696→  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+  1697→  pdfHeader(doc,'Expense Report',store.name+' · '+exps.length+' entries · Total: '+fmt(total));
+  1698→  doc.autoTable({startY:58,head:[['Date','Category','Description','Recorded By','Amount']],body:exps.map(e=>[new Date(e.date).toLocaleDateString('en-KE'),e.category,e.description,staffName(e.recordedBy),fmt(e.amount)]),foot:[['','','','','TOTAL: '+fmt(total)]],headStyles:{fillColor:[59,130,246]},footStyles:{fillColor:[31,17,41],textColor:[255,255,255]},styles:{fontSize:9}});
+  1699→  // category breakdown
+  1700→  const fy=doc.lastAutoTable.finalY+10;
+  1701→  if(fy<240){
+  1702→    doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(31,17,41);
+  1703→    doc.text('Category Breakdown',14,fy);
+  1704→    doc.autoTable({startY:fy+4,head:[['Category','Count','Amount','% of Total']],body:['Rent','Utilities','Salaries','Inventory','Marketing','Maintenance','Other'].map(c=>{const items=exps.filter(e=>e.category===c);const t=items.reduce((a,b)=>a+b.amount,0);return [c,String(items.length),fmt(t),total?(t/total*100).toFixed(1)+'%':'0%']}).filter(r=>r[1]!=='0'),headStyles:{fillColor:[59,130,246]},styles:{fontSize:9}});
+  1705→  }
+  1706→  downloadPdf(doc,'expense-report-'+todayKey()+'.pdf');
+  1707→};
+  1708→window.exportReconciliationReport=function(){
+  1709→  const rec=state.reconciliation.find(r=>r.storeId===state.currentStoreId&&r.date===todayKey());
+  1710→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+  1711→  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+  1712→  if(!rec){pdfHeader(doc,'Daily Reconciliation',store.name+' · No record for today');doc.setFontSize(11);doc.setTextColor(107,114,128);doc.text('No reconciliation has been started for '+new Date().toLocaleDateString('en-KE'),14,60);downloadPdf(doc,'reconciliation-'+todayKey()+'.pdf');return}
+  1713→  const variance=rec.items.filter(it=>it.actualClosing!==null).reduce((a,b)=>a+(b.actualClosing-b.expectedClosing),0);
+  1714→  pdfHeader(doc,'Daily Reconciliation Report',store.name+' · '+new Date().toLocaleDateString('en-KE',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+' · Total Variance: '+variance);
+  1715→  doc.autoTable({startY:58,head:[['Product','Opening','Sales','Added','Expected','Actual','Variance']],body:rec.items.map(it=>[it.name,it.opening,it.salesToday,it.stockAdded,it.expectedClosing,it.actualClosing??'—',it.actualClosing===null?'—':(it.actualClosing-it.expectedClosing>0?'+':'')+(it.actualClosing-it.expectedClosing)]),headStyles:{fillColor:[139,92,246]},didParseCell:function(d){if(d.section==='body'&&d.column.index===6&&d.cell.raw!=='—'){const v=parseInt(d.cell.raw);d.cell.styles.textColor=v===0?[16,185,129]:v>0?[245,158,11]:[220,38,38];d.cell.styles.fontStyle='bold'}},styles:{fontSize:9}});
+  1716→  downloadPdf(doc,'reconciliation-'+todayKey()+'.pdf');
+  1717→};
+  1718→window.exportStockTakeReport=function(){
+  1719→  const takes=state.stockTakes.filter(t=>t.storeId===state.currentStoreId).sort((a,b)=>b.startedAt-a.startedAt);
+  1720→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+  1721→  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+  1722→  pdfHeader(doc,'Stock Count Audit Report',store.name+' · '+takes.length+' count sessions');
+  1723→  if(!takes.length){doc.setFontSize(11);doc.setTextColor(107,114,128);doc.text('No stock counts have been performed yet.',14,60);downloadPdf(doc,'stocktake-audit-'+todayKey()+'.pdf');return}
+  1724→  let y=58;
+  1725→  takes.forEach((t,i)=>{
+  1726→    if(y>240){doc.addPage();y=20}
+  1727→    const variance=t.items.filter(it=>it.counted!==null).reduce((a,b)=>a+(b.counted-b.expected),0);
+  1728→    doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(31,17,41);
+  1729→    doc.text('Count #'+(i+1)+' · '+new Date(t.startedAt).toLocaleString('en-KE'),14,y);y+=4;
+  1730→    doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(107,114,128);
+  1731→    doc.text('By: '+staffName(t.startedBy)+'  ·  Status: '+t.status+(t.approvedBy?'  ·  Approved by: '+staffName(t.approvedBy):'')+'  ·  Variance: '+(variance>0?'+':'')+variance,14,y);y+=6;
+  1732→    doc.autoTable({startY:y,head:[['Product','Expected','Counted','Variance']],body:t.items.filter(it=>it.counted!==null).map(it=>{const p=state.inventory.find(x=>x.id===it.inventoryId);const v=it.counted-it.expected;return [p?p.name:'?',it.expected,it.counted,(v>0?'+':'')+v]}),headStyles:{fillColor:[20,184,166]},didParseCell:function(d){if(d.section==='body'&&d.column.index===3){const v=parseInt(d.cell.raw);d.cell.styles.textColor=v===0?[16,185,129]:v>0?[245,158,11]:[220,38,38];d.cell.styles.fontStyle='bold'}},styles:{fontSize:8}});
+  1733→    y=doc.lastAutoTable.finalY+12;
+  1734→  });
+  1735→  downloadPdf(doc,'stocktake-audit-'+todayKey()+'.pdf');
+  1736→};
+  1737→
+  1738→/* ----- STAFF ----- */
+  1739→RENDERERS.staff=function(){
+  1740→  let html=`<div class="page-header"><div><h2>Staff Management</h2><p>${state.staff.length} team members</p></div><div class="page-actions"><button class="btn btn-primary btn-sm" onclick="openStaffModal()"><i class="fa-solid fa-user-plus"></i> Add Staff</button></div></div>
+  1741→  <div class="card" style="padding:0"><div class="table-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>PIN</th><th>Store</th><th>Sales</th><th>Actions</th></tr></thead><tbody>
+  1742→    ${state.staff.map(s=>{const sc=state.sales.filter(x=>x.staffId===s.id).length;const store=state.stores.find(x=>x.id===s.storeId);return `<tr><td><div class="flex items-center gap-8"><div class="user-avatar" style="width:30px;height:30px;font-size:12px;background:linear-gradient(135deg,var(--amber),var(--crimson))">${s.name.charAt(0)}</div><b>${s.name}</b></div></td><td><span class="badge ${s.role==='manager'?'badge-purple':'badge-teal'}">${s.role}</span></td><td><code style="background:var(--bg-alt);padding:3px 8px;border-radius:6px;font-weight:700;letter-spacing:2px" data-pin="${s.pin}"><span class="pin-mask">••••</span> <i class="fa-solid fa-eye pin-reveal" style="cursor:pointer;font-size:10px;margin-left:4px;color:var(--text-muted)" onclick="togglePin(this,'${s.pin}')"></i></code></td><td>${store?store.name:'—'}</td><td>${sc} sales</td><td><div class="row-actions"><button onclick="openStaffModal('${s.id}')"><i class="fa-solid fa-pen"></i></button><button class="delete" onclick="deleteStaff('${s.id}')"><i class="fa-solid fa-trash"></i></button></div></td></tr>`}).join('')}
+  1743→  </tbody></table></div></div>`;
+  1744→  $('#content').innerHTML=html;
+  1745→};
+  1746→window.openStaffModal=function(id){
+  1747→  const s=id?state.staff.find(x=>x.id===id):null;
+  1748→  openModal(s?'Edit Staff':'Add Staff',
+  1749→    `<div class="form-grid">
+  1750→      <div class="form-group"><label>Name</label><input id="stName" class="form-control" value="${s?s.name:''}"></div>
+  1751→      <div class="form-group"><label>Role</label><select id="stRole" class="form-control"><option value="staff" ${s&&s.role==='staff'?'selected':''}>Staff</option><option value="manager" ${s&&s.role==='manager'?'selected':''}>Manager</option></select></div>
+  1752→      <div class="form-group"><label>PIN (4 digits)</label><input id="stPin" type="password" class="form-control" maxlength="4" value="${s?s.pin:''}" inputmode="numeric" pattern="[0-9]*"></div>
+  1753→      <div class="form-group"><label>Store</label><select id="stStore" class="form-control">${state.stores.map(st=>`<option value="${st.id}" ${s&&s.storeId===st.id?'selected':''}>${st.name}</option>`).join('')}</select></div>
+  1754→    </div>`,
+  1755→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveStaff('${id||''}')"><i class="fa-solid fa-check"></i> Save</button>`);
+  1756→};
+  1757→window.saveStaff=function(id){
+  1758→  const get=v=>$('#'+v).value.trim();
+  1759→  if(!get('stName')||!get('stPin')||get('stPin').length!==4){toast('Name and 4-digit PIN required','error');return}
+  1760→  if(id){Object.assign(state.staff.find(x=>x.id===id),{name:get('stName'),role:get('stRole'),pin:get('stPin'),storeId:get('stStore')})}
+  1761→  else{state.staff.push({id:uid('u'),name:get('stName'),role:get('stRole'),pin:get('stPin'),storeId:get('stStore')})}
+  1762→  saveState();closeModal();toast('Staff saved','success');navigate('staff');
+  1763→};
+  1764→window.deleteStaff=function(id){if(!confirm('Delete staff member?'))return;state.staff=state.staff.filter(s=>s.id!==id);saveState();toast('Deleted','success');navigate('staff')};
+  1765→window.togglePin=function(el,pin){
+  1766→  const code=el.closest('code');
+  1767→  const mask=code.querySelector('.pin-mask');
+  1768→  if(mask.textContent==='••••'){mask.textContent=pin;el.className='fa-solid fa-eye-slash pin-reveal'}
+  1769→  else{mask.textContent='••••';el.className='fa-solid fa-eye pin-reveal'}
+  1770→};
+  1771→
+  1772→/* ----- STORES ----- */
+  1773→RENDERERS.stores=function(){
+  1774→  let html=`<div class="page-header"><div><h2>Multi-Store Management</h2><p>${state.stores.length} locations</p></div><div class="page-actions"><button class="btn btn-primary btn-sm" onclick="openStoreModal()"><i class="fa-solid fa-plus"></i> Add Store</button></div></div>
+  1775→  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">
+  1776→    ${state.stores.map(s=>{const inv=state.inventory.filter(p=>p.storeId===s.id);const val=inv.reduce((a,b)=>a+b.current*b.cost,0);const sales=state.sales.filter(x=>x.storeId===s.id);const rev=sales.reduce((a,b)=>a+b.total,0);return `<div class="card" style="border-top:4px solid ${s.id===state.currentStoreId?'var(--emerald)':'var(--border)'}">
+  1777→      <div class="flex items-center justify-between mb-12"><div class="flex items-center gap-8"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,var(--crimson),var(--purple));display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-store"></i></div><div><h3 style="font-size:15px;font-weight:700">${s.name}</h3><p style="font-size:12px;color:var(--text-muted)">${s.location}</p></div></div>${s.id===state.currentStoreId?'<span class="badge badge-green">Active</span>':''}</div>
+  1778→      <div class="kpi-row"><div class="mini-kpi"><div class="l">SKUs</div><div class="v">${inv.length}</div></div><div class="mini-kpi"><div class="l">Stock Value</div><div class="v">${fmt(val)}</div></div><div class="mini-kpi"><div class="l">Revenue</div><div class="v">${fmt(rev)}</div></div></div>
+  1779→      <div class="flex gap-8"><button class="btn btn-ghost btn-sm btn-block" onclick="switchStore('${s.id}')"><i class="fa-solid fa-right-left"></i> Switch</button><button class="btn btn-outline btn-sm" onclick="openStoreModal('${s.id}')"><i class="fa-solid fa-pen"></i></button></div>
+  1780→    </div>`}).join('')}
+  1781→  </div>`;
+  1782→  $('#content').innerHTML=html;
+  1783→};
+  1784→window.switchStore=function(id){state.currentStoreId=id;saveState();buildStoreSelector();navigate('dashboard');toast('Switched store','info')};
+  1785→window.openStoreModal=function(id){
+  1786→  const s=id?state.stores.find(x=>x.id===id):null;
+  1787→  openModal(s?'Edit Store':'Add Store',
+  1788→    `<div class="form-group"><label>Store Name</label><input id="strName" class="form-control" value="${s?s.name:''}"></div>
+  1789→     <div class="form-group"><label>Location</label><input id="strLoc" class="form-control" value="${s?s.location:''}"></div>`,
+  1790→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveStore('${id||''}')"><i class="fa-solid fa-check"></i> Save</button>`);
+  1791→};
+  1792→window.saveStore=function(id){
+  1793→  const n=$('#strName').value.trim(),l=$('#strLoc').value.trim();
+  1794→  if(!n){toast('Name required','error');return}
+  1795→  if(id){Object.assign(state.stores.find(x=>x.id===id),{name:n,location:l})}
+  1796→  else{state.stores.push({id:uid('s'),name:n,location:l})}
+  1797→  saveState();closeModal();toast('Store saved','success');navigate('stores');
+  1798→};
+  1799→
+  1800→/* ----- SETTINGS ----- */
+  1801→RENDERERS.settings=function(){
+  1802→  const lastBackup=localStorage.getItem(LS_KEY+'_lastbackup');
+  1803→  const dataSize=new Blob([JSON.stringify(state)]).size;
+  1804→  let html=`<div class="page-header"><div><h2>Settings</h2><p>System configuration and data management</p></div></div>
+  1805→  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">
+  1806→    <div class="card"><div class="card-header"><h3><i class="fa-solid fa-wifi" style="color:var(--emerald)"></i> Offline Mode</h3></div>
+  1807→      <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">VinoCellar Pro runs entirely in your browser. All data is stored locally and works without internet.</p>
+  1808→      <div class="flex items-center justify-between" style="padding:10px;background:var(--bg-alt);border-radius:10px"><span style="font-size:12px;font-weight:600">Status</span><span class="badge badge-green" id="offlineStatus">Online</span></div>
+  1809→      <p style="font-size:11px;color:var(--text-muted);margin-top:8px">Auto-syncs when connection returns.</p>
+  1810→    </div>
+  1811→    <div class="card"><div class="card-header"><h3><i class="fa-solid fa-cloud" style="color:var(--blue)"></i> Cloud Backup</h3></div>
+  1812→      <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Export your data as a backup file, or restore from a previous backup.</p>
+  1813→      <div class="flex items-center justify-between mb-8" style="padding:8px 10px;background:var(--bg-alt);border-radius:8px;font-size:12px"><span>Last backup</span><b>${lastBackup?new Date(lastBackup).toLocaleString():'Never'}</b></div>
+  1814→      <div class="flex items-center justify-between mb-8" style="padding:8px 10px;background:var(--bg-alt);border-radius:8px;font-size:12px"><span>Data size</span><b>${(dataSize/1024).toFixed(1)} KB</b></div>
+  1815→      <button class="btn btn-blue btn-block mb-8" onclick="exportBackup()"><i class="fa-solid fa-download"></i> Download Backup</button>
+  1816→      <button class="btn btn-ghost btn-block" onclick="document.getElementById('importFile').click()"><i class="fa-solid fa-upload"></i> Restore from Backup</button>
+  1817→      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importBackup(this)">
+  1818→    </div>
+  1819→    <div class="card"><div class="card-header"><h3><i class="fa-solid fa-database" style="color:var(--purple)"></i> Data Summary</h3></div>
+  1820→      <div class="h-row" style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;border-bottom:1px dashed var(--border-light)"><span>Products</span><b>${state.inventory.length}</b></div>
+  1821→      <div class="h-row" style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;border-bottom:1px dashed var(--border-light)"><span>Sales</span><b>${state.sales.length}</b></div>
+  1822→      <div class="h-row" style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;border-bottom:1px dashed var(--border-light)"><span>Suppliers</span><b>${state.suppliers.length}</b></div>
+  1823→      <div class="h-row" style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;border-bottom:1px dashed var(--border-light)"><span>Staff</span><b>${state.staff.length}</b></div>
+  1824→      <div class="h-row" style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px"><span>Stores</span><b>${state.stores.length}</b></div>
+  1825→    </div>
+  1826→    <div class="card"><div class="card-header"><h3><i class="fa-solid fa-circle-info" style="color:var(--amber)"></i> About</h3></div>
+  1827→      <p style="font-size:13px;color:var(--text-muted);line-height:1.6">VinoCellar Pro v1.0<br>Wine & Spirits Inventory Management<br>Built for offline-first retail operations.</p>
+  1828→      <p style="font-size:11px;color:var(--text-light);margin-top:10px">PIN: Manager 1234 · Staff 5678</p>
+  1829→    </div>
+  1830→    ${currentUser.role==='manager'?`<div class="card" style="border:1px solid #FECACA"><div class="card-header"><h3 style="color:var(--crimson)"><i class="fa-solid fa-triangle-exclamation"></i> Danger Zone</h3></div>
+  1831→      <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Reset all data to factory defaults. This cannot be undone.</p>
+  1832→      <button class="btn btn-danger btn-block" onclick="resetData()"><i class="fa-solid fa-rotate-left"></i> Reset All Data</button>
+  1833→    </div>`:''}
+  1834→  </div>`;
+  1835→  $('#content').innerHTML=html;
+  1836→};
+  1837→window.exportBackup=function(){
+  1838→  const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  1839→  const url=URL.createObjectURL(blob);const a=document.createElement('a');
+  1840→  a.href=url;a.download='vinocellar-backup-'+new Date().toISOString().slice(0,10)+'.json';
+  1841→  a.click();URL.revokeObjectURL(url);
+  1842→  localStorage.setItem(LS_KEY+'_lastbackup',new Date().toISOString());
+  1843→  toast('Backup downloaded','success');
+  1844→};
+  1845→window.importBackup=function(input){
+  1846→  const file=input.files[0];if(!file)return;
+  1847→  const r=new FileReader();
+  1848→  r.onload=e=>{try{const d=JSON.parse(e.target.result);if(!d.inventory)throw 0;state=d;saveState();toast('Backup restored','success');setTimeout(()=>location.reload(),800)}catch(err){toast('Invalid backup file','error')}};
+  1849→  r.readAsText(file);
+  1850→};
+  1851→window.resetData=function(){
+  1852→  if(!confirm('Reset ALL data to defaults? This cannot be undone.'))return;
+  1853→  if(!confirm('Are you absolutely sure? All sales, products, and staff will be erased.'))return;
+  1854→  localStorage.removeItem(LS_KEY);
+  1855→  state=seedState();saveState();
+  1856→  toast('Data reset to defaults','success');
+  1857→  setTimeout(()=>location.reload(),800);
+  1858→};
+  1859→
+  1860→/* ================== SCANNER ================== */
+  1861→async function startScanner(){
+  1862→  if(!('BarcodeDetector'in window)&&!navigator.mediaDevices){
+  1863→    // fallback: manual barcode entry
+  1864→    openModal('Scan Barcode',
+  1865→      `<p class="text-muted">Camera scanning not available on this device.</p><div class="form-group mt-12"><label>Enter barcode manually</label><input id="manualBarcode" class="form-control" placeholder="6001234500011" autofocus></div>`,
+  1866→      `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="lookupBarcode(document.getElementById('manualBarcode').value)"><i class="fa-solid fa-search"></i> Lookup</button>`);
+  1867→    return;
+  1868→  }
+  1869→  try{
+  1870→    scannerStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+  1871→    const video=$('#scannerVideo');video.srcObject=scannerStream;
+  1872→    $('#scannerOverlay').classList.add('show');
+  1873→    // try BarcodeDetector
+  1874→    if('BarcodeDetector'in window){
+  1875→      const det=new BarcodeDetector();
+  1876→      const scan=async()=>{
+  1877→        if(!scannerStream)return;
+  1878→        try{const codes=await det.detect(video);if(codes.length){stopScanner();lookupBarcode(codes[0].rawValue);return}}catch(e){}
+  1879→        setTimeout(scan,500);
+  1880→      };
+  1881→      scan();
+  1882→    }else{
+  1883→      // fallback - just show video and let user click
+  1884→      setTimeout(()=>{
+  1885→        stopScanner();
+  1886→        openModal('Scan Barcode',
+  1887→          `<p class="text-muted">BarcodeDetector API not supported. Enter barcode manually:</p><div class="form-group mt-12"><input id="manualBarcode" class="form-control" placeholder="6001234500011" autofocus></div>`,
+  1888→          `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="lookupBarcode(document.getElementById('manualBarcode').value)"><i class="fa-solid fa-search"></i> Lookup</button>`);
+  1889→      },3000);
+  1890→    }
+  1891→  }catch(err){
+  1892→    openModal('Scan Barcode',
+  1893→      `<p class="text-muted">Camera access denied or unavailable.</p><div class="form-group mt-12"><label>Enter barcode manually</label><input id="manualBarcode" class="form-control" placeholder="6001234500011" autofocus></div>`,
+  1894→      `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="lookupBarcode(document.getElementById('manualBarcode').value)"><i class="fa-solid fa-search"></i> Lookup</button>`);
+  1895→  }
+  1896→}
+  1897→function stopScanner(){if(scannerStream){scannerStream.getTracks().forEach(t=>t.stop());scannerStream=null}$('#scannerOverlay').classList.remove('show')}
+  1898→$('#scannerClose').addEventListener('click',stopScanner);
+  1899→$('#scanBtn').addEventListener('click',startScanner);
+  1900→window.lookupBarcode=function(code){
+  1901→  if(!code){toast('Enter a barcode','warn');return}
+  1902→  const p=state.inventory.find(x=>x.barcode===code&&x.storeId===state.currentStoreId);
+  1903→  closeModal();
+  1904→  if(p){
+  1905→    if(currentPage==='inventory')openProductModal(p.id);
+  1906→    else if(currentPage==='pos')addToCart(p.id);
+  1907→    else{navigate('inventory');setTimeout(()=>openProductModal(p.id),200)}
+  1908→    toast('Found: '+p.name,'success');
+  1909→  }else{
+  1910→    toast('No product with barcode '+code,'error');
+  1911→    if(confirm('Add new product with barcode '+code+'?')){navigate('inventory');setTimeout(()=>{openProductModal();$('#pBarcode').value=code},200)}
+  1912→  }
+  1913→};
+  1914→
+  1915→/* ================== BACKUP BUTTON ================== */
+  1916→$('#backupBtn').addEventListener('click',()=>{
+  1917→  if(currentUser&&currentUser.role==='manager')exportBackup();
+  1918→  else toast('Only managers can backup','warn');
+  1919→});
+  1920→
+  1921→/* ================== ONLINE/OFFLINE INDICATOR ================== */
+  1922→function updateOnlineStatus(){
+  1923→  const pill=$('#offlinePill');if(!pill)return;
+  1924→  if(navigator.onLine){pill.className='offline-pill online';pill.innerHTML='<i class="fa-solid fa-wifi"></i> Online'}
+  1925→  else{pill.className='offline-pill';pill.innerHTML='<i class="fa-solid fa-cloud-arrow-down"></i> Offline'}
+  1926→}
+  1927→window.addEventListener('online',()=>{updateOnlineStatus();toast('Back online. Data synced locally.','success')});
+  1928→window.addEventListener('offline',()=>{updateOnlineStatus();toast('Working offline. Changes saved locally.','info')});
+  1929→updateOnlineStatus();
+  1930→
+  1931→/* ================== INIT ================== */
+  1932→window.addEventListener('resize',()=>{
+  1933→  if(window.innerWidth<=1024)$$('.dash-grid').forEach(g=>g.style.gridTemplateColumns='1fr');
+  1934→  else $$('.dash-grid').forEach(g=>g.style.gridTemplateColumns='1fr 1fr');
+  1935→});
+  1936→</script>
+  1937→</body>
+  1938→</html>
+  1939→
