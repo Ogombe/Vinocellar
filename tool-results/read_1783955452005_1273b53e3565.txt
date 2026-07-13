@@ -1,0 +1,440 @@
+  1500→  charts.prof=new Chart($('#profChart'),{type:'bar',data:{labels:days,datasets:[{label:'Profit',data:profits,backgroundColor:'#10B981',borderRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+  1501→  const m={};sales.forEach(s=>s.items.forEach(i=>{if(!m[i.id])m[i.id]={name:i.name,profit:0};m[i.id].profit+=(i.price-i.cost)*i.qty}));
+  1502→  const top=Object.values(m).sort((a,b)=>b.profit-a.profit).slice(0,10);
+  1503→  charts.profTop=new Chart($('#profTopChart'),{type:'bar',data:{labels:top.map(t=>t.name.split(' ').slice(0,2).join(' ')),datasets:[{data:top.map(t=>t.profit),backgroundColor:['#10B981','#14B8A6','#3B82F6','#8B5CF6','#DC2626','#F59E0B','#EC4899','#F97316','#6366F1','#A855F7'],borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+  1504→};
+  1505→
+  1506→/* ----- EXPENSES ----- */
+  1507→RENDERERS.expenses=function(){
+  1508→  const exp=state.expenses.filter(e=>e.storeId===state.currentStoreId).sort((a,b)=>b.date.localeCompare(a.date));
+  1509→  const total=exp.reduce((a,b)=>a+b.amount,0);
+  1510→  const thisMonth=exp.filter(e=>e.date.slice(0,7)===todayKey().slice(0,7)).reduce((a,b)=>a+b.amount,0);
+  1511→  const cats=['Rent','Utilities','Salaries','Inventory','Marketing','Maintenance','Other'];
+  1512→  const catTotals=cats.map(c=>({cat:c,total:exp.filter(e=>e.category===c).reduce((a,b)=>a+b.amount,0)})).filter(x=>x.total>0);
+  1513→  let html=`<div class="page-header"><div><h2>Expense Tracking</h2><p>${exp.length} expense records · ${state.stores.find(s=>s.id===state.currentStoreId).name}</p></div>
+  1514→    <div class="page-actions"><button class="btn btn-primary btn-sm" onclick="openExpenseModal()"><i class="fa-solid fa-plus"></i> Add Expense</button></div></div>
+  1515→  <div class="stat-grid">
+  1516→    <div class="stat-card stat-crimson"><div class="label">Total Expenses</div><div class="value">${fmt(total)}</div><div class="delta">All time</div><i class="fa-solid fa-receipt icon"></i></div>
+  1517→    <div class="stat-card stat-amber"><div class="label">This Month</div><div class="value">${fmt(thisMonth)}</div><div class="delta">${new Date().toLocaleDateString('en-KE',{month:'long',year:'numeric'})}</div><i class="fa-solid fa-calendar icon"></i></div>
+  1518→    <div class="stat-card stat-blue"><div class="label">Records</div><div class="value">${exp.length}</div><div class="delta">entries logged</div><i class="fa-solid fa-file-lines icon"></i></div>
+  1519→    <div class="stat-card stat-purple"><div class="label">Avg / Entry</div><div class="value">${fmt(exp.length?total/exp.length:0)}</div><div class="delta">per expense</div><i class="fa-solid fa-chart-pie icon"></i></div>
+  1520→  </div>`;
+  1521→  if(catTotals.length){
+  1522→    html+=`<div class="card"><div class="card-header"><h3>Expenses by Category</h3></div>
+  1523→      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
+  1524→        <canvas id="expCatChart" height="200"></canvas>
+  1525→        <div>${catTotals.sort((a,b)=>b.total-a.total).map(c=>{const pct=total?(c.total/total*100).toFixed(0):0;const colors={Rent:'#DC2626',Utilities:'#F59E0B',Salaries:'#3B82F6',Inventory:'#10B981',Marketing:'#8B5CF6',Maintenance:'#14B8A6',Other:'#6B7280'};return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--border-light)"><div style="width:10px;height:10px;border-radius:50%;background:${colors[c.cat]}"></div><div style="flex:1"><div style="font-size:13px;font-weight:600">${c.cat}</div><div style="font-size:11px;color:var(--text-muted)">${pct}% of total</div></div><div style="font-weight:800">${fmt(c.total)}</div></div>`}).join('')}</div>
+  1526→      </div></div>`;
+  1527→  }
+  1528→  html+=`<div class="card" style="padding:0"><div class="card-header" style="padding:16px"><h3>Expense History</h3></div>
+  1529→    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Recorded By</th><th>Actions</th></tr></thead><tbody>
+  1530→      ${exp.length?exp.map(e=>{const colors={Rent:'badge-red',Utilities:'badge-gold',Salaries:'badge-blue',Inventory:'badge-green',Marketing:'badge-purple',Maintenance:'badge-teal',Other:'badge-gray'};return `<tr><td>${new Date(e.date).toLocaleDateString('en-KE',{day:'numeric',month:'short',year:'numeric'})}</td><td><span class="badge ${colors[e.category]||'badge-gray'}">${e.category}</span></td><td>${e.description}</td><td><b class="text-crimson">${fmt(e.amount)}</b></td><td>${staffName(e.recordedBy)}</td><td><div class="row-actions"><button onclick="openExpenseModal('${e.id}')"><i class="fa-solid fa-pen"></i></button><button class="delete" onclick="deleteExpense('${e.id}')"><i class="fa-solid fa-trash"></i></button></div></td></tr>`}).join(''):'<tr><td colspan="6"><div class="empty-state"><i class="fa-solid fa-receipt"></i><h3>No expenses yet</h3><p>Add your first expense above.</p></div></td></tr>'}
+  1531→    </tbody></table></div></div>`;
+  1532→  $('#content').innerHTML=html;
+  1533→  if(window.innerWidth<=1024)$$('.dash-grid').forEach(g=>g.style.gridTemplateColumns='1fr');
+  1534→  if(catTotals.length){
+  1535→    const colors={Rent:'#DC2626',Utilities:'#F59E0B',Salaries:'#3B82F6',Inventory:'#10B981',Marketing:'#8B5CF6',Maintenance:'#14B8A6',Other:'#6B7280'};
+  1536→    charts.expCat=new Chart($('#expCatChart'),{type:'doughnut',data:{labels:catTotals.map(c=>c.cat),datasets:[{data:catTotals.map(c=>c.total),backgroundColor:catTotals.map(c=>colors[c.cat])}]},options:{responsive:true,plugins:{legend:{position:'bottom'}}}});
+  1537→  }
+  1538→};
+  1539→window.openExpenseModal=function(id){
+  1540→  const e=id?state.expenses.find(x=>x.id===id):null;
+  1541→  const cats=['Rent','Utilities','Salaries','Inventory','Marketing','Maintenance','Other'];
+  1542→  openModal(e?'Edit Expense':'Add Expense',
+  1543→    `<div class="form-grid">
+  1544→      <div class="form-group"><label>Date</label><input type="date" id="expDate" class="form-control" value="${e?e.date:todayKey()}"></div>
+  1545→      <div class="form-group"><label>Category</label><select id="expCategory" class="form-control">${cats.map(c=>`<option ${e&&e.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+  1546→      <div class="form-group"><label>Amount (KSh)</label><input type="number" id="expAmount" class="form-control" value="${e?e.amount:''}" min="0" step="100"></div>
+  1547→      <div class="form-group"><label>Description</label><input id="expDesc" class="form-control" value="${e?e.description:''}"></div>
+  1548→    </div>`,
+  1549→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveExpense('${id||''}')"><i class="fa-solid fa-check"></i> Save</button>`);
+  1550→};
+  1551→window.saveExpense=function(id){
+  1552→  const get=v=>$('#'+v).value.trim();
+  1553→  if(!get('expDate')||!get('expAmount')){toast('Date and amount required','error');return}
+  1554→  const data={date:get('expDate'),category:get('expCategory'),amount:parseFloat(get('expAmount'))||0,description:get('expDesc')||get('expCategory')};
+  1555→  if(id){Object.assign(state.expenses.find(x=>x.id===id),data);toast('Expense updated','success')}
+  1556→  else{data.id=uid('e');data.storeId=state.currentStoreId;data.recordedBy=currentUser.id;state.expenses.push(data);toast('Expense added','success')}
+  1557→  saveState();closeModal();navigate('expenses');
+  1558→};
+  1559→window.deleteExpense=function(id){if(!confirm('Delete this expense?'))return;state.expenses=state.expenses.filter(e=>e.id!==id);saveState();toast('Deleted','success');navigate('expenses')};
+  1560→
+  1561→/* ----- PDF REPORTS ----- */
+  1562→RENDERERS.reports=function(){
+  1563→  let html=`<div class="page-header"><div><h2>PDF Reports</h2><p>Export professional PDF reports for printing, sharing, or accounting</p></div></div>
+  1564→  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px">
+  1565→    <div class="card" style="border-top:4px solid var(--crimson);cursor:pointer" onclick="exportSalesReport()">
+  1566→      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#EF4444,#DC2626);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-chart-line"></i></div><div><h3 style="font-size:15px;font-weight:700">Sales Report</h3><p style="font-size:11px;color:var(--text-muted)">All transactions & revenue</p></div></div>
+  1567→      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Detailed breakdown of all sales including items sold, payment methods, daily totals, and top performers.</p>
+  1568→      <button class="btn btn-primary btn-block btn-sm"><i class="fa-solid fa-file-pdf"></i> Generate PDF</button>
+  1569→    </div>
+  1570→    <div class="card" style="border-top:4px solid var(--amber);cursor:pointer" onclick="exportInventoryReport()">
+  1571→      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#FBBF24,#F59E0B);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-boxes-stacked"></i></div><div><h3 style="font-size:15px;font-weight:700">Inventory Report</h3><p style="font-size:11px;color:var(--text-muted)">Current stock & valuation</p></div></div>
+  1572→      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Full inventory listing with quantities, costs, sell prices, margins, reorder levels, and stock status indicators.</p>
+  1573→      <button class="btn btn-amber btn-block btn-sm"><i class="fa-solid fa-file-pdf"></i> Generate PDF</button>
+  1574→    </div>
+  1575→    <div class="card" style="border-top:4px solid var(--emerald);cursor:pointer" onclick="exportProfitReport()">
+  1576→      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#34D399,#10B981);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-coins"></i></div><div><h3 style="font-size:15px;font-weight:700">Profit & Loss</h3><p style="font-size:11px;color:var(--text-muted)">Revenue, costs & net profit</p></div></div>
+  1577→      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Complete P&L statement with gross profit, operating expenses by category, and net profit margin analysis.</p>
+  1578→      <button class="btn btn-emerald btn-block btn-sm"><i class="fa-solid fa-file-pdf"></i> Generate PDF</button>
+  1579→    </div>
+  1580→    <div class="card" style="border-top:4px solid var(--blue);cursor:pointer" onclick="exportExpenseReport()">
+  1581→      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#60A5FA,#3B82F6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-receipt"></i></div><div><h3 style="font-size:15px;font-weight:700">Expense Report</h3><p style="font-size:11px;color:var(--text-muted)">All recorded expenses</p></div></div>
+  1582→      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Categorized breakdown of all expenses with daily totals, category subtotals, and grand total for the period.</p>
+  1583→      <button class="btn btn-blue btn-block btn-sm"><i class="fa-solid fa-file-pdf"></i> Generate PDF</button>
+  1584→    </div>
+  1585→    <div class="card" style="border-top:4px solid var(--purple);cursor:pointer" onclick="exportReconciliationReport()">
+  1586→      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#A78BFA,#8B5CF6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-scale-balanced"></i></div><div><h3 style="font-size:15px;font-weight:700">Daily Reconciliation</h3><p style="font-size:11px;color:var(--text-muted)">Stock variance audit</p></div></div>
+  1587→      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Today's reconciliation showing opening stock, sales, additions, expected vs actual closing, and variance per item.</p>
+  1588→      <button class="btn btn-block btn-sm" style="background:var(--purple);color:#fff"><i class="fa-solid fa-file-pdf"></i> Generate PDF</button>
+  1589→    </div>
+  1590→    <div class="card" style="border-top:4px solid var(--teal);cursor:pointer" onclick="exportStockTakeReport()">
+  1591→      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#2DD4BF,#14B8A6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-clipboard-check"></i></div><div><h3 style="font-size:15px;font-weight:700">Stock Count Audit</h3><p style="font-size:11px;color:var(--text-muted)">Historical count records</p></div></div>
+  1592→      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">All stock count sessions with expected vs counted quantities, variances, approver, and timestamp for audit trails.</p>
+  1593→      <button class="btn btn-block btn-sm" style="background:var(--teal);color:#fff"><i class="fa-solid fa-file-pdf"></i> Generate PDF</button>
+  1594→    </div>
+  1595→  </div>`;
+  1596→  $('#content').innerHTML=html;
+  1597→};
+  1598→function pdfHeader(doc,title,subtitle){
+  1599→  const w=doc.internal.pageSize.getWidth();
+  1600→  doc.setFillColor(31,17,41);doc.rect(0,0,w,28,'F');
+  1601→  doc.setTextColor(255,255,255);doc.setFontSize(16);doc.setFont('helvetica','bold');
+  1602→  doc.text('VinoCellar Pro',14,13);
+  1603→  doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(245,158,11);
+  1604→  doc.text('Wine & Spirits Inventory Management',14,21);
+  1605→  doc.setTextColor(31,17,41);doc.setFontSize(14);doc.setFont('helvetica','bold');
+  1606→  doc.text(title,14,42);
+  1607→  doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(107,114,128);
+  1608→  doc.text(subtitle,14,49);
+  1609→  doc.setDrawColor(220,38,38);doc.setLineWidth(0.8);doc.line(14,53,w-14,53);
+  1610→}
+  1611→function pdfFooter(doc){
+  1612→  const w=doc.internal.pageSize.getWidth();const h=doc.internal.pageSize.getHeight();
+  1613→  doc.setFontSize(8);doc.setTextColor(156,163,175);doc.setFont('helvetica','normal');
+  1614→  const pages=doc.internal.getNumberOfPages();
+  1615→  for(let i=1;i<=pages;i++){
+  1616→    doc.setPage(i);
+  1617→    doc.text('Generated '+new Date().toLocaleString('en-KE')+'  ·  VinoCellar Pro  ·  Page '+i+' of '+pages,14,h-10);
+  1618→  }
+  1619→}
+  1620→function downloadPdf(doc,filename){
+  1621→  pdfFooter(doc);
+  1622→  doc.save(filename);
+  1623→  toast('PDF downloaded: '+filename,'success');
+  1624→}
+  1625→window.exportSalesReport=function(){
+  1626→  const sales=state.sales.filter(s=>s.storeId===state.currentStoreId).sort((a,b)=>b.timestamp-a.timestamp);
+  1627→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+  1628→  const totalRev=sales.reduce((a,b)=>a+b.total,0);
+  1629→  const totalUnits=sales.reduce((a,b)=>a+b.items.reduce((x,y)=>x+y.qty,0),0);
+  1630→  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+  1631→  pdfHeader(doc,'Sales Report',store.name+' · '+sales.length+' transactions · Total: '+fmt(totalRev));
+  1632→  doc.autoTable({startY:58,head:[['Date','Items','Units','Payment','Total']],body:sales.map(s=>[new Date(s.timestamp).toLocaleString('en-KE'),s.items.length,s.items.reduce((a,b)=>a+b.qty,0),s.paymentMethod.toUpperCase(),fmt(s.total)]),foot:[['','','','','TOTAL: '+fmt(totalRev)]],headStyles:{fillColor:[220,38,38]},footStyles:{fillColor:[31,17,41],textColor:[255,255,255]},styles:{fontSize:9}});
+  1633→  // summary box
+  1634→  const fy=doc.lastAutoTable.finalY+10;
+  1635→  doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(31,17,41);
+  1636→  doc.text('Summary',14,fy);
+  1637→  doc.autoTable({startY:fy+4,theme:'plain',body:[['Total Transactions',String(sales.length)],['Total Revenue',fmt(totalRev)],['Units Sold',String(totalUnits)],['Average Sale Value',fmt(sales.length?totalRev/sales.length:0)]],styles:{fontSize:10}});
+  1638→  downloadPdf(doc,'sales-report-'+todayKey()+'.pdf');
+  1639→};
+  1640→window.exportInventoryReport=function(){
+  1641→  const inv=currentStoreInv();
+  1642→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+  1643→  const totalVal=inv.reduce((a,b)=>a+b.current*b.cost,0);
+  1644→  const totalSellVal=inv.reduce((a,b)=>a+b.current*b.sell,0);
+  1645→  const lowStock=inv.filter(p=>p.current<=p.reorder).length;
+  1646→  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+  1647→  pdfHeader(doc,'Inventory Report',store.name+' · '+inv.length+' products · Stock value: '+fmt(totalVal));
+  1648→  doc.autoTable({startY:58,head:[['Product','Category','SKU','Stock','Reorder','Cost','Price','Margin','Status']],body:inv.map(p=>{const m=p.sell-p.cost;const st=p.current===0?'OUT':p.current<=p.reorder?'LOW':'OK';return[p.name,p.category,p.sku,p.current,p.reorder,fmt(p.cost),fmt(p.sell),fmt(m),st]}),headStyles:{fillColor:[245,158,11]},columnStyles:{0:{cellWidth:50}},styles:{fontSize:8}});
+  1649→  const fy=doc.lastAutoTable.finalY+10;
+  1650→  doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(31,17,41);
+  1651→  doc.text('Inventory Summary',14,fy);
+  1652→  doc.autoTable({startY:fy+4,theme:'plain',body:[['Total Products',String(inv.length)],['Total Units',String(inv.reduce((a,b)=>a+b.current,0))],['Inventory Cost Value',fmt(totalVal)],['Inventory Sell Value',fmt(totalSellVal)],['Low Stock Items',String(lowStock)],['Out of Stock Items',String(inv.filter(p=>p.current===0).length)]],styles:{fontSize:10}});
+  1653→  downloadPdf(doc,'inventory-report-'+todayKey()+'.pdf');
+  1654→};
+  1655→window.exportProfitReport=function(){
+  1656→  const sales=state.sales.filter(s=>s.storeId===state.currentStoreId);
+  1657→  const exps=state.expenses.filter(e=>e.storeId===state.currentStoreId);
+  1658→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+  1659→  let rev=0,cogs=0;
+  1660→  sales.forEach(s=>s.items.forEach(i=>{rev+=i.price*i.qty;cogs+=i.cost*i.qty}));
+  1661→  const grossProfit=rev-cogs;
+  1662→  const totalExp=exps.reduce((a,b)=>a+b.amount,0);
+  1663→  const netProfit=grossProfit-totalExp;
+  1664→  const gPct=rev?(grossProfit/rev*100).toFixed(1):0;
+  1665→  const nPct=rev?(netProfit/rev*100).toFixed(1):0;
+  1666→  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+  1667→  pdfHeader(doc,'Profit & Loss Statement',store.name+' · Generated '+new Date().toLocaleDateString('en-KE'));
+  1668→  // P&L statement
+  1669→  doc.autoTable({startY:58,theme:'plain',body:[
+  1670→    ['REVENUE',''],
+  1671→    ['Gross Sales',fmt(rev)],
+  1672→    ['Cost of Goods Sold (COGS)',fmt(cogs)],
+  1673→    ['Gross Profit',fmt(grossProfit)],
+  1674→    ['Gross Margin %',gPct+'%'],
+  1675→    ['',''],
+  1676→    ['OPERATING EXPENSES',''],
+  1677→    ...['Rent','Utilities','Salaries','Inventory','Marketing','Maintenance','Other'].map(c=>[c,fmt(exps.filter(e=>e.category===c).reduce((a,b)=>a+b.amount,0))]).filter(r=>r[1]!=='KSh 0'),
+  1678→    ['Total Operating Expenses',fmt(totalExp)],
+  1679→    ['',''],
+  1680→    ['NET PROFIT',fmt(netProfit)],
+  1681→    ['Net Margin %',nPct+'%']
+  1682→  ],columnStyles:{0:{fontStyle:'bold',textColor:[31,17,41]},1:{halign:'right',fontStyle:'bold'}},didParseCell:function(d){const lbl=d.cell.raw[0];if(lbl==='Gross Profit'||lbl==='NET PROFIT'||lbl==='Total Operating Expenses'||lbl==='REVENUE'||lbl==='OPERATING EXPENSES'){d.cell.styles.fontStyle='bold';d.cell.styles.fillColor=[243,238,230];if(lbl==='NET PROFIT'){d.cell.styles.textColor=[16,185,129]}if(lbl==='Gross Profit'){d.cell.styles.textColor=[16,185,129]}if(lbl==='Total Operating Expenses'){d.cell.styles.textColor=[220,38,38]}}},styles:{fontSize:10}});
+  1683→  // expense detail table
+  1684→  const fy=doc.lastAutoTable.finalY+14;
+  1685→  if(fy<240){
+  1686→    doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(31,17,41);
+  1687→    doc.text('Expense Detail',14,fy);
+  1688→    doc.autoTable({startY:fy+4,head:[['Date','Category','Description','Amount']],body:exps.sort((a,b)=>b.date.localeCompare(a.date)).map(e=>[new Date(e.date).toLocaleDateString('en-KE'),e.category,e.description,fmt(e.amount)]),foot:[['','','TOTAL',fmt(totalExp)]],headStyles:{fillColor:[220,38,38]},footStyles:{fillColor:[31,17,41],textColor:[255,255,255]},styles:{fontSize:9}});
+  1689→  }
+  1690→  downloadPdf(doc,'profit-loss-'+todayKey()+'.pdf');
+  1691→};
+  1692→window.exportExpenseReport=function(){
+  1693→  const exps=state.expenses.filter(e=>e.storeId===state.currentStoreId).sort((a,b)=>b.date.localeCompare(a.date));
+  1694→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+  1695→  const total=exps.reduce((a,b)=>a+b.amount,0);
+  1696→  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+  1697→  pdfHeader(doc,'Expense Report',store.name+' · '+exps.length+' entries · Total: '+fmt(total));
+  1698→  doc.autoTable({startY:58,head:[['Date','Category','Description','Recorded By','Amount']],body:exps.map(e=>[new Date(e.date).toLocaleDateString('en-KE'),e.category,e.description,staffName(e.recordedBy),fmt(e.amount)]),foot:[['','','','','TOTAL: '+fmt(total)]],headStyles:{fillColor:[59,130,246]},footStyles:{fillColor:[31,17,41],textColor:[255,255,255]},styles:{fontSize:9}});
+  1699→  // category breakdown
+  1700→  const fy=doc.lastAutoTable.finalY+10;
+  1701→  if(fy<240){
+  1702→    doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(31,17,41);
+  1703→    doc.text('Category Breakdown',14,fy);
+  1704→    doc.autoTable({startY:fy+4,head:[['Category','Count','Amount','% of Total']],body:['Rent','Utilities','Salaries','Inventory','Marketing','Maintenance','Other'].map(c=>{const items=exps.filter(e=>e.category===c);const t=items.reduce((a,b)=>a+b.amount,0);return [c,String(items.length),fmt(t),total?(t/total*100).toFixed(1)+'%':'0%']}).filter(r=>r[1]!=='0'),headStyles:{fillColor:[59,130,246]},styles:{fontSize:9}});
+  1705→  }
+  1706→  downloadPdf(doc,'expense-report-'+todayKey()+'.pdf');
+  1707→};
+  1708→window.exportReconciliationReport=function(){
+  1709→  const rec=state.reconciliation.find(r=>r.storeId===state.currentStoreId&&r.date===todayKey());
+  1710→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+  1711→  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+  1712→  if(!rec){pdfHeader(doc,'Daily Reconciliation',store.name+' · No record for today');doc.setFontSize(11);doc.setTextColor(107,114,128);doc.text('No reconciliation has been started for '+new Date().toLocaleDateString('en-KE'),14,60);downloadPdf(doc,'reconciliation-'+todayKey()+'.pdf');return}
+  1713→  const variance=rec.items.filter(it=>it.actualClosing!==null).reduce((a,b)=>a+(b.actualClosing-b.expectedClosing),0);
+  1714→  pdfHeader(doc,'Daily Reconciliation Report',store.name+' · '+new Date().toLocaleDateString('en-KE',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+' · Total Variance: '+variance);
+  1715→  doc.autoTable({startY:58,head:[['Product','Opening','Sales','Added','Expected','Actual','Variance']],body:rec.items.map(it=>[it.name,it.opening,it.salesToday,it.stockAdded,it.expectedClosing,it.actualClosing??'—',it.actualClosing===null?'—':(it.actualClosing-it.expectedClosing>0?'+':'')+(it.actualClosing-it.expectedClosing)]),headStyles:{fillColor:[139,92,246]},didParseCell:function(d){if(d.section==='body'&&d.column.index===6&&d.cell.raw!=='—'){const v=parseInt(d.cell.raw);d.cell.styles.textColor=v===0?[16,185,129]:v>0?[245,158,11]:[220,38,38];d.cell.styles.fontStyle='bold'}},styles:{fontSize:9}});
+  1716→  downloadPdf(doc,'reconciliation-'+todayKey()+'.pdf');
+  1717→};
+  1718→window.exportStockTakeReport=function(){
+  1719→  const takes=state.stockTakes.filter(t=>t.storeId===state.currentStoreId).sort((a,b)=>b.startedAt-a.startedAt);
+  1720→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+  1721→  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+  1722→  pdfHeader(doc,'Stock Count Audit Report',store.name+' · '+takes.length+' count sessions');
+  1723→  if(!takes.length){doc.setFontSize(11);doc.setTextColor(107,114,128);doc.text('No stock counts have been performed yet.',14,60);downloadPdf(doc,'stocktake-audit-'+todayKey()+'.pdf');return}
+  1724→  let y=58;
+  1725→  takes.forEach((t,i)=>{
+  1726→    if(y>240){doc.addPage();y=20}
+  1727→    const variance=t.items.filter(it=>it.counted!==null).reduce((a,b)=>a+(b.counted-b.expected),0);
+  1728→    doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(31,17,41);
+  1729→    doc.text('Count #'+(i+1)+' · '+new Date(t.startedAt).toLocaleString('en-KE'),14,y);y+=4;
+  1730→    doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(107,114,128);
+  1731→    doc.text('By: '+staffName(t.startedBy)+'  ·  Status: '+t.status+(t.approvedBy?'  ·  Approved by: '+staffName(t.approvedBy):'')+'  ·  Variance: '+(variance>0?'+':'')+variance,14,y);y+=6;
+  1732→    doc.autoTable({startY:y,head:[['Product','Expected','Counted','Variance']],body:t.items.filter(it=>it.counted!==null).map(it=>{const p=state.inventory.find(x=>x.id===it.inventoryId);const v=it.counted-it.expected;return [p?p.name:'?',it.expected,it.counted,(v>0?'+':'')+v]}),headStyles:{fillColor:[20,184,166]},didParseCell:function(d){if(d.section==='body'&&d.column.index===3){const v=parseInt(d.cell.raw);d.cell.styles.textColor=v===0?[16,185,129]:v>0?[245,158,11]:[220,38,38];d.cell.styles.fontStyle='bold'}},styles:{fontSize:8}});
+  1733→    y=doc.lastAutoTable.finalY+12;
+  1734→  });
+  1735→  downloadPdf(doc,'stocktake-audit-'+todayKey()+'.pdf');
+  1736→};
+  1737→
+  1738→/* ----- STAFF ----- */
+  1739→RENDERERS.staff=function(){
+  1740→  let html=`<div class="page-header"><div><h2>Staff Management</h2><p>${state.staff.length} team members</p></div><div class="page-actions"><button class="btn btn-primary btn-sm" onclick="openStaffModal()"><i class="fa-solid fa-user-plus"></i> Add Staff</button></div></div>
+  1741→  <div class="card" style="padding:0"><div class="table-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>PIN</th><th>Store</th><th>Sales</th><th>Actions</th></tr></thead><tbody>
+  1742→    ${state.staff.map(s=>{const sc=state.sales.filter(x=>x.staffId===s.id).length;const store=state.stores.find(x=>x.id===s.storeId);return `<tr><td><div class="flex items-center gap-8"><div class="user-avatar" style="width:30px;height:30px;font-size:12px;background:linear-gradient(135deg,var(--amber),var(--crimson))">${s.name.charAt(0)}</div><b>${s.name}</b></div></td><td><span class="badge ${s.role==='manager'?'badge-purple':'badge-teal'}">${s.role}</span></td><td><code style="background:var(--bg-alt);padding:3px 8px;border-radius:6px;font-weight:700;letter-spacing:2px" data-pin="${s.pin}"><span class="pin-mask">••••</span> <i class="fa-solid fa-eye pin-reveal" style="cursor:pointer;font-size:10px;margin-left:4px;color:var(--text-muted)" onclick="togglePin(this,'${s.pin}')"></i></code></td><td>${store?store.name:'—'}</td><td>${sc} sales</td><td><div class="row-actions"><button onclick="openStaffModal('${s.id}')"><i class="fa-solid fa-pen"></i></button><button class="delete" onclick="deleteStaff('${s.id}')"><i class="fa-solid fa-trash"></i></button></div></td></tr>`}).join('')}
+  1743→  </tbody></table></div></div>`;
+  1744→  $('#content').innerHTML=html;
+  1745→};
+  1746→window.openStaffModal=function(id){
+  1747→  const s=id?state.staff.find(x=>x.id===id):null;
+  1748→  openModal(s?'Edit Staff':'Add Staff',
+  1749→    `<div class="form-grid">
+  1750→      <div class="form-group"><label>Name</label><input id="stName" class="form-control" value="${s?s.name:''}"></div>
+  1751→      <div class="form-group"><label>Role</label><select id="stRole" class="form-control"><option value="staff" ${s&&s.role==='staff'?'selected':''}>Staff</option><option value="manager" ${s&&s.role==='manager'?'selected':''}>Manager</option></select></div>
+  1752→      <div class="form-group"><label>PIN (4 digits)</label><input id="stPin" type="password" class="form-control" maxlength="4" value="${s?s.pin:''}" inputmode="numeric" pattern="[0-9]*"></div>
+  1753→      <div class="form-group"><label>Store</label><select id="stStore" class="form-control">${state.stores.map(st=>`<option value="${st.id}" ${s&&s.storeId===st.id?'selected':''}>${st.name}</option>`).join('')}</select></div>
+  1754→    </div>`,
+  1755→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveStaff('${id||''}')"><i class="fa-solid fa-check"></i> Save</button>`);
+  1756→};
+  1757→window.saveStaff=function(id){
+  1758→  const get=v=>$('#'+v).value.trim();
+  1759→  if(!get('stName')||!get('stPin')||get('stPin').length!==4){toast('Name and 4-digit PIN required','error');return}
+  1760→  if(id){Object.assign(state.staff.find(x=>x.id===id),{name:get('stName'),role:get('stRole'),pin:get('stPin'),storeId:get('stStore')})}
+  1761→  else{state.staff.push({id:uid('u'),name:get('stName'),role:get('stRole'),pin:get('stPin'),storeId:get('stStore')})}
+  1762→  saveState();closeModal();toast('Staff saved','success');navigate('staff');
+  1763→};
+  1764→window.deleteStaff=function(id){if(!confirm('Delete staff member?'))return;state.staff=state.staff.filter(s=>s.id!==id);saveState();toast('Deleted','success');navigate('staff')};
+  1765→window.togglePin=function(el,pin){
+  1766→  const code=el.closest('code');
+  1767→  const mask=code.querySelector('.pin-mask');
+  1768→  if(mask.textContent==='••••'){mask.textContent=pin;el.className='fa-solid fa-eye-slash pin-reveal'}
+  1769→  else{mask.textContent='••••';el.className='fa-solid fa-eye pin-reveal'}
+  1770→};
+  1771→
+  1772→/* ----- STORES ----- */
+  1773→RENDERERS.stores=function(){
+  1774→  let html=`<div class="page-header"><div><h2>Multi-Store Management</h2><p>${state.stores.length} locations</p></div><div class="page-actions"><button class="btn btn-primary btn-sm" onclick="openStoreModal()"><i class="fa-solid fa-plus"></i> Add Store</button></div></div>
+  1775→  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">
+  1776→    ${state.stores.map(s=>{const inv=state.inventory.filter(p=>p.storeId===s.id);const val=inv.reduce((a,b)=>a+b.current*b.cost,0);const sales=state.sales.filter(x=>x.storeId===s.id);const rev=sales.reduce((a,b)=>a+b.total,0);return `<div class="card" style="border-top:4px solid ${s.id===state.currentStoreId?'var(--emerald)':'var(--border)'}">
+  1777→      <div class="flex items-center justify-between mb-12"><div class="flex items-center gap-8"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,var(--crimson),var(--purple));display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-store"></i></div><div><h3 style="font-size:15px;font-weight:700">${s.name}</h3><p style="font-size:12px;color:var(--text-muted)">${s.location}</p></div></div>${s.id===state.currentStoreId?'<span class="badge badge-green">Active</span>':''}</div>
+  1778→      <div class="kpi-row"><div class="mini-kpi"><div class="l">SKUs</div><div class="v">${inv.length}</div></div><div class="mini-kpi"><div class="l">Stock Value</div><div class="v">${fmt(val)}</div></div><div class="mini-kpi"><div class="l">Revenue</div><div class="v">${fmt(rev)}</div></div></div>
+  1779→      <div class="flex gap-8"><button class="btn btn-ghost btn-sm btn-block" onclick="switchStore('${s.id}')"><i class="fa-solid fa-right-left"></i> Switch</button><button class="btn btn-outline btn-sm" onclick="openStoreModal('${s.id}')"><i class="fa-solid fa-pen"></i></button></div>
+  1780→    </div>`}).join('')}
+  1781→  </div>`;
+  1782→  $('#content').innerHTML=html;
+  1783→};
+  1784→window.switchStore=function(id){state.currentStoreId=id;saveState();buildStoreSelector();navigate('dashboard');toast('Switched store','info')};
+  1785→window.openStoreModal=function(id){
+  1786→  const s=id?state.stores.find(x=>x.id===id):null;
+  1787→  openModal(s?'Edit Store':'Add Store',
+  1788→    `<div class="form-group"><label>Store Name</label><input id="strName" class="form-control" value="${s?s.name:''}"></div>
+  1789→     <div class="form-group"><label>Location</label><input id="strLoc" class="form-control" value="${s?s.location:''}"></div>`,
+  1790→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveStore('${id||''}')"><i class="fa-solid fa-check"></i> Save</button>`);
+  1791→};
+  1792→window.saveStore=function(id){
+  1793→  const n=$('#strName').value.trim(),l=$('#strLoc').value.trim();
+  1794→  if(!n){toast('Name required','error');return}
+  1795→  if(id){Object.assign(state.stores.find(x=>x.id===id),{name:n,location:l})}
+  1796→  else{state.stores.push({id:uid('s'),name:n,location:l})}
+  1797→  saveState();closeModal();toast('Store saved','success');navigate('stores');
+  1798→};
+  1799→
+  1800→/* ----- SETTINGS ----- */
+  1801→RENDERERS.settings=function(){
+  1802→  const lastBackup=localStorage.getItem(LS_KEY+'_lastbackup');
+  1803→  const dataSize=new Blob([JSON.stringify(state)]).size;
+  1804→  let html=`<div class="page-header"><div><h2>Settings</h2><p>System configuration and data management</p></div></div>
+  1805→  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">
+  1806→    <div class="card"><div class="card-header"><h3><i class="fa-solid fa-wifi" style="color:var(--emerald)"></i> Offline Mode</h3></div>
+  1807→      <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">VinoCellar Pro runs entirely in your browser. All data is stored locally and works without internet.</p>
+  1808→      <div class="flex items-center justify-between" style="padding:10px;background:var(--bg-alt);border-radius:10px"><span style="font-size:12px;font-weight:600">Status</span><span class="badge badge-green" id="offlineStatus">Online</span></div>
+  1809→      <p style="font-size:11px;color:var(--text-muted);margin-top:8px">Auto-syncs when connection returns.</p>
+  1810→    </div>
+  1811→    <div class="card"><div class="card-header"><h3><i class="fa-solid fa-cloud" style="color:var(--blue)"></i> Cloud Backup</h3></div>
+  1812→      <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Export your data as a backup file, or restore from a previous backup.</p>
+  1813→      <div class="flex items-center justify-between mb-8" style="padding:8px 10px;background:var(--bg-alt);border-radius:8px;font-size:12px"><span>Last backup</span><b>${lastBackup?new Date(lastBackup).toLocaleString():'Never'}</b></div>
+  1814→      <div class="flex items-center justify-between mb-8" style="padding:8px 10px;background:var(--bg-alt);border-radius:8px;font-size:12px"><span>Data size</span><b>${(dataSize/1024).toFixed(1)} KB</b></div>
+  1815→      <button class="btn btn-blue btn-block mb-8" onclick="exportBackup()"><i class="fa-solid fa-download"></i> Download Backup</button>
+  1816→      <button class="btn btn-ghost btn-block" onclick="document.getElementById('importFile').click()"><i class="fa-solid fa-upload"></i> Restore from Backup</button>
+  1817→      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importBackup(this)">
+  1818→    </div>
+  1819→    <div class="card"><div class="card-header"><h3><i class="fa-solid fa-database" style="color:var(--purple)"></i> Data Summary</h3></div>
+  1820→      <div class="h-row" style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;border-bottom:1px dashed var(--border-light)"><span>Products</span><b>${state.inventory.length}</b></div>
+  1821→      <div class="h-row" style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;border-bottom:1px dashed var(--border-light)"><span>Sales</span><b>${state.sales.length}</b></div>
+  1822→      <div class="h-row" style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;border-bottom:1px dashed var(--border-light)"><span>Suppliers</span><b>${state.suppliers.length}</b></div>
+  1823→      <div class="h-row" style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;border-bottom:1px dashed var(--border-light)"><span>Staff</span><b>${state.staff.length}</b></div>
+  1824→      <div class="h-row" style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px"><span>Stores</span><b>${state.stores.length}</b></div>
+  1825→    </div>
+  1826→    <div class="card"><div class="card-header"><h3><i class="fa-solid fa-circle-info" style="color:var(--amber)"></i> About</h3></div>
+  1827→      <p style="font-size:13px;color:var(--text-muted);line-height:1.6">VinoCellar Pro v1.0<br>Wine & Spirits Inventory Management<br>Built for offline-first retail operations.</p>
+  1828→      <p style="font-size:11px;color:var(--text-light);margin-top:10px">PIN: Manager 1234 · Staff 5678</p>
+  1829→    </div>
+  1830→    ${currentUser.role==='manager'?`<div class="card" style="border:1px solid #FECACA"><div class="card-header"><h3 style="color:var(--crimson)"><i class="fa-solid fa-triangle-exclamation"></i> Danger Zone</h3></div>
+  1831→      <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Reset all data to factory defaults. This cannot be undone.</p>
+  1832→      <button class="btn btn-danger btn-block" onclick="resetData()"><i class="fa-solid fa-rotate-left"></i> Reset All Data</button>
+  1833→    </div>`:''}
+  1834→  </div>`;
+  1835→  $('#content').innerHTML=html;
+  1836→};
+  1837→window.exportBackup=function(){
+  1838→  const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  1839→  const url=URL.createObjectURL(blob);const a=document.createElement('a');
+  1840→  a.href=url;a.download='vinocellar-backup-'+new Date().toISOString().slice(0,10)+'.json';
+  1841→  a.click();URL.revokeObjectURL(url);
+  1842→  localStorage.setItem(LS_KEY+'_lastbackup',new Date().toISOString());
+  1843→  toast('Backup downloaded','success');
+  1844→};
+  1845→window.importBackup=function(input){
+  1846→  const file=input.files[0];if(!file)return;
+  1847→  const r=new FileReader();
+  1848→  r.onload=e=>{try{const d=JSON.parse(e.target.result);if(!d.inventory)throw 0;state=d;saveState();toast('Backup restored','success');setTimeout(()=>location.reload(),800)}catch(err){toast('Invalid backup file','error')}};
+  1849→  r.readAsText(file);
+  1850→};
+  1851→window.resetData=function(){
+  1852→  if(!confirm('Reset ALL data to defaults? This cannot be undone.'))return;
+  1853→  if(!confirm('Are you absolutely sure? All sales, products, and staff will be erased.'))return;
+  1854→  localStorage.removeItem(LS_KEY);
+  1855→  state=seedState();saveState();
+  1856→  toast('Data reset to defaults','success');
+  1857→  setTimeout(()=>location.reload(),800);
+  1858→};
+  1859→
+  1860→/* ================== SCANNER ================== */
+  1861→async function startScanner(){
+  1862→  if(!('BarcodeDetector'in window)&&!navigator.mediaDevices){
+  1863→    // fallback: manual barcode entry
+  1864→    openModal('Scan Barcode',
+  1865→      `<p class="text-muted">Camera scanning not available on this device.</p><div class="form-group mt-12"><label>Enter barcode manually</label><input id="manualBarcode" class="form-control" placeholder="6001234500011" autofocus></div>`,
+  1866→      `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="lookupBarcode(document.getElementById('manualBarcode').value)"><i class="fa-solid fa-search"></i> Lookup</button>`);
+  1867→    return;
+  1868→  }
+  1869→  try{
+  1870→    scannerStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+  1871→    const video=$('#scannerVideo');video.srcObject=scannerStream;
+  1872→    $('#scannerOverlay').classList.add('show');
+  1873→    // try BarcodeDetector
+  1874→    if('BarcodeDetector'in window){
+  1875→      const det=new BarcodeDetector();
+  1876→      const scan=async()=>{
+  1877→        if(!scannerStream)return;
+  1878→        try{const codes=await det.detect(video);if(codes.length){stopScanner();lookupBarcode(codes[0].rawValue);return}}catch(e){}
+  1879→        setTimeout(scan,500);
+  1880→      };
+  1881→      scan();
+  1882→    }else{
+  1883→      // fallback - just show video and let user click
+  1884→      setTimeout(()=>{
+  1885→        stopScanner();
+  1886→        openModal('Scan Barcode',
+  1887→          `<p class="text-muted">BarcodeDetector API not supported. Enter barcode manually:</p><div class="form-group mt-12"><input id="manualBarcode" class="form-control" placeholder="6001234500011" autofocus></div>`,
+  1888→          `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="lookupBarcode(document.getElementById('manualBarcode').value)"><i class="fa-solid fa-search"></i> Lookup</button>`);
+  1889→      },3000);
+  1890→    }
+  1891→  }catch(err){
+  1892→    openModal('Scan Barcode',
+  1893→      `<p class="text-muted">Camera access denied or unavailable.</p><div class="form-group mt-12"><label>Enter barcode manually</label><input id="manualBarcode" class="form-control" placeholder="6001234500011" autofocus></div>`,
+  1894→      `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="lookupBarcode(document.getElementById('manualBarcode').value)"><i class="fa-solid fa-search"></i> Lookup</button>`);
+  1895→  }
+  1896→}
+  1897→function stopScanner(){if(scannerStream){scannerStream.getTracks().forEach(t=>t.stop());scannerStream=null}$('#scannerOverlay').classList.remove('show')}
+  1898→$('#scannerClose').addEventListener('click',stopScanner);
+  1899→$('#scanBtn').addEventListener('click',startScanner);
+  1900→window.lookupBarcode=function(code){
+  1901→  if(!code){toast('Enter a barcode','warn');return}
+  1902→  const p=state.inventory.find(x=>x.barcode===code&&x.storeId===state.currentStoreId);
+  1903→  closeModal();
+  1904→  if(p){
+  1905→    if(currentPage==='inventory')openProductModal(p.id);
+  1906→    else if(currentPage==='pos')addToCart(p.id);
+  1907→    else{navigate('inventory');setTimeout(()=>openProductModal(p.id),200)}
+  1908→    toast('Found: '+p.name,'success');
+  1909→  }else{
+  1910→    toast('No product with barcode '+code,'error');
+  1911→    if(confirm('Add new product with barcode '+code+'?')){navigate('inventory');setTimeout(()=>{openProductModal();$('#pBarcode').value=code},200)}
+  1912→  }
+  1913→};
+  1914→
+  1915→/* ================== BACKUP BUTTON ================== */
+  1916→$('#backupBtn').addEventListener('click',()=>{
+  1917→  if(currentUser&&currentUser.role==='manager')exportBackup();
+  1918→  else toast('Only managers can backup','warn');
+  1919→});
+  1920→
+  1921→/* ================== ONLINE/OFFLINE INDICATOR ================== */
+  1922→function updateOnlineStatus(){
+  1923→  const pill=$('#offlinePill');if(!pill)return;
+  1924→  if(navigator.onLine){pill.className='offline-pill online';pill.innerHTML='<i class="fa-solid fa-wifi"></i> Online'}
+  1925→  else{pill.className='offline-pill';pill.innerHTML='<i class="fa-solid fa-cloud-arrow-down"></i> Offline'}
+  1926→}
+  1927→window.addEventListener('online',()=>{updateOnlineStatus();toast('Back online. Data synced locally.','success')});
+  1928→window.addEventListener('offline',()=>{updateOnlineStatus();toast('Working offline. Changes saved locally.','info')});
+  1929→updateOnlineStatus();
+  1930→
+  1931→/* ================== INIT ================== */
+  1932→window.addEventListener('resize',()=>{
+  1933→  if(window.innerWidth<=1024)$$('.dash-grid').forEach(g=>g.style.gridTemplateColumns='1fr');
+  1934→  else $$('.dash-grid').forEach(g=>g.style.gridTemplateColumns='1fr 1fr');
+  1935→});
+  1936→</script>
+  1937→</body>
+  1938→</html>
+  1939→

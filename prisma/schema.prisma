@@ -1,0 +1,372 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== MULTI-TENANT CORE ====================
+
+model Organisation {
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  plan            String   @default("trial") // trial, starter, professional, enterprise
+  isActive        Boolean  @default(true)
+  trialEndsAt     DateTime?
+  currentPeriodEnd DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  users        User[]
+  stores       Store[]
+  categories   Category[]
+  suppliers    Supplier[]
+  products     Product[]
+  sales        Sale[]
+  stockTakes   StockTake[]
+  reconciliations Reconciliation[]
+  expenses     Expense[]
+  auditLogs    AuditLog[]
+  notifications Notification[]
+  settings     OrgSetting[]
+  superAdminAccess SuperAdminAccess[]
+
+  @@index([slug])
+  @@index([isActive])
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String
+  passwordHash   String
+  name           String
+  pin            String?  @unique // 4-digit manager PIN
+  role           String   @default("staff") // manager, staff, super_admin
+  isActive       Boolean  @default(true)
+  organisationId String
+  storeId        String?
+  lastLoginAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+  store          Store?       @relation(fields: [storeId], references: [id])
+  sales            Sale[]
+  startedStockTakes StockTake[] @relation("StockTakeStarter")
+  approvedStockTakes StockTake[] @relation("StockTakeApprover")
+  expenses         Expense[]
+  recordings       Reconciliation[]
+  auditLogs        AuditLog[]
+
+  @@unique([email, organisationId])
+  @@index([organisationId])
+  @@index([pin])
+  @@index([role])
+}
+
+// ==================== STORES / BRANCHES ====================
+
+model Store {
+  id             String   @id @default(cuid())
+  name           String
+  location       String   @default("")
+  organisationId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+  products       Product[]
+  users          User[]
+  sales          Sale[]
+  stockTakes     StockTake[]
+  reconciliations Reconciliation[]
+  expenses       Expense[]
+
+  @@index([organisationId])
+}
+
+// ==================== CATEGORIES ====================
+
+model Category {
+  id             String   @id @default(cuid())
+  name           String
+  colour         String   @default("#6B7280")
+  organisationId String
+  createdAt      DateTime @default(now())
+
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+  products       Product[]
+
+  @@unique([name, organisationId])
+  @@index([organisationId])
+}
+
+// ==================== SUPPLIERS ====================
+
+model Supplier {
+  id             String   @id @default(cuid())
+  name           String
+  contact        String   @default("")
+  phone          String   @default("")
+  email          String   @default("")
+  productTypes   String   @default("")
+  organisationId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+  products       Product[]
+
+  @@index([organisationId])
+}
+
+// ==================== PRODUCTS / INVENTORY ====================
+
+model Product {
+  id             String   @id @default(cuid())
+  name           String
+  sku            String   @default("")
+  barcode        String   @default("")
+  size           String   @default("750ml")
+  openingStock   Int      @default(0)
+  currentStock   Int      @default(0)
+  reorderLevel   Int      @default(5)
+  costPrice      Float    @default(0)
+  sellPrice      Float    @default(0)
+  organisationId String
+  storeId        String
+  categoryId     String?
+  supplierId     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+  store          Store        @relation(fields: [storeId], references: [id])
+  category       Category?    @relation(fields: [categoryId], references: [id])
+  supplier       Supplier?    @relation(fields: [supplierId], references: [id])
+  saleItems      SaleItem[]
+  stockTakeItems StockTakeItem[]
+  reconItems     ReconItem[]
+
+  @@index([organisationId])
+  @@index([storeId])
+  @@index([barcode])
+  @@index([sku])
+  @@index([categoryId])
+  @@index([supplierId])
+}
+
+// ==================== SALES ====================
+
+model Sale {
+  id             String   @id @default(cuid())
+  total          Float
+  paymentMethod  String   @default("cash") // cash, card, mpesa
+  organisationId String
+  storeId        String
+  staffId        String
+  createdAt      DateTime @default(now())
+
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+  store          Store        @relation(fields: [storeId], references: [id])
+  staff          User         @relation(fields: [staffId], references: [id])
+  items          SaleItem[]
+
+  @@index([organisationId])
+  @@index([storeId])
+  @@index([staffId])
+  @@index([createdAt])
+}
+
+model SaleItem {
+  id        String  @id @default(cuid())
+  name      String
+  qty       Int
+  price     Float
+  cost      Float
+  saleId    String
+  productId String
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+// ==================== STOCK TAKES ====================
+
+model StockTake {
+  id             String    @id @default(cuid())
+  status         String    @default("in_progress") // in_progress, pending, approved
+  startedBy      String
+  approvedBy     String?
+  approvedAt     DateTime?
+  organisationId String
+  storeId        String
+  startedAt      DateTime  @default(now())
+  submittedAt    DateTime?
+
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+  store          Store        @relation(fields: [storeId], references: [id])
+  starter        User         @relation("StockTakeStarter", fields: [startedBy], references: [id])
+  approver       User?        @relation("StockTakeApprover", fields: [approvedBy], references: [id])
+  items          StockTakeItem[]
+
+  @@index([organisationId])
+  @@index([storeId])
+  @@index([status])
+}
+
+model StockTakeItem {
+  id          String   @id @default(cuid())
+  expected    Int
+  counted     Int?
+  stockTakeId String
+  productId   String
+
+  stockTake StockTake @relation(fields: [stockTakeId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id])
+
+  @@index([stockTakeId])
+  @@index([productId])
+}
+
+// ==================== DAILY RECONCILIATION ====================
+
+model Reconciliation {
+  id             String   @id @default(cuid())
+  date           String   // YYYY-MM-DD
+  organisationId String
+  storeId        String
+  recordedBy     String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+  store          Store        @relation(fields: [storeId], references: [id])
+  recorder       User         @relation(fields: [recordedBy], references: [id])
+  items          ReconItem[]
+
+  @@unique([date, storeId])
+  @@index([organisationId])
+  @@index([storeId])
+}
+
+model ReconItem {
+  id              String  @id @default(cuid())
+  opening         Int
+  salesToday      Int
+  stockAdded      Int     @default(0)
+  expectedClosing Int
+  actualClosing   Int?
+  reconciliationId String
+  productId       String
+
+  reconciliation Reconciliation @relation(fields: [reconciliationId], references: [id], onDelete: Cascade)
+  product        Product        @relation(fields: [productId], references: [id])
+
+  @@index([reconciliationId])
+  @@index([productId])
+}
+
+// ==================== EXPENSES ====================
+
+model Expense {
+  id             String   @id @default(cuid())
+  date           String   // YYYY-MM-DD
+  category       String   // Rent, Utilities, Salaries, etc.
+  description    String
+  amount         Float
+  organisationId String
+  storeId        String
+  recordedBy     String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+  store          Store        @relation(fields: [storeId], references: [id])
+  recorder       User         @relation(fields: [recordedBy], references: [id])
+
+  @@index([organisationId])
+  @@index([storeId])
+  @@index([date])
+}
+
+// ==================== AUDIT LOGS ====================
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  action         String
+  entity         String
+  entityId       String?
+  beforeValue    String?  // JSON string
+  afterValue     String?  // JSON string
+  userId         String
+  organisationId String
+  ipAddress      String?  @default("")
+  createdAt      DateTime @default(now())
+
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+  user           User         @relation(fields: [userId], references: [id])
+
+  @@index([organisationId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ==================== NOTIFICATIONS ====================
+
+model Notification {
+  id             String   @id @default(cuid())
+  title          String
+  message        String
+  type           String   @default("info") // info, warning, error, success
+  isRead         Boolean  @default(false)
+  userId         String
+  organisationId String
+  createdAt      DateTime @default(now())
+
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+
+  @@index([userId])
+  @@index([organisationId])
+  @@index([isRead])
+}
+
+// ==================== ORG SETTINGS ====================
+
+model OrgSetting {
+  id             String   @id @default(cuid())
+  key            String
+  value          String   @default("")
+  organisationId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+
+  @@unique([key, organisationId])
+  @@index([organisationId])
+}
+
+// ==================== SUPER ADMIN ACCESS ====================
+
+model SuperAdminAccess {
+  id             String   @id @default(cuid())
+  organisationId String
+  grantedBy      String   // super_admin user id
+  reason         String   @default("")
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdAt      DateTime @default(now())
+
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+
+  @@index([organisationId])
+  @@index([expiresAt])
+}

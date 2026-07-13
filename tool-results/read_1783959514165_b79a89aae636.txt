@@ -1,0 +1,302 @@
+     1→  1400→  1400→  let html=`<div class="page-header"><div><h2>Suppliers</h2><p>${state.suppliers.length} suppliers</p></div><div class="page-actions"><button class="btn btn-primary btn-sm" onclick="openSupplierModal()"><i class="fa-solid fa-plus"></i> Add Supplier</button></div></div>
+     2→  1401→  1401→  <div class="card" style="padding:0"><div class="table-wrap"><table><thead><tr><th>Name</th><th>Contact</th><th>Phone</th><th>Email</th><th>Products</th><th>Items Supplied</th><th>Actions</th></tr></thead><tbody>
+     3→  1402→  1402→    ${state.suppliers.map(s=>{const cnt=state.inventory.filter(p=>p.supplierId===s.id).length;return `<tr><td><b>${s.name}</b></td><td>${s.contact}</td><td>${s.phone}</td><td>${s.email}</td><td><span class="badge badge-purple">${s.products}</span></td><td>${cnt}</td><td><div class="row-actions"><button onclick="openSupplierModal('${s.id}')"><i class="fa-solid fa-pen"></i></button><button class="delete" onclick="deleteSupplier('${s.id}')"><i class="fa-solid fa-trash"></i></button></div></td></tr>`}).join('')}
+     4→  1403→  1403→  </tbody></table></div></div>`;
+     5→  1404→  1404→  $('#content').innerHTML=html;
+     6→  1405→  1405→};
+     7→  1406→  1406→window.openSupplierModal=function(id){
+     8→  1407→  1407→  const s=id?state.suppliers.find(x=>x.id===id):null;
+     9→  1408→  1408→  openModal(s?'Edit Supplier':'Add Supplier',
+    10→  1409→  1409→    `<div class="form-grid">
+    11→  1410→  1410→      <div class="form-group"><label>Company Name</label><input id="supName" class="form-control" value="${s?s.name:''}"></div>
+    12→  1411→  1411→      <div class="form-group"><label>Contact Person</label><input id="supContact" class="form-control" value="${s?s.contact:''}"></div>
+    13→  1412→  1412→      <div class="form-group"><label>Phone</label><input id="supPhone" class="form-control" value="${s?s.phone:''}"></div>
+    14→  1413→  1413→      <div class="form-group"><label>Email</label><input id="supEmail" class="form-control" value="${s?s.email:''}"></div>
+    15→  1414→  1414→      <div class="form-group"><label>Products/Category</label><input id="supProducts" class="form-control" value="${s?s.products:''}"></div>
+    16→  1415→  1415→    </div>`,
+    17→  1416→  1416→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveSupplier('${id||''}')"><i class="fa-solid fa-check"></i> Save</button>`);
+    18→  1417→  1417→};
+    19→  1418→  1418→window.saveSupplier=function(id){
+    20→  1419→  1419→  const get=v=>$('#'+v).value.trim();
+    21→  1420→  1420→  if(!get('supName')){toast('Name required','error');return}
+    22→  1421→  1421→  if(id){Object.assign(state.suppliers.find(x=>x.id===id),{name:get('supName'),contact:get('supContact'),phone:get('supPhone'),email:get('supEmail'),products:get('supProducts')})}
+    23→  1422→  1422→  else{state.suppliers.push({id:uid('sup'),name:get('supName'),contact:get('supContact'),phone:get('supPhone'),email:get('supEmail'),products:get('supProducts')})}
+    24→  1423→  1423→  saveState();closeModal();toast('Supplier saved','success');navigate('suppliers');
+    25→  1424→  1424→};
+    26→  1425→  1425→window.deleteSupplier=function(id){if(!confirm('Delete supplier?'))return;state.suppliers=state.suppliers.filter(s=>s.id!==id);saveState();toast('Deleted','success');navigate('suppliers')};
+    27→  1426→  1426→
+    28→  1427→  1427→/* ----- SALES ANALYTICS ----- */
+    29→  1428→  1428→RENDERERS.analytics=function(){
+    30→  1429→  1429→  const sales=state.sales.filter(s=>s.storeId===state.currentStoreId);
+    31→  1430→  1430→  const totalRev=sales.reduce((a,b)=>a+b.total,0);
+    32→  1431→  1431→  const totalUnits=sales.reduce((a,b)=>a+b.items.reduce((x,y)=>x+y.qty,0),0);
+    33→  1432→  1432→  const avg=sales.length?totalRev/sales.length:0;
+    34→  1433→  1433→  let html=`<div class="page-header"><div><h2>Sales Analytics</h2><p>Performance insights for ${state.stores.find(s=>s.id===state.currentStoreId).name}</p></div></div>
+    35→  1434→  1434→  <div class="stat-grid">
+    36→  1435→  1435→    <div class="stat-card stat-crimson"><div class="label">Total Revenue</div><div class="value">${fmt(totalRev)}</div><div class="delta">All time</div><i class="fa-solid fa-money-bill icon"></i></div>
+    37→  1436→  1436→    <div class="stat-card stat-emerald"><div class="label">Units Sold</div><div class="value">${totalUnits}</div><div class="delta">units</div><i class="fa-solid fa-cubes icon"></i></div>
+    38→  1437→  1437→    <div class="stat-card stat-blue"><div class="label">Transactions</div><div class="value">${sales.length}</div><div class="delta">total sales</div><i class="fa-solid fa-receipt icon"></i></div>
+    39→  1438→  1438→    <div class="stat-card stat-amber"><div class="label">Avg Sale Value</div><div class="value">${fmt(avg)}</div><div class="delta">per transaction</div><i class="fa-solid fa-chart-line icon"></i></div>
+    40→  1439→  1439→  </div>
+    41→  1440→  1440→  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
+    42→  1441→  1441→    <div class="card"><div class="card-header"><h3>30-Day Sales Trend</h3></div><canvas id="trendChart" height="200"></canvas></div>
+    43→  1442→  1442→    <div class="card"><div class="card-header"><h3>Sales by Category</h3></div><canvas id="catChart" height="200"></canvas></div>
+    44→  1443→  1443→  </div>
+    45→  1444→  1444→  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
+    46→  1445→  1445→    <div class="card"><div class="card-header"><h3>Top 10 Products (Revenue)</h3></div><canvas id="top10Chart" height="220"></canvas></div>
+    47→  1446→  1446→    <div class="card"><div class="card-header"><h3>Payment Methods</h3></div><canvas id="payChart" height="220"></canvas></div>
+    48→  1447→  1447→  </div>`;
+    49→  1448→  1448→  $('#content').innerHTML=html;
+    50→  1449→  1449→  if(window.innerWidth<=1024)$$('.dash-grid').forEach(g=>g.style.gridTemplateColumns='1fr');
+    51→  1450→  1450→  // 30-day trend
+    52→  1451→  1451→  const days=[];const revs=[];
+    53→  1452→  1452→  for(let d=29;d>=0;d--){const dt=new Date(Date.now()-d*86400000);days.push(dt.getDate());revs.push(sales.filter(s=>new Date(s.timestamp).toDateString()===dt.toDateString()).reduce((a,b)=>a+b.total,0))}
+    54→  1453→  1453→  charts.trend=new Chart($('#trendChart'),{type:'line',data:{labels:days,datasets:[{label:'Revenue',data:revs,borderColor:'#DC2626',backgroundColor:'rgba(220,38,38,.1)',fill:true,tension:.3}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+    55→  1454→  1454→  // category
+    56→  1455→  1455→  const catMap={};sales.forEach(s=>s.items.forEach(i=>{const p=state.inventory.find(x=>x.id===i.id);const cat=p?p.category:'Other';catMap[cat]=(catMap[cat]||0)+i.price*i.qty}));
+    57→  1456→  1456→  charts.cat=new Chart($('#catChart'),{type:'doughnut',data:{labels:Object.keys(catMap),datasets:[{data:Object.values(catMap),backgroundColor:['#DC2626','#F59E0B','#10B981','#3B82F6','#8B5CF6','#14B8A6','#EC4899','#F97316','#6366F1','#A855F7']}]},options:{responsive:true,plugins:{legend:{position:'right'}}}});
+    58→  1457→  1457→  // top 10
+    59→  1458→  1458→  const sellerMap={};sales.forEach(s=>s.items.forEach(i=>{sellerMap[i.name]=(sellerMap[i.name]||0)+i.price*i.qty}));
+    60→  1459→  1459→  const top10=Object.entries(sellerMap).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    61→  1460→  1460→  charts.top10=new Chart($('#top10Chart'),{type:'bar',data:{labels:top10.map(t=>t[0].split(' ').slice(0,2).join(' ')),datasets:[{data:top10.map(t=>t[1]),backgroundColor:'#F59E0B',borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+    62→  1461→  1461→  // payment
+    63→  1462→  1462→  const payMap={};sales.forEach(s=>payMap[s.paymentMethod]=(payMap[s.paymentMethod]||0)+s.total);
+    64→  1463→  1463→  charts.pay=new Chart($('#payChart'),{type:'pie',data:{labels:Object.keys(payMap).map(k=>k.charAt(0).toUpperCase()+k.slice(1)),datasets:[{data:Object.values(payMap),backgroundColor:['#10B981','#3B82F6','#F59E0B']}]},options:{responsive:true,plugins:{legend:{position:'right'}}}});
+    65→  1464→  1464→};
+    66→  1465→  1465→
+    67→  1466→  1466→/* ----- PROFIT ANALYTICS ----- */
+    68→  1467→  1467→RENDERERS.profit=function(){
+    69→  1468→  1468→  const sales=state.sales.filter(s=>s.storeId===state.currentStoreId);
+    70→  1469→  1469→  const exps=state.expenses.filter(e=>e.storeId===state.currentStoreId);
+    71→  1470→  1470→  let rev=0,cost=0;
+    72→  1471→  1471→  sales.forEach(s=>s.items.forEach(i=>{rev+=i.price*i.qty;cost+=i.cost*i.qty}));
+    73→  1472→  1472→  const profit=rev-cost;const pct=rev?(profit/rev*100).toFixed(1):0;
+    74→  1473→  1473→  const totalExp=exps.reduce((a,b)=>a+b.amount,0);
+    75→  1474→  1474→  const netProfit=profit-totalExp;
+    76→  1475→  1475→  const netPct=rev?(netProfit/rev*100).toFixed(1):0;
+    77→  1476→  1476→  let html=`<div class="page-header"><div><h2>Profit Analytics</h2><p>Margin and profitability analysis</p></div>
+    78→  1477→  1477→    <div class="page-actions"><button class="btn btn-emerald btn-sm" onclick="exportProfitReport()"><i class="fa-solid fa-file-pdf"></i> Export PDF</button></div></div>
+    79→  1478→  1478→  <div class="stat-grid">
+    80→  1479→  1479→    <div class="stat-card stat-emerald"><div class="label">Gross Profit</div><div class="value">${fmt(profit)}</div><div class="delta">${pct}% margin</div><i class="fa-solid fa-coins icon"></i></div>
+    81→  1480→  1480→    <div class="stat-card stat-blue"><div class="label">Revenue</div><div class="value">${fmt(rev)}</div><div class="delta">total sales</div><i class="fa-solid fa-money-bill-trend-up icon"></i></div>
+    82→  1481→  1481→    <div class="stat-card stat-crimson"><div class="label">Cost of Goods</div><div class="value">${fmt(cost)}</div><div class="delta">inventory cost</div><i class="fa-solid fa-warehouse icon"></i></div>
+    83→  1482→  1482→    <div class="stat-card stat-amber"><div class="label">Operating Expenses</div><div class="value">${fmt(totalExp)}</div><div class="delta">${exps.length} entries</div><i class="fa-solid fa-receipt icon"></i></div>
+    84→  1483→  1483→    <div class="stat-card stat-purple"><div class="label">Net Profit</div><div class="value">${fmt(netProfit)}</div><div class="delta">${netPct}% net margin</div><i class="fa-solid fa-piggy-bank icon"></i></div>
+    85→  1484→  1484→  </div>
+    86→  1485→  1485→  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
+    87→  1486→  1486→    <div class="card"><div class="card-header"><h3>Daily Profit Trend (30 days)</h3></div><canvas id="profChart" height="200"></canvas></div>
+    88→  1487→  1487→    <div class="card"><div class="card-header"><h3>Top 10 by Profit</h3></div><canvas id="profTopChart" height="200"></canvas></div>
+    89→  1488→  1488→  </div>
+    90→  1489→  1489→  <div class="card"><div class="card-header"><h3>Expense Breakdown by Category</h3></div>
+    91→  1490→  1490→    <div style="display:flex;gap:8px;flex-wrap:wrap">${['Rent','Utilities','Salaries','Inventory','Marketing','Maintenance','Other'].map(c=>{const t=exps.filter(e=>e.category===c).reduce((a,b)=>a+b.amount,0);if(!t)return'';const cls={Rent:'badge-red',Utilities:'badge-gold',Salaries:'badge-blue',Inventory:'badge-green',Marketing:'badge-purple',Maintenance:'badge-teal',Other:'badge-gray'}[c];return `<div style="flex:1;min-width:120px;text-align:center;padding:10px;background:var(--bg-alt);border-radius:10px"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase">${c}</div><div style="font-size:16px;font-weight:800;margin-top:4px">${fmt(t)}</div></div>`}).join('')}</div>
+    92→  1491→  1491→  </div>
+    93→  1492→  1492→  <div class="card"><div class="card-header"><h3>Profit by Product</h3></div>
+    94→  1493→  1493→    <div class="table-wrap"><table><thead><tr><th>Product</th><th>Units Sold</th><th>Revenue</th><th>Cost</th><th>Profit</th><th>Margin</th></tr></thead><tbody>
+    95→  1494→  1494→      ${(()=>{const m={};sales.forEach(s=>s.items.forEach(i=>{if(!m[i.id])m[i.id]={name:i.name,units:0,rev:0,cost:0};m[i.id].units+=i.qty;m[i.id].rev+=i.price*i.qty;m[i.id].cost+=i.cost*i.qty}));return Object.values(m).sort((a,b)=>(b.rev-b.cost)-(a.rev-a.cost)).map(x=>{const p=x.rev-x.cost;const pc=x.rev?(p/x.rev*100).toFixed(0):0;return `<tr><td><b>${x.name}</b></td><td>${x.units}</td><td>${fmt(x.rev)}</td><td>${fmt(x.cost)}</td><td><b class="text-emerald">${fmt(p)}</b></td><td><span class="badge ${pc>=40?'badge-green':pc>=20?'badge-gold':'badge-red'}">${pc}%</span></td></tr>`}).join('')})()}
+    96→  1495→  1495→    </tbody></table></div></div>`;
+    97→  1496→  1496→  $('#content').innerHTML=html;
+    98→  1497→  1497→  if(window.innerWidth<=1024)$$('.dash-grid').forEach(g=>g.style.gridTemplateColumns='1fr');
+    99→  1498→  1498→  const days=[],profits=[];
+   100→  1499→  1499→  for(let d=29;d>=0;d--){const dt=new Date(Date.now()-d*86400000);days.push(dt.getDate());const ss=sales.filter(s=>new Date(s.timestamp).toDateString()===dt.toDateString());profits.push(ss.reduce((a,b)=>a+b.items.reduce((x,y)=>x+(y.price-y.cost)*y.qty,0),0))}
+   101→  1500→  1500→  charts.prof=new Chart($('#profChart'),{type:'bar',data:{labels:days,datasets:[{label:'Profit',data:profits,backgroundColor:'#10B981',borderRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+   102→  1501→  1501→  const m={};sales.forEach(s=>s.items.forEach(i=>{if(!m[i.id])m[i.id]={name:i.name,profit:0};m[i.id].profit+=(i.price-i.cost)*i.qty}));
+   103→  1502→  1502→  const top=Object.values(m).sort((a,b)=>b.profit-a.profit).slice(0,10);
+   104→  1503→  1503→  charts.profTop=new Chart($('#profTopChart'),{type:'bar',data:{labels:top.map(t=>t.name.split(' ').slice(0,2).join(' ')),datasets:[{data:top.map(t=>t.profit),backgroundColor:['#10B981','#14B8A6','#3B82F6','#8B5CF6','#DC2626','#F59E0B','#EC4899','#F97316','#6366F1','#A855F7'],borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+   105→  1504→  1504→};
+   106→  1505→  1505→
+   107→  1506→  1506→/* ----- EXPENSES ----- */
+   108→  1507→  1507→RENDERERS.expenses=function(){
+   109→  1508→  1508→  const exp=state.expenses.filter(e=>e.storeId===state.currentStoreId).sort((a,b)=>b.date.localeCompare(a.date));
+   110→  1509→  1509→  const total=exp.reduce((a,b)=>a+b.amount,0);
+   111→  1510→  1510→  const thisMonth=exp.filter(e=>e.date.slice(0,7)===todayKey().slice(0,7)).reduce((a,b)=>a+b.amount,0);
+   112→  1511→  1511→  const cats=['Rent','Utilities','Salaries','Inventory','Marketing','Maintenance','Other'];
+   113→  1512→  1512→  const catTotals=cats.map(c=>({cat:c,total:exp.filter(e=>e.category===c).reduce((a,b)=>a+b.amount,0)})).filter(x=>x.total>0);
+   114→  1513→  1513→  let html=`<div class="page-header"><div><h2>Expense Tracking</h2><p>${exp.length} expense records · ${state.stores.find(s=>s.id===state.currentStoreId).name}</p></div>
+   115→  1514→  1514→    <div class="page-actions"><button class="btn btn-primary btn-sm" onclick="openExpenseModal()"><i class="fa-solid fa-plus"></i> Add Expense</button></div></div>
+   116→  1515→  1515→  <div class="stat-grid">
+   117→  1516→  1516→    <div class="stat-card stat-crimson"><div class="label">Total Expenses</div><div class="value">${fmt(total)}</div><div class="delta">All time</div><i class="fa-solid fa-receipt icon"></i></div>
+   118→  1517→  1517→    <div class="stat-card stat-amber"><div class="label">This Month</div><div class="value">${fmt(thisMonth)}</div><div class="delta">${new Date().toLocaleDateString('en-KE',{month:'long',year:'numeric'})}</div><i class="fa-solid fa-calendar icon"></i></div>
+   119→  1518→  1518→    <div class="stat-card stat-blue"><div class="label">Records</div><div class="value">${exp.length}</div><div class="delta">entries logged</div><i class="fa-solid fa-file-lines icon"></i></div>
+   120→  1519→  1519→    <div class="stat-card stat-purple"><div class="label">Avg / Entry</div><div class="value">${fmt(exp.length?total/exp.length:0)}</div><div class="delta">per expense</div><i class="fa-solid fa-chart-pie icon"></i></div>
+   121→  1520→  1520→  </div>`;
+   122→  1521→  1521→  if(catTotals.length){
+   123→  1522→  1522→    html+=`<div class="card"><div class="card-header"><h3>Expenses by Category</h3></div>
+   124→  1523→  1523→      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
+   125→  1524→  1524→        <canvas id="expCatChart" height="200"></canvas>
+   126→  1525→  1525→        <div>${catTotals.sort((a,b)=>b.total-a.total).map(c=>{const pct=total?(c.total/total*100).toFixed(0):0;const colors={Rent:'#DC2626',Utilities:'#F59E0B',Salaries:'#3B82F6',Inventory:'#10B981',Marketing:'#8B5CF6',Maintenance:'#14B8A6',Other:'#6B7280'};return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--border-light)"><div style="width:10px;height:10px;border-radius:50%;background:${colors[c.cat]}"></div><div style="flex:1"><div style="font-size:13px;font-weight:600">${c.cat}</div><div style="font-size:11px;color:var(--text-muted)">${pct}% of total</div></div><div style="font-weight:800">${fmt(c.total)}</div></div>`}).join('')}</div>
+   127→  1526→  1526→      </div></div>`;
+   128→  1527→  1527→  }
+   129→  1528→  1528→  html+=`<div class="card" style="padding:0"><div class="card-header" style="padding:16px"><h3>Expense History</h3></div>
+   130→  1529→  1529→    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Recorded By</th><th>Actions</th></tr></thead><tbody>
+   131→  1530→  1530→      ${exp.length?exp.map(e=>{const colors={Rent:'badge-red',Utilities:'badge-gold',Salaries:'badge-blue',Inventory:'badge-green',Marketing:'badge-purple',Maintenance:'badge-teal',Other:'badge-gray'};return `<tr><td>${new Date(e.date).toLocaleDateString('en-KE',{day:'numeric',month:'short',year:'numeric'})}</td><td><span class="badge ${colors[e.category]||'badge-gray'}">${e.category}</span></td><td>${e.description}</td><td><b class="text-crimson">${fmt(e.amount)}</b></td><td>${staffName(e.recordedBy)}</td><td><div class="row-actions"><button onclick="openExpenseModal('${e.id}')"><i class="fa-solid fa-pen"></i></button><button class="delete" onclick="deleteExpense('${e.id}')"><i class="fa-solid fa-trash"></i></button></div></td></tr>`}).join(''):'<tr><td colspan="6"><div class="empty-state"><i class="fa-solid fa-receipt"></i><h3>No expenses yet</h3><p>Add your first expense above.</p></div></td></tr>'}
+   132→  1531→  1531→    </tbody></table></div></div>`;
+   133→  1532→  1532→  $('#content').innerHTML=html;
+   134→  1533→  1533→  if(window.innerWidth<=1024)$$('.dash-grid').forEach(g=>g.style.gridTemplateColumns='1fr');
+   135→  1534→  1534→  if(catTotals.length){
+   136→  1535→  1535→    const colors={Rent:'#DC2626',Utilities:'#F59E0B',Salaries:'#3B82F6',Inventory:'#10B981',Marketing:'#8B5CF6',Maintenance:'#14B8A6',Other:'#6B7280'};
+   137→  1536→  1536→    charts.expCat=new Chart($('#expCatChart'),{type:'doughnut',data:{labels:catTotals.map(c=>c.cat),datasets:[{data:catTotals.map(c=>c.total),backgroundColor:catTotals.map(c=>colors[c.cat])}]},options:{responsive:true,plugins:{legend:{position:'bottom'}}}});
+   138→  1537→  1537→  }
+   139→  1538→  1538→};
+   140→  1539→  1539→window.openExpenseModal=function(id){
+   141→  1540→  1540→  const e=id?state.expenses.find(x=>x.id===id):null;
+   142→  1541→  1541→  const cats=['Rent','Utilities','Salaries','Inventory','Marketing','Maintenance','Other'];
+   143→  1542→  1542→  openModal(e?'Edit Expense':'Add Expense',
+   144→  1543→  1543→    `<div class="form-grid">
+   145→  1544→  1544→      <div class="form-group"><label>Date</label><input type="date" id="expDate" class="form-control" value="${e?e.date:todayKey()}"></div>
+   146→  1545→  1545→      <div class="form-group"><label>Category</label><select id="expCategory" class="form-control">${cats.map(c=>`<option ${e&&e.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+   147→  1546→  1546→      <div class="form-group"><label>Amount (KSh)</label><input type="number" id="expAmount" class="form-control" value="${e?e.amount:''}" min="0" step="100"></div>
+   148→  1547→  1547→      <div class="form-group"><label>Description</label><input id="expDesc" class="form-control" value="${e?e.description:''}"></div>
+   149→  1548→  1548→    </div>`,
+   150→  1549→  1549→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveExpense('${id||''}')"><i class="fa-solid fa-check"></i> Save</button>`);
+   151→  1550→  1550→};
+   152→  1551→  1551→window.saveExpense=function(id){
+   153→  1552→  1552→  const get=v=>$('#'+v).value.trim();
+   154→  1553→  1553→  if(!get('expDate')||!get('expAmount')){toast('Date and amount required','error');return}
+   155→  1554→  1554→  const data={date:get('expDate'),category:get('expCategory'),amount:parseFloat(get('expAmount'))||0,description:get('expDesc')||get('expCategory')};
+   156→  1555→  1555→  if(id){Object.assign(state.expenses.find(x=>x.id===id),data);toast('Expense updated','success')}
+   157→  1556→  1556→  else{data.id=uid('e');data.storeId=state.currentStoreId;data.recordedBy=currentUser.id;state.expenses.push(data);toast('Expense added','success')}
+   158→  1557→  1557→  saveState();closeModal();navigate('expenses');
+   159→  1558→  1558→};
+   160→  1559→  1559→window.deleteExpense=function(id){if(!confirm('Delete this expense?'))return;state.expenses=state.expenses.filter(e=>e.id!==id);saveState();toast('Deleted','success');navigate('expenses')};
+   161→  1560→  1560→
+   162→  1561→  1561→/* ----- PDF REPORTS ----- */
+   163→  1562→  1562→RENDERERS.reports=function(){
+   164→  1563→  1563→  let html=`<div class="page-header"><div><h2>PDF Reports</h2><p>Export professional PDF reports for printing, sharing, or accounting</p></div></div>
+   165→  1564→  1564→  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px">
+   166→  1565→  1565→    <div class="card" style="border-top:4px solid var(--crimson);cursor:pointer" onclick="exportSalesReport()">
+   167→  1566→  1566→      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#EF4444,#DC2626);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-chart-line"></i></div><div><h3 style="font-size:15px;font-weight:700">Sales Report</h3><p style="font-size:11px;color:var(--text-muted)">All transactions & revenue</p></div></div>
+   168→  1567→  1567→      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Detailed breakdown of all sales including items sold, payment methods, daily totals, and top performers.</p>
+   169→  1568→  1568→      <button class="btn btn-primary btn-block btn-sm"><i class="fa-solid fa-file-pdf"></i> Generate PDF</button>
+   170→  1569→  1569→    </div>
+   171→  1570→  1570→    <div class="card" style="border-top:4px solid var(--amber);cursor:pointer" onclick="exportInventoryReport()">
+   172→  1571→  1571→      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#FBBF24,#F59E0B);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-boxes-stacked"></i></div><div><h3 style="font-size:15px;font-weight:700">Inventory Report</h3><p style="font-size:11px;color:var(--text-muted)">Current stock & valuation</p></div></div>
+   173→  1572→  1572→      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Full inventory listing with quantities, costs, sell prices, margins, reorder levels, and stock status indicators.</p>
+   174→  1573→  1573→      <button class="btn btn-amber btn-block btn-sm"><i class="fa-solid fa-file-pdf"></i> Generate PDF</button>
+   175→  1574→  1574→    </div>
+   176→  1575→  1575→    <div class="card" style="border-top:4px solid var(--emerald);cursor:pointer" onclick="exportProfitReport()">
+   177→  1576→  1576→      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#34D399,#10B981);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-coins"></i></div><div><h3 style="font-size:15px;font-weight:700">Profit & Loss</h3><p style="font-size:11px;color:var(--text-muted)">Revenue, costs & net profit</p></div></div>
+   178→  1577→  1577→      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Complete P&L statement with gross profit, operating expenses by category, and net profit margin analysis.</p>
+   179→  1578→  1578→      <button class="btn btn-emerald btn-block btn-sm"><i class="fa-solid fa-file-pdf"></i> Generate PDF</button>
+   180→  1579→  1579→    </div>
+   181→  1580→  1580→    <div class="card" style="border-top:4px solid var(--blue);cursor:pointer" onclick="exportExpenseReport()">
+   182→  1581→  1581→      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#60A5FA,#3B82F6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-receipt"></i></div><div><h3 style="font-size:15px;font-weight:700">Expense Report</h3><p style="font-size:11px;color:var(--text-muted)">All recorded expenses</p></div></div>
+   183→  1582→  1582→      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Categorized breakdown of all expenses with daily totals, category subtotals, and grand total for the period.</p>
+   184→  1583→  1583→      <button class="btn btn-blue btn-block btn-sm"><i class="fa-solid fa-file-pdf"></i> Generate PDF</button>
+   185→  1584→  1584→    </div>
+   186→  1585→  1585→    <div class="card" style="border-top:4px solid var(--purple);cursor:pointer" onclick="exportReconciliationReport()">
+   187→  1586→  1586→      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#A78BFA,#8B5CF6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-scale-balanced"></i></div><div><h3 style="font-size:15px;font-weight:700">Daily Reconciliation</h3><p style="font-size:11px;color:var(--text-muted)">Stock variance audit</p></div></div>
+   188→  1587→  1587→      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Today's reconciliation showing opening stock, sales, additions, expected vs actual closing, and variance per item.</p>
+   189→  1588→  1588→      <button class="btn btn-block btn-sm" style="background:var(--purple);color:#fff"><i class="fa-solid fa-file-pdf"></i> Generate PDF</button>
+   190→  1589→  1589→    </div>
+   191→  1590→  1590→    <div class="card" style="border-top:4px solid var(--teal);cursor:pointer" onclick="exportStockTakeReport()">
+   192→  1591→  1591→      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#2DD4BF,#14B8A6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px"><i class="fa-solid fa-clipboard-check"></i></div><div><h3 style="font-size:15px;font-weight:700">Stock Count Audit</h3><p style="font-size:11px;color:var(--text-muted)">Historical count records</p></div></div>
+   193→  1592→  1592→      <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">All stock count sessions with expected vs counted quantities, variances, approver, and timestamp for audit trails.</p>
+   194→  1593→  1593→      <button class="btn btn-block btn-sm" style="background:var(--teal);color:#fff"><i class="fa-solid fa-file-pdf"></i> Generate PDF</button>
+   195→  1594→  1594→    </div>
+   196→  1595→  1595→  </div>`;
+   197→  1596→  1596→  $('#content').innerHTML=html;
+   198→  1597→  1597→};
+   199→  1598→  1598→function pdfHeader(doc,title,subtitle){
+   200→  1599→  1599→  const w=doc.internal.pageSize.getWidth();
+   201→  1600→  1600→  doc.setFillColor(31,17,41);doc.rect(0,0,w,28,'F');
+   202→  1601→  1601→  doc.setTextColor(255,255,255);doc.setFontSize(16);doc.setFont('helvetica','bold');
+   203→  1602→  1602→  doc.text('VinoCellar Pro',14,13);
+   204→  1603→  1603→  doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(245,158,11);
+   205→  1604→  1604→  doc.text('Wine & Spirits Inventory Management',14,21);
+   206→  1605→  1605→  doc.setTextColor(31,17,41);doc.setFontSize(14);doc.setFont('helvetica','bold');
+   207→  1606→  1606→  doc.text(title,14,42);
+   208→  1607→  1607→  doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(107,114,128);
+   209→  1608→  1608→  doc.text(subtitle,14,49);
+   210→  1609→  1609→  doc.setDrawColor(220,38,38);doc.setLineWidth(0.8);doc.line(14,53,w-14,53);
+   211→  1610→  1610→}
+   212→  1611→  1611→function pdfFooter(doc){
+   213→  1612→  1612→  const w=doc.internal.pageSize.getWidth();const h=doc.internal.pageSize.getHeight();
+   214→  1613→  1613→  doc.setFontSize(8);doc.setTextColor(156,163,175);doc.setFont('helvetica','normal');
+   215→  1614→  1614→  const pages=doc.internal.getNumberOfPages();
+   216→  1615→  1615→  for(let i=1;i<=pages;i++){
+   217→  1616→  1616→    doc.setPage(i);
+   218→  1617→  1617→    doc.text('Generated '+new Date().toLocaleString('en-KE')+'  ·  VinoCellar Pro  ·  Page '+i+' of '+pages,14,h-10);
+   219→  1618→  1618→  }
+   220→  1619→  1619→}
+   221→  1620→  1620→function downloadPdf(doc,filename){
+   222→  1621→  1621→  pdfFooter(doc);
+   223→  1622→  1622→  doc.save(filename);
+   224→  1623→  1623→  toast('PDF downloaded: '+filename,'success');
+   225→  1624→  1624→}
+   226→  1625→  1625→window.exportSalesReport=function(){
+   227→  1626→  1626→  const sales=state.sales.filter(s=>s.storeId===state.currentStoreId).sort((a,b)=>b.timestamp-a.timestamp);
+   228→  1627→  1627→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+   229→  1628→  1628→  const totalRev=sales.reduce((a,b)=>a+b.total,0);
+   230→  1629→  1629→  const totalUnits=sales.reduce((a,b)=>a+b.items.reduce((x,y)=>x+y.qty,0),0);
+   231→  1630→  1630→  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+   232→  1631→  1631→  pdfHeader(doc,'Sales Report',store.name+' · '+sales.length+' transactions · Total: '+fmt(totalRev));
+   233→  1632→  1632→  doc.autoTable({startY:58,head:[['Date','Items','Units','Payment','Total']],body:sales.map(s=>[new Date(s.timestamp).toLocaleString('en-KE'),s.items.length,s.items.reduce((a,b)=>a+b.qty,0),s.paymentMethod.toUpperCase(),fmt(s.total)]),foot:[['','','','','TOTAL: '+fmt(totalRev)]],headStyles:{fillColor:[220,38,38]},footStyles:{fillColor:[31,17,41],textColor:[255,255,255]},styles:{fontSize:9}});
+   234→  1633→  1633→  // summary box
+   235→  1634→  1634→  const fy=doc.lastAutoTable.finalY+10;
+   236→  1635→  1635→  doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(31,17,41);
+   237→  1636→  1636→  doc.text('Summary',14,fy);
+   238→  1637→  1637→  doc.autoTable({startY:fy+4,theme:'plain',body:[['Total Transactions',String(sales.length)],['Total Revenue',fmt(totalRev)],['Units Sold',String(totalUnits)],['Average Sale Value',fmt(sales.length?totalRev/sales.length:0)]],styles:{fontSize:10}});
+   239→  1638→  1638→  downloadPdf(doc,'sales-report-'+todayKey()+'.pdf');
+   240→  1639→  1639→};
+   241→  1640→  1640→window.exportInventoryReport=function(){
+   242→  1641→  1641→  const inv=currentStoreInv();
+   243→  1642→  1642→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+   244→  1643→  1643→  const totalVal=inv.reduce((a,b)=>a+b.current*b.cost,0);
+   245→  1644→  1644→  const totalSellVal=inv.reduce((a,b)=>a+b.current*b.sell,0);
+   246→  1645→  1645→  const lowStock=inv.filter(p=>p.current<=p.reorder).length;
+   247→  1646→  1646→  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+   248→  1647→  1647→  pdfHeader(doc,'Inventory Report',store.name+' · '+inv.length+' products · Stock value: '+fmt(totalVal));
+   249→  1648→  1648→  doc.autoTable({startY:58,head:[['Product','Category','SKU','Stock','Reorder','Cost','Price','Margin','Status']],body:inv.map(p=>{const m=p.sell-p.cost;const st=p.current===0?'OUT':p.current<=p.reorder?'LOW':'OK';return[p.name,p.category,p.sku,p.current,p.reorder,fmt(p.cost),fmt(p.sell),fmt(m),st]}),headStyles:{fillColor:[245,158,11]},columnStyles:{0:{cellWidth:50}},styles:{fontSize:8}});
+   250→  1649→  1649→  const fy=doc.lastAutoTable.finalY+10;
+   251→  1650→  1650→  doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(31,17,41);
+   252→  1651→  1651→  doc.text('Inventory Summary',14,fy);
+   253→  1652→  1652→  doc.autoTable({startY:fy+4,theme:'plain',body:[['Total Products',String(inv.length)],['Total Units',String(inv.reduce((a,b)=>a+b.current,0))],['Inventory Cost Value',fmt(totalVal)],['Inventory Sell Value',fmt(totalSellVal)],['Low Stock Items',String(lowStock)],['Out of Stock Items',String(inv.filter(p=>p.current===0).length)]],styles:{fontSize:10}});
+   254→  1653→  1653→  downloadPdf(doc,'inventory-report-'+todayKey()+'.pdf');
+   255→  1654→  1654→};
+   256→  1655→  1655→window.exportProfitReport=function(){
+   257→  1656→  1656→  const sales=state.sales.filter(s=>s.storeId===state.currentStoreId);
+   258→  1657→  1657→  const exps=state.expenses.filter(e=>e.storeId===state.currentStoreId);
+   259→  1658→  1658→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+   260→  1659→  1659→  let rev=0,cogs=0;
+   261→  1660→  1660→  sales.forEach(s=>s.items.forEach(i=>{rev+=i.price*i.qty;cogs+=i.cost*i.qty}));
+   262→  1661→  1661→  const grossProfit=rev-cogs;
+   263→  1662→  1662→  const totalExp=exps.reduce((a,b)=>a+b.amount,0);
+   264→  1663→  1663→  const netProfit=grossProfit-totalExp;
+   265→  1664→  1664→  const gPct=rev?(grossProfit/rev*100).toFixed(1):0;
+   266→  1665→  1665→  const nPct=rev?(netProfit/rev*100).toFixed(1):0;
+   267→  1666→  1666→  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+   268→  1667→  1667→  pdfHeader(doc,'Profit & Loss Statement',store.name+' · Generated '+new Date().toLocaleDateString('en-KE'));
+   269→  1668→  1668→  // P&L statement
+   270→  1669→  1669→  doc.autoTable({startY:58,theme:'plain',body:[
+   271→  1670→  1670→    ['REVENUE',''],
+   272→  1671→  1671→    ['Gross Sales',fmt(rev)],
+   273→  1672→  1672→    ['Cost of Goods Sold (COGS)',fmt(cogs)],
+   274→  1673→  1673→    ['Gross Profit',fmt(grossProfit)],
+   275→  1674→  1674→    ['Gross Margin %',gPct+'%'],
+   276→  1675→  1675→    ['',''],
+   277→  1676→  1676→    ['OPERATING EXPENSES',''],
+   278→  1677→  1677→    ...['Rent','Utilities','Salaries','Inventory','Marketing','Maintenance','Other'].map(c=>[c,fmt(exps.filter(e=>e.category===c).reduce((a,b)=>a+b.amount,0))]).filter(r=>r[1]!=='KSh 0'),
+   279→  1678→  1678→    ['Total Operating Expenses',fmt(totalExp)],
+   280→  1679→  1679→    ['',''],
+   281→  1680→  1680→    ['NET PROFIT',fmt(netProfit)],
+   282→  1681→  1681→    ['Net Margin %',nPct+'%']
+   283→  1682→  1682→  ],columnStyles:{0:{fontStyle:'bold',textColor:[31,17,41]},1:{halign:'right',fontStyle:'bold'}},didParseCell:function(d){const lbl=d.cell.raw[0];if(lbl==='Gross Profit'||lbl==='NET PROFIT'||lbl==='Total Operating Expenses'||lbl==='REVENUE'||lbl==='OPERATING EXPENSES'){d.cell.styles.fontStyle='bold';d.cell.styles.fillColor=[243,238,230];if(lbl==='NET PROFIT'){d.cell.styles.textColor=[16,185,129]}if(lbl==='Gross Profit'){d.cell.styles.textColor=[16,185,129]}if(lbl==='Total Operating Expenses'){d.cell.styles.textColor=[220,38,38]}}},styles:{fontSize:10}});
+   284→  1683→  1683→  // expense detail table
+   285→  1684→  1684→  const fy=doc.lastAutoTable.finalY+14;
+   286→  1685→  1685→  if(fy<240){
+   287→  1686→  1686→    doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(31,17,41);
+   288→  1687→  1687→    doc.text('Expense Detail',14,fy);
+   289→  1688→  1688→    doc.autoTable({startY:fy+4,head:[['Date','Category','Description','Amount']],body:exps.sort((a,b)=>b.date.localeCompare(a.date)).map(e=>[new Date(e.date).toLocaleDateString('en-KE'),e.category,e.description,fmt(e.amount)]),foot:[['','','TOTAL',fmt(totalExp)]],headStyles:{fillColor:[220,38,38]},footStyles:{fillColor:[31,17,41],textColor:[255,255,255]},styles:{fontSize:9}});
+   290→  1689→  1689→  }
+   291→  1690→  1690→  downloadPdf(doc,'profit-loss-'+todayKey()+'.pdf');
+   292→  1691→  1691→};
+   293→  1692→  1692→window.exportExpenseReport=function(){
+   294→  1693→  1693→  const exps=state.expenses.filter(e=>e.storeId===state.currentStoreId).sort((a,b)=>b.date.localeCompare(a.date));
+   295→  1694→  1694→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+   296→  1695→  1695→  const total=exps.reduce((a,b)=>a+b.amount,0);
+   297→  1696→  1696→  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+   298→  1697→  1697→  pdfHeader(doc,'Expense Report',store.name+' · '+exps.length+' entries · Total: '+fmt(total));
+   299→  1698→  1698→  doc.autoTable({startY:58,head:[['Date','Category','Description','Recorded By','Amount']],body:exps.map(e=>[new Date(e.date).toLocaleDateString('en-KE'),e.category,e.description,staffName(e.recordedBy),fmt(e.amount)]),foot:[['','','','','TOTAL: '+fmt(total)]],headStyles:{fillColor:[59,130,246]},footStyles:{fillColor:[31,17,41],textColor:[255,255,255]},styles:{fontSize:9}});
+   300→  1699→  1699→  // category breakdown
+
+[showing lines 1-300 of 540; use offset=301 with limit to continue reading]

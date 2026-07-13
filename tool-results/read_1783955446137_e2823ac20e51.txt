@@ -1,0 +1,502 @@
+  1000→  if(slowMovers.length){
+  1001→    insights.push({type:'warn',icon:'fa-hourglass-half',text:`<b>${slowMovers[0].name}</b> hasn't sold this week but you have ${slowMovers[0].current} units. Consider a discount bundle or staff recommendation push.`});
+  1002→  }
+  1003→  // health
+  1004→  if(health.score<60){
+  1005→    insights.push({type:'warn',icon:'fa-heart-pulse',text:`Inventory Health Score is ${health.score}/100 (${health.label}). Address ${inv.filter(p=>p.current<=p.reorder).length} low-stock items to improve coverage.`});
+  1006→  }else{
+  1007→    insights.push({type:'success',icon:'fa-heart-pulse',text:`Inventory Health Score is ${health.score}/100 (${health.label}). Stock levels are well balanced.`});
+  1008→  }
+  1009→  if(!insights.length)insights.push({type:'info',icon:'fa-circle-info',text:'Not enough data for insights yet. Make a few sales and check back.'});
+  1010→  $('#aiInsights').innerHTML=insights.map(i=>`<div class="ai-insight ${i.type}"><i class="fa-solid ${i.icon}"></i><div>${i.text}</div></div>`).join('');
+  1011→}
+  1012→
+  1013→window.quickReorder=function(pid){
+  1014→  const p=currentStoreInv().find(x=>x.id===pid);if(!p)return;
+  1015→  openModal('Reorder: '+p.name,
+  1016→    `<div class="form-group"><label>Supplier</label><input class="form-control" value="${supplierName(p.supplierId)}" disabled></div>
+  1017→     <div class="form-group"><label>Quantity to order</label><input type="number" id="roQty" class="form-control" value="${p.reorder*2}" min="1"></div>
+  1018→     <div class="form-group"><label>Estimated cost</label><input class="form-control" id="roCost" disabled></div>`,
+  1019→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmReorder('${pid}')"><i class="fa-solid fa-check"></i> Place Order</button>`);
+  1020→  const calc=()=>{$('#roCost').value=fmt(($('#roQty').value||0)*p.cost)};
+  1021→  $('#roQty').addEventListener('input',calc);calc();
+  1022→};
+  1023→window.confirmReorder=function(pid){
+  1024→  const qty=parseInt($('#roQty').value);if(!qty||qty<1){toast('Enter valid quantity','error');return}
+  1025→  const p=currentStoreInv().find(x=>x.id===pid);
+  1026→  p.current+=qty;p.opening=p.current;
+  1027→  saveState();
+  1028→  closeModal();toast('Order received. '+qty+' units of '+p.name+' added.','success');
+  1029→  navigate('inventory');
+  1030→};
+  1031→
+  1032→/* ----- INVENTORY ----- */
+  1033→RENDERERS.inventory=function(){
+  1034→  const inv=currentStoreInv();
+  1035→  const cats=['All',...new Set(inv.map(p=>p.category))];
+  1036→  let html=`
+  1037→  <div class="page-header"><div><h2>Inventory Management</h2><p>${inv.length} products in ${state.stores.find(s=>s.id===state.currentStoreId).name}</p></div>
+  1038→    <div class="page-actions">
+  1039→      <button class="btn btn-outline btn-sm" id="invScanBtn"><i class="fa-solid fa-barcode"></i> Scan</button>
+  1040→      <button class="btn btn-amber btn-sm" onclick="navigate('stocktake')"><i class="fa-solid fa-clipboard-check"></i> Stock Count</button>
+  1041→      <button class="btn btn-primary btn-sm" onclick="openProductModal()"><i class="fa-solid fa-plus"></i> Add Product</button>
+  1042→    </div>
+  1043→  </div>
+  1044→  <div class="flex gap-8 items-center mb-12 flex-wrap">
+  1045→    <div class="search-bar"><i class="fa-solid fa-magnifying-glass"></i><input id="invSearch" placeholder="Search by name, SKU, barcode..."></div>
+  1046→    <div class="filter-chips" id="catChips">${cats.map((c,i)=>`<button class="chip ${i===0?'active':''}" data-cat="${c}">${c}</button>`).join('')}</div>
+  1047→  </div>
+  1048→  <div class="card" style="padding:0">
+  1049→    <div class="table-wrap"><table><thead><tr><th>Product</th><th>Category</th><th>SKU</th><th>Stock</th><th>Cost</th><th>Price</th><th>Margin</th><th>Status</th><th>Actions</th></tr></thead><tbody id="invBody"></tbody></table></div>
+  1050→  </div>`;
+  1051→  $('#content').innerHTML=html;
+  1052→  let curCat='All',curSearch='';
+  1053→  function draw(){
+  1054→    let rows=inv.filter(p=>(curCat==='All'||p.category===curCat)&&(p.name+p.sku+p.barcode).toLowerCase().includes(curSearch.toLowerCase()));
+  1055→    $('#invBody').innerHTML=rows.length?rows.map(p=>{
+  1056→      const margin=p.sell-p.cost;const pct=(margin/p.sell*100).toFixed(0);
+  1057→      const status=p.current===0?'<span class="badge badge-red">Out</span>':p.current<=p.reorder?'<span class="badge badge-gold">Low</span>':'<span class="badge badge-green">OK</span>';
+  1058→      return `<tr><td><b>${p.name}</b><br><small class="text-muted">${p.barcode}</small></td><td><span class="badge badge-purple">${p.category}</span></td><td>${p.sku}</td><td><b style="font-size:15px;color:${p.current<=p.reorder?'var(--crimson)':'var(--sidebar)'}">${p.current}</b><br><small class="text-muted">min ${p.reorder}</small></td><td>${fmt(p.cost)}</td><td>${fmt(p.sell)}</td><td><b class="text-emerald">${fmt(margin)}</b><br><small class="text-muted">${pct}%</small></td><td>${status}</td><td><div class="row-actions"><button onclick="openProductModal('${p.id}')" title="Edit"><i class="fa-solid fa-pen"></i></button><button class="delete" onclick="deleteProduct('${p.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button></div></td></tr>`;
+  1059→    }).join(''):'<tr><td colspan="9"><div class="empty-state"><i class="fa-solid fa-box-open"></i><h3>No products found</h3></div></td></tr>';
+  1060→  }
+  1061→  draw();
+  1062→  $('#invSearch').addEventListener('input',e=>{curSearch=e.target.value;draw()});
+  1063→  $$('#catChips .chip').forEach(c=>c.addEventListener('click',()=>{$$('#catChips .chip').forEach(x=>x.classList.remove('active'));c.classList.add('active');curCat=c.dataset.cat;draw()}));
+  1064→  $('#invScanBtn').addEventListener('click',startScanner);
+  1065→};
+  1066→
+  1067→window.openProductModal=function(id){
+  1068→  const p=id?currentStoreInv().find(x=>x.id===id):null;
+  1069→  const cats=['Wine','Whisky','Vodka','Gin','Rum','Champagne','Beer','Cognac','Tequila','Liqueur','Other'];
+  1070→  const sizes=['750ml','1L','700ml','375ml','1.75L','330ml','500ml','50ml'];
+  1071→  openModal(p?'Edit Product':'Add Product',
+  1072→    `<div class="form-grid">
+  1073→      <div class="form-group"><label>Product Name</label><input id="pName" class="form-control" value="${p?p.name:''}"></div>
+  1074→      <div class="form-group"><label>SKU</label><input id="pSku" class="form-control" value="${p?p.sku:''}"></div>
+  1075→      <div class="form-group"><label>Barcode</label><div style="display:flex;gap:6px"><input id="pBarcode" class="form-control" value="${p?p.barcode:''}"><button class="btn btn-ghost" onclick="document.getElementById('pBarcode').value=generateBarcode()"><i class="fa-solid fa-dice"></i></button></div></div>
+  1076→      <div class="form-group"><label>Category</label><select id="pCategory" class="form-control">${cats.map(c=>`<option ${p&&p.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+  1077→      <div class="form-group"><label>Size</label><select id="pSize" class="form-control">${sizes.map(s=>`<option ${p&&p.size===s?'selected':''}>${s}</option>`).join('')}</select></div>
+  1078→      <div class="form-group"><label>Supplier</label><select id="pSupplier" class="form-control">${state.suppliers.map(s=>`<option value="${s.id}" ${p&&p.supplierId===s.id?'selected':''}>${s.name}</option>`).join('')}</select></div>
+  1079→      <div class="form-group"><label>Opening Stock</label><input type="number" id="pOpening" class="form-control" value="${p?p.opening:0}"></div>
+  1080→      <div class="form-group"><label>Current Stock</label><input type="number" id="pCurrent" class="form-control" value="${p?p.current:0}"></div>
+  1081→      <div class="form-group"><label>Reorder Level</label><input type="number" id="pReorder" class="form-control" value="${p?p.reorder:5}"></div>
+  1082→      <div class="form-group"><label>Cost Price (KSh)</label><input type="number" id="pCost" class="form-control" value="${p?p.cost:0}"></div>
+  1083→      <div class="form-group"><label>Sell Price (KSh)</label><input type="number" id="pSell" class="form-control" value="${p?p.sell:0}"></div>
+  1084→    </div>`,
+  1085→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveProduct('${id||''}')"><i class="fa-solid fa-check"></i> ${p?'Save Changes':'Add Product'}</button>`,true);
+  1086→};
+  1087→window.generateBarcode=function(){return '600'+Math.floor(Math.random()*9000000000+1000000000)};
+  1088→window.saveProduct=function(id){
+  1089→  const get=v=>$('#'+v).value.trim();
+  1090→  if(!get('pName')||!get('pSku')){toast('Name and SKU required','error');return}
+  1091→  const data={name:get('pName'),sku:get('pSku'),barcode:get('pBarcode')||generateBarcode(),category:get('pCategory'),size:get('pSize'),supplierId:get('pSupplier'),opening:parseInt(get('pOpening'))||0,current:parseInt(get('pCurrent'))||0,reorder:parseInt(get('pReorder'))||5,cost:parseInt(get('pCost'))||0,sell:parseInt(get('pSell'))||0};
+  1092→  if(id){Object.assign(currentStoreInv().find(x=>x.id===id),data);toast('Product updated','success')}
+  1093→  else{data.id=uid('p');data.storeId=state.currentStoreId;state.inventory.push(data);toast('Product added','success')}
+  1094→  saveState();closeModal();navigate('inventory');
+  1095→};
+  1096→window.deleteProduct=function(id){
+  1097→  if(!confirm('Delete this product?'))return;
+  1098→  state.inventory=state.inventory.filter(p=>p.id!==id);saveState();toast('Product deleted','success');navigate('inventory');
+  1099→};
+  1100→
+  1101→/* ----- STOCK TAKE ----- */
+  1102→RENDERERS.stocktake=function(){
+  1103→  const myTakes=state.stockTakes.filter(t=>t.storeId===state.currentStoreId).sort((a,b)=>b.startedAt-a.startedAt);
+  1104→  let html=`
+  1105→  <div class="page-header"><div><h2>Stock Counting</h2><p>Physical count with variance tracking and manager approval</p></div>
+  1106→    <div class="page-actions"><button class="btn btn-primary btn-sm" onclick="startStockTake()"><i class="fa-solid fa-play"></i> Start New Count</button></div>
+  1107→  </div>`;
+  1108→  if(pendingStockTake){
+  1109→    const inv=currentStoreInv();
+  1110→    html+=`<div class="card" style="background:linear-gradient(135deg,#FFFBEB,#FEF3C7);border-left:4px solid var(--amber)">
+  1111→      <div class="flex items-center justify-between flex-wrap gap-8">
+  1112→        <div><h3 style="color:#92400E"><i class="fa-solid fa-clipboard-list"></i> Count in Progress</h3><p class="text-muted" style="font-size:12px">Started ${new Date(pendingStockTake.startedAt).toLocaleString()} by ${staffName(pendingStockTake.startedBy)}</p></div>
+  1113→        <div class="flex gap-8"><button class="btn btn-ghost btn-sm" onclick="cancelStockTake()">Cancel</button><button class="btn btn-emerald btn-sm" onclick="submitStockTake()"><i class="fa-solid fa-paper-plane"></i> Submit for Approval</button></div>
+  1114→      </div>
+  1115→    </div>
+  1116→    <div class="search-bar mb-12"><i class="fa-solid fa-magnifying-glass"></i><input id="stSearch" placeholder="Search items to count..."></div>
+  1117→    <div id="stItems"></div>`;
+  1118→  }
+  1119→  html+=`<div class="card"><div class="card-header"><h3>Count History</h3></div>
+  1120→    ${myTakes.length?`<div class="table-wrap"><table><thead><tr><th>Date</th><th>Started By</th><th>Items</th><th>Variance</th><th>Status</th><th>Action</th></tr></thead><tbody>
+  1121→      ${myTakes.map(t=>{const v=t.items.reduce((a,b)=>a+(b.counted-b.expected),0);return `<tr><td>${new Date(t.startedAt).toLocaleString()}</td><td>${staffName(t.startedBy)}</td><td>${t.items.length}</td><td><b class="${v===0?'text-emerald':v>0?'text-amber':'text-crimson'}">${v>0?'+':''}${v}</b></td><td><span class="badge ${t.status==='approved'?'badge-green':t.status==='pending'?'badge-gold':'badge-gray'}">${t.status}</span></td><td>${t.status==='pending'&&currentUser.role==='manager'?'<button class="btn btn-amber btn-sm" onclick="approveStockTake(\''+t.id+'\')"><i class="fa-solid fa-check"></i> Approve</button>':'<button class="btn btn-ghost btn-sm" onclick="viewStockTake(\''+t.id+'\')">View</button>'}</td></tr>`}).join('')}
+  1122→    </tbody></table></div>`:'<div class="empty-state"><i class="fa-solid fa-clipboard-check"></i><h3>No counts yet</h3><p>Start a new physical count above.</p></div>'}
+  1123→  </div>`;
+  1124→  $('#content').innerHTML=html;
+  1125→  if(pendingStockTake){
+  1126→    drawStockTakeItems();
+  1127→    $('#stSearch').addEventListener('input',drawStockTakeItems);
+  1128→  }
+  1129→};
+  1130→function drawStockTakeItems(){
+  1131→  const inv=currentStoreInv();
+  1132→  const q=($('#stSearch')?.value||'').toLowerCase();
+  1133→  const rows=inv.filter(p=>(p.name+p.sku).toLowerCase().includes(q));
+  1134→  $('#stItems').innerHTML=rows.map(p=>{
+  1135→    const item=pendingStockTake.items.find(i=>i.inventoryId===p.id)||{expected:p.current,counted:null};
+  1136→    const v=item.counted===null?null:item.counted-item.expected;
+  1137→    return `<div class="stocktake-item">
+  1138→      <div><div class="st-name">${p.name}</div><div class="st-meta">${p.category} · ${p.size} · SKU ${p.sku}</div></div>
+  1139→      <div style="text-align:center"><div style="font-size:10px;color:var(--text-muted)">EXPECTED</div><div style="font-weight:700;font-size:16px">${item.expected}</div></div>
+  1140→      <input type="number" class="stocktake-input" placeholder="0" value="${item.counted??''}" data-id="${p.id}" onchange="updateStockTakeCount('${p.id}',this.value)">
+  1141→      <div class="st-variance ${v===null?'':v===0?'zero':v>0?'pos':'neg'}">${v===null?'—':(v>0?'+':'')+v}</div>
+  1142→    </div>`;
+  1143→  }).join('');
+  1144→}
+  1145→window.startStockTake=function(){
+  1146→  const inv=currentStoreInv();
+  1147→  if(!inv.length){toast('No inventory to count','warn');return}
+  1148→  pendingStockTake={id:uid('st'),storeId:state.currentStoreId,startedBy:currentUser.id,startedAt:Date.now(),status:'in_progress',items:inv.map(p=>({inventoryId:p.id,expected:p.current,counted:null})),approvedBy:null};
+  1149→  toast('Stock count started','success');navigate('stocktake');
+  1150→};
+  1151→window.updateStockTakeCount=function(id,val){
+  1152→  const item=pendingStockTake.items.find(i=>i.inventoryId===id);
+  1153→  if(item)item.counted=val===''?null:parseInt(val);
+  1154→  // refresh just that row's variance
+  1155→  drawStockTakeItems();
+  1156→};
+  1157→window.cancelStockTake=function(){
+  1158→  if(!confirm('Cancel this stock count? Progress will be lost.'))return;
+  1159→  pendingStockTake=null;navigate('stocktake');
+  1160→};
+  1161→window.submitStockTake=function(){
+  1162→  const counted=pendingStockTake.items.filter(i=>i.counted!==null).length;
+  1163→  if(!counted){toast('Count at least one item before submitting','warn');return}
+  1164→  pendingStockTake.status='pending';
+  1165→  pendingStockTake.submittedAt=Date.now();
+  1166→  state.stockTakes.push(pendingStockTake);
+  1167→  pendingStockTake=null;
+  1168→  saveState();
+  1169→  toast('Stock count submitted for approval','success');
+  1170→  navigate('stocktake');
+  1171→};
+  1172→window.approveStockTake=function(id){
+  1173→  const t=state.stockTakes.find(x=>x.id===id);if(!t)return;
+  1174→  openModal('Approve Stock Count',
+  1175→    `<p>This will update system stock levels with counted quantities.</p>
+  1176→     <div class="table-wrap mt-12"><table><thead><tr><th>Product</th><th>Expected</th><th>Counted</th><th>Variance</th></tr></thead><tbody>
+  1177→     ${t.items.filter(i=>i.counted!==null).map(i=>{const p=state.inventory.find(x=>x.id===i.inventoryId);const v=i.counted-i.expected;return `<tr><td>${p?p.name:'?'}</td><td>${i.expected}</td><td><b>${i.counted}</b></td><td class="${v===0?'text-emerald':v>0?'text-amber':'text-crimson'}">${v>0?'+':''}${v}</td></tr>`}).join('')}
+  1178→     </tbody></table></div>`,
+  1179→    `<button class="btn btn-ghost" onclick="closeModal()">Reject</button><button class="btn btn-emerald" onclick="confirmApproveStockTake('${id}')"><i class="fa-solid fa-check"></i> Approve & Apply</button>`,true);
+  1180→};
+  1181→window.confirmApproveStockTake=function(id){
+  1182→  const t=state.stockTakes.find(x=>x.id===id);
+  1183→  t.items.filter(i=>i.counted!==null).forEach(i=>{const p=state.inventory.find(x=>x.id===i.inventoryId);if(p){p.current=i.counted;p.opening=i.counted}});
+  1184→  t.status='approved';t.approvedBy=currentUser.id;t.approvedAt=Date.now();
+  1185→  saveState();closeModal();toast('Stock count approved and applied','success');navigate('stocktake');
+  1186→};
+  1187→window.viewStockTake=function(id){
+  1188→  const t=state.stockTakes.find(x=>x.id===id);
+  1189→  openModal('Stock Count Detail',
+  1190→    `<p class="text-muted">${new Date(t.startedAt).toLocaleString()} · ${staffName(t.startedBy)}</p>
+  1191→     <div class="table-wrap mt-12"><table><thead><tr><th>Product</th><th>Expected</th><th>Counted</th><th>Variance</th></tr></thead><tbody>
+  1192→     ${t.items.filter(i=>i.counted!==null).map(i=>{const p=state.inventory.find(x=>x.id===i.inventoryId);const v=i.counted-i.expected;return `<tr><td>${p?p.name:'?'}</td><td>${i.expected}</td><td>${i.counted}</td><td class="${v===0?'text-emerald':v>0?'text-amber':'text-crimson'}">${v>0?'+':''}${v}</td></tr>`}).join('')}
+  1193→     </tbody></table></div>`,
+  1194→    `<button class="btn btn-ghost" onclick="closeModal()">Close</button>`,true);
+  1195→};
+  1196→
+  1197→/* ----- DAILY RECONCILIATION ----- */
+  1198→RENDERERS.reconciliation=function(){
+  1199→  // defensive: ensure arrays exist
+  1200→  if(!Array.isArray(state.reconciliation))state.reconciliation=[];
+  1201→  if(!Array.isArray(state.sales))state.sales=[];
+  1202→  if(!Array.isArray(state.inventory))state.inventory=[];
+  1203→  const inv=currentStoreInv();
+  1204→  const today=todayKey();
+  1205→  let rec=state.reconciliation.find(r=>r.storeId===state.currentStoreId&&r.date===today);
+  1206→
+  1207→  if(!rec){
+  1208→    // auto-build today's record from sales + inventory opening
+  1209→    rec={id:uid('rec'),storeId:state.currentStoreId,date:today,items:inv.map(p=>buildRecItem(p))};
+  1210→    state.reconciliation.push(rec);saveState();
+  1211→  } else {
+  1212→    // sync: add any new inventory items not yet in today's reconciliation
+  1213→    inv.forEach(p=>{
+  1214→      if(!rec.items.find(it=>it.inventoryId===p.id)){
+  1215→        rec.items.push(buildRecItem(p));
+  1216→      }
+  1217→    });
+  1218→    // remove items whose inventory has been deleted
+  1219→    rec.items=rec.items.filter(it=>inv.find(p=>p.id===it.inventoryId));
+  1220→    saveState();
+  1221→  }
+  1222→
+  1223→  // history (excluding today)
+  1224→  const history=state.reconciliation.filter(r=>r.storeId===state.currentStoreId&&r.date!==today).sort((a,b)=>b.date.localeCompare(a.date));
+  1225→
+  1226→  let html=`
+  1227→  <div class="page-header"><div><h2>Daily Reconciliation</h2><p>${new Date().toLocaleDateString('en-KE',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p></div>
+  1228→    <div class="page-actions"><button class="btn btn-emerald btn-sm" onclick="saveReconciliation()"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+  1229→    <button class="btn btn-outline btn-sm" onclick="exportReconciliationReport()"><i class="fa-solid fa-file-pdf"></i> PDF</button></div>
+  1230→  </div>
+  1231→  <div class="stat-grid">
+  1232→    <div class="stat-card stat-blue"><div class="label">Total Opening Stock</div><div class="value">${rec.items.reduce((a,b)=>a+(b.opening||0),0)}</div><div class="delta">units</div><i class="fa-solid fa-door-open icon"></i></div>
+  1233→    <div class="stat-card stat-crimson"><div class="label">Units Sold Today</div><div class="value">${rec.items.reduce((a,b)=>a+(b.salesToday||0),0)}</div><div class="delta">units</div><i class="fa-solid fa-cart-shopping icon"></i></div>
+  1234→    <div class="stat-card stat-emerald"><div class="label">Units Added</div><div class="value">${rec.items.reduce((a,b)=>a+(b.stockAdded||0),0)}</div><div class="delta">units</div><i class="fa-solid fa-truck icon"></i></div>
+  1235→    <div class="stat-card stat-amber"><div class="label">Total Variance</div><div class="value" id="totalVariance">0</div><div class="delta">units</div><i class="fa-solid fa-scale-balanced icon"></i></div>
+  1236→  </div>`;
+  1237→  if(!rec.items.length){
+  1238→    html+=`<div class="card"><div class="empty-state"><i class="fa-solid fa-box-open"></i><h3>No inventory to reconcile</h3><p>Add products to your inventory first, then come back here.</p>
+  1239→      <button class="btn btn-primary mt-12" onclick="navigate('inventory')"><i class="fa-solid fa-plus"></i> Go to Inventory</button></div></div>`;
+  1240→  } else {
+  1241→    html+=`<div class="card" style="padding:0">
+  1242→      <div class="table-wrap"><table><thead><tr><th>Product</th><th>Opening</th><th>Sales</th><th>Added</th><th>Expected Closing</th><th>Actual Closing</th><th>Variance</th></tr></thead><tbody>
+  1243→        ${rec.items.map((it,i)=>`<tr><td><b>${it.name||'—'}</b></td><td>${it.opening||0}</td><td>${it.salesToday||0}</td><td><input type="number" value="${it.stockAdded||0}" style="width:60px;padding:5px;border:1px solid var(--border);border-radius:6px;text-align:center" onchange="updateRecField(${i},'stockAdded',this.value);updateRecExpected(${i})"></td><td id="recExp${i}">${it.expectedClosing||0}</td><td><input type="number" value="${it.actualClosing===null?'':it.actualClosing}" placeholder="—" style="width:70px;padding:5px;border:1px solid var(--border);border-radius:6px;text-align:center;font-weight:700" onchange="updateRecField(${i},'actualClosing',this.value);updateRecVar(${i})"></td><td id="recVar${i}" style="font-weight:700">—</td></tr>`).join('')}
+  1244→      </tbody></table></div>
+  1245→    </div>`;
+  1246→  }
+  1247→  // history section
+  1248→  html+=`<div class="card"><div class="card-header"><h3>Reconciliation History</h3><div class="sub">${history.length} past record(s)</div></div>
+  1249→    ${history.length?`<div class="table-wrap"><table><thead><tr><th>Date</th><th>Items</th><th>Opening</th><th>Sold</th><th>Added</th><th>Counted</th><th>Variance</th><th>Action</th></tr></thead><tbody>
+  1250→      ${history.map(r=>{const items=r.items||[];const opening=items.reduce((a,b)=>a+(b.opening||0),0);const sold=items.reduce((a,b)=>a+(b.salesToday||0),0);const added=items.reduce((a,b)=>a+(b.stockAdded||0),0);const counted=items.filter(it=>it.actualClosing!==null).length;const variance=items.filter(it=>it.actualClosing!==null).reduce((a,b)=>a+((b.actualClosing||0)-(b.expectedClosing||0)),0);return `<tr><td>${new Date(r.date).toLocaleDateString('en-KE',{day:'numeric',month:'short',year:'numeric'})}</td><td>${items.length}</td><td>${opening}</td><td>${sold}</td><td>${added}</td><td>${counted}/${items.length}</td><td><b class="${variance===0?'text-emerald':variance>0?'text-amber':'text-crimson'}">${variance>0?'+':''}${variance}</b></td><td><button class="btn btn-ghost btn-sm" onclick="viewReconciliation('${r.id}')"><i class="fa-solid fa-eye"></i> View</button></td></tr>`}).join('')}
+  1251→    </tbody></table></div>`:'<div class="empty-state" style="padding:30px"><i class="fa-solid fa-clock-rotate-left"></i><h3>No past records</h3><p>Previous reconciliations will appear here.</p></div>'}
+  1252→  </div>`;
+  1253→  $('#content').innerHTML=html;
+  1254→  rec.items.forEach((it,i)=>updateRecVar(i));
+  1255→  updateTotalVariance(rec);
+  1256→  window._currentRec=rec;
+  1257→};
+  1258→function buildRecItem(p){
+  1259→  const soldToday=state.sales.filter(s=>s.storeId===state.currentStoreId&&new Date(s.timestamp).toDateString()===new Date().toDateString()&&s.items.some(i=>i.id===p.id)).reduce((a,b)=>{const it=b.items.find(i=>i.id===p.id);return a+(it?it.qty:0)},0);
+  1260→  return {inventoryId:p.id,name:p.name,opening:p.opening||0,salesToday:soldToday,stockAdded:0,expectedClosing:(p.opening||0)-soldToday,actualClosing:null};
+  1261→}
+  1262→window.updateRecField=function(i,field,val){if(!window._currentRec)return;window._currentRec.items[i][field]=val===''?null:parseInt(val);saveState()};
+  1263→window.updateRecExpected=function(i){if(!window._currentRec)return;const it=window._currentRec.items[i];it.expectedClosing=(it.opening||0)-(it.salesToday||0)+(it.stockAdded||0);const c=$('#recExp'+i);if(c)c.textContent=it.expectedClosing;updateRecVar(i);updateTotalVariance(window._currentRec)};
+  1264→window.updateRecVar=function(i){if(!window._currentRec)return;const it=window._currentRec.items[i];const cell=$('#recVar'+i);if(!cell)return;if(it.actualClosing===null){cell.textContent='—';cell.className='';return}const v=it.actualClosing-(it.expectedClosing||0);cell.textContent=(v>0?'+':'')+v;cell.className=v===0?'text-emerald':v>0?'text-amber':'text-crimson';cell.style.fontWeight='700';updateTotalVariance(window._currentRec)};
+  1265→window.updateTotalVariance=function(rec){const v=(rec.items||[]).filter(it=>it.actualClosing!==null).reduce((a,b)=>a+((b.actualClosing||0)-(b.expectedClosing||0)),0);const cell=$('#totalVariance');if(cell)cell.textContent=(v>0?'+':'')+v};
+  1266→window.saveReconciliation=function(){saveState();toast('Daily reconciliation saved','success')};
+  1267→window.viewReconciliation=function(id){
+  1268→  const r=state.reconciliation.find(x=>x.id===id);if(!r)return;
+  1269→  const items=r.items||[];
+  1270→  const variance=items.filter(it=>it.actualClosing!==null).reduce((a,b)=>a+((b.actualClosing||0)-(b.expectedClosing||0)),0);
+  1271→  openModal('Reconciliation · '+new Date(r.date).toLocaleDateString('en-KE',{weekday:'long',day:'numeric',month:'long',year:'numeric'}),
+  1272→    `<div class="kpi-row mb-12">
+  1273→      <div class="mini-kpi"><div class="l">Items</div><div class="v">${items.length}</div></div>
+  1274→      <div class="mini-kpi"><div class="l">Counted</div><div class="v">${items.filter(it=>it.actualClosing!==null).length}/${items.length}</div></div>
+  1275→      <div class="mini-kpi"><div class="l">Variance</div><div class="v ${variance===0?'pos':variance<0?'neg':''}">${variance>0?'+':''}${variance}</div></div>
+  1276→    </div>
+  1277→    <div class="table-wrap"><table><thead><tr><th>Product</th><th>Opening</th><th>Sales</th><th>Added</th><th>Expected</th><th>Actual</th><th>Variance</th></tr></thead><tbody>
+  1278→      ${items.map(it=>{const v=it.actualClosing===null?null:(it.actualClosing||0)-(it.expectedClosing||0);return `<tr><td><b>${it.name||'—'}</b></td><td>${it.opening||0}</td><td>${it.salesToday||0}</td><td>${it.stockAdded||0}</td><td>${it.expectedClosing||0}</td><td>${it.actualClosing===null?'<span class="text-muted">—</span>':it.actualClosing}</td><td>${v===null?'<span class="text-muted">—</span>':`<b class="${v===0?'text-emerald':v>0?'text-amber':'text-crimson'}">${v>0?'+':''}${v}</b>`}</td></tr>`}).join('')}
+  1279→    </tbody></table></div>`,
+  1280→    `<button class="btn btn-outline" onclick="exportPastReconciliation('${r.id}')"><i class="fa-solid fa-file-pdf"></i> Export PDF</button><button class="btn btn-ghost" onclick="closeModal()">Close</button>`,true);
+  1281→};
+  1282→window.exportPastReconciliation=function(id){
+  1283→  const r=state.reconciliation.find(x=>x.id===id);if(!r)return;
+  1284→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+  1285→  const items=r.items||[];
+  1286→  const variance=items.filter(it=>it.actualClosing!==null).reduce((a,b)=>a+((b.actualClosing||0)-(b.expectedClosing||0)),0);
+  1287→  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+  1288→  pdfHeader(doc,'Daily Reconciliation Report',store.name+' · '+new Date(r.date).toLocaleDateString('en-KE',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+' · Variance: '+(variance>0?'+':'')+variance);
+  1289→  doc.autoTable({startY:58,head:[['Product','Opening','Sales','Added','Expected','Actual','Variance']],body:items.map(it=>[it.name||'—',it.opening||0,it.salesToday||0,it.stockAdded||0,it.expectedClosing||0,it.actualClosing===null?'—':it.actualClosing,it.actualClosing===null?'—':((it.actualClosing-it.expectedClosing>0?'+':'')+(it.actualClosing-(it.expectedClosing||0)))]),headStyles:{fillColor:[139,92,246]},didParseCell:function(d){if(d.section==='body'&&d.column.index===6&&d.cell.raw!=='—'){const v=parseInt(d.cell.raw);d.cell.styles.textColor=v===0?[16,185,129]:v>0?[245,158,11]:[220,38,38];d.cell.styles.fontStyle='bold'}},styles:{fontSize:9}});
+  1290→  downloadPdf(doc,'reconciliation-'+r.date+'.pdf');
+  1291→};
+  1292→
+  1293→/* ----- POS ----- */
+  1294→RENDERERS.pos=function(){
+  1295→  const inv=currentStoreInv();
+  1296→  const cats=['All',...new Set(inv.map(p=>p.category))];
+  1297→  $('#content').innerHTML=`
+  1298→  <div class="page-header"><div><h2>Point of Sale</h2><p>Ring up sales — stock updates automatically</p></div></div>
+  1299→  <div class="pos-grid">
+  1300→    <div>
+  1301→      <div class="search-bar mb-12"><i class="fa-solid fa-magnifying-glass"></i><input id="posSearch" placeholder="Search products..."></div>
+  1302→      <div class="filter-chips" id="posCats">${cats.map((c,i)=>`<button class="chip ${i===0?'active':''}" data-cat="${c}">${c}</button>`).join('')}</div>
+  1303→      <div class="pos-products" id="posProducts"></div>
+  1304→    </div>
+  1305→    <div class="cart" id="cartPanel">
+  1306→      <div class="cart-header"><h3><i class="fa-solid fa-cart-shopping"></i> Current Sale</h3><button class="btn btn-ghost btn-sm" onclick="clearCart()">Clear</button></div>
+  1307→      <div class="cart-items" id="cartItems"></div>
+  1308→      <div class="cart-footer">
+  1309→        <div class="cart-total"><span>Total</span><span id="cartTotal">KSh 0</span></div>
+  1310→        <div class="form-row mb-8"><select id="payMethod" class="form-control"><option value="cash">Cash</option><option value="card">Card</option><option value="mpesa">M-Pesa</option></select></div>
+  1311→        <button class="btn btn-emerald btn-block" onclick="checkout()"><i class="fa-solid fa-cash-register"></i> Complete Sale</button>
+  1312→      </div>
+  1313→    </div>
+  1314→  </div>`;
+  1315→  let curCat='All',curSearch='';
+  1316→  function drawProducts(){
+  1317→    let rows=inv.filter(p=>(curCat==='All'||p.category===curCat)&&(p.name+p.sku).toLowerCase().includes(curSearch.toLowerCase()));
+  1318→    const colors={Wine:'#DC2626',Whisky:'#92400E',Vodka:'#3B82F6',Gin:'#10B981',Rum:'#F59E0B',Champagne:'#EC4899',Beer:'#F97316',Cognac:'#8B5CF6',Tequila:'#14B8A6',Liqueur:'#A78BFA'};
+  1319→    $('#posProducts').innerHTML=rows.length?rows.map(p=>{
+  1320→      const c=colors[p.category]||'#6B7280';
+  1321→      return `<div class="pos-product ${p.current===0?'out':''}" onclick="${p.current>0?`addToCart('${p.id}')`:''}">
+  1322→        <div class="pp-icon" style="color:${c}"><i class="fa-solid fa-wine-bottle"></i></div>
+  1323→        <div class="pp-name">${p.name}</div><div class="pp-price">${fmt(p.sell)}</div><div class="pp-stock">${p.current} in stock</div></div>`;
+  1324→    }).join(''):'<div class="empty-state" style="grid-column:1/-1"><i class="fa-solid fa-box-open"></i><h3>No products</h3></div>';
+  1325→  }
+  1326→  drawProducts();drawCart();
+  1327→  $('#posSearch').addEventListener('input',e=>{curSearch=e.target.value;drawProducts()});
+  1328→  $$('#posCats .chip').forEach(c=>c.addEventListener('click',()=>{$$('#posCats .chip').forEach(x=>x.classList.remove('active'));c.classList.add('active');curCat=c.dataset.cat;drawProducts()}));
+  1329→};
+  1330→window.addToCart=function(id){
+  1331→  const p=currentStoreInv().find(x=>x.id===id);if(!p||p.current===0)return;
+  1332→  const ex=cart.find(c=>c.id===id);
+  1333→  if(ex){if(ex.qty>=p.current){toast('Not enough stock','warn');return}ex.qty++}
+  1334→  else cart.push({id,name:p.name,price:p.sell,qty:1,maxStock:p.current});
+  1335→  drawCart();
+  1336→};
+  1337→window.removeFromCart=function(id){cart=cart.filter(c=>c.id!==id);drawCart()};
+  1338→window.changeQty=function(id,d){
+  1339→  const c=cart.find(x=>x.id===id);if(!c)return;
+  1340→  c.qty+=d;if(c.qty<=0)cart=cart.filter(x=>x.id!==id);
+  1341→  else if(c.qty>c.maxStock){c.qty=c.maxStock;toast('Reached stock limit','warn')}
+  1342→  drawCart();
+  1343→};
+  1344→window.clearCart=function(){cart=[];drawCart()};
+  1345→function drawCart(){
+  1346→  const el=$('#cartItems');if(!el)return;
+  1347→  el.innerHTML=cart.length?cart.map(c=>`<div class="cart-item">
+  1348→    <div class="ci-name">${c.name}<br><small class="text-muted">${fmt(c.price)}</small></div>
+  1349→    <div class="qty-ctrl"><button onclick="changeQty('${c.id}',-1)">−</button><span>${c.qty}</span><button onclick="changeQty('${c.id}',1)">+</button></div>
+  1350→    <div class="ci-price">${fmt(c.price*c.qty)}</div>
+  1351→    <button class="icon-btn" onclick="removeFromCart('${c.id}')"><i class="fa-solid fa-xmark"></i></button>
+  1352→  </div>`).join(''):'<div class="empty-state" style="padding:30px 10px"><i class="fa-solid fa-cart-shopping"></i><h3>Cart empty</h3><p>Tap products to add</p></div>';
+  1353→  const total=cart.reduce((a,b)=>a+b.price*b.qty,0);
+  1354→  $('#cartTotal').textContent=fmt(total);
+  1355→}
+  1356→window.checkout=function(){
+  1357→  if(!cart.length){toast('Cart is empty','warn');return}
+  1358→  const total=cart.reduce((a,b)=>a+b.price*b.qty,0);
+  1359→  openModal('Complete Sale',
+  1360→    `<div class="text-center" style="padding:14px 0">
+  1361→      <div style="font-size:13px;color:var(--text-muted)">Total Due</div>
+  1362→      <div style="font-size:34px;font-weight:800;color:var(--crimson)">${fmt(total)}</div>
+  1363→      <div style="margin-top:10px"><span class="badge badge-blue">${($('#payMethod').value||'cash').toUpperCase()}</span></div>
+  1364→      <div style="margin-top:14px;font-size:12px;color:var(--text-muted)">${cart.length} item(s) · ${cart.reduce((a,b)=>a+b.qty,0)} units</div>
+  1365→    </div>`,
+  1366→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-emerald" onclick="confirmCheckout()"><i class="fa-solid fa-check"></i> Confirm Sale</button>`);
+  1367→};
+  1368→window.confirmCheckout=function(){
+  1369→  const total=cart.reduce((a,b)=>a+b.price*b.qty,0);
+  1370→  const sale={id:uid('sale'),items:cart.map(c=>({id:c.id,name:c.name,qty:c.qty,price:c.price,cost:currentStoreInv().find(p=>p.id===c.id).cost})),total,staffId:currentUser.id,storeId:state.currentStoreId,timestamp:Date.now(),paymentMethod:$('#payMethod').value||'cash'};
+  1371→  state.sales.push(sale);
+  1372→  // deduct stock
+  1373→  cart.forEach(c=>{const p=currentStoreInv().find(x=>x.id===c.id);if(p){p.current-=c.qty;if(p.current<0)p.current=0}});
+  1374→  saveState();cart=[];closeModal();
+  1375→  toast('Sale completed: '+fmt(total),'success');
+  1376→  navigate('pos');
+  1377→  // ask whether to print receipt (non-blocking)
+  1378→  setTimeout(()=>{
+  1379→    if(confirm('Sale completed: '+fmt(total)+'\n\nPrint receipt?')) printReceipt(sale);
+  1380→  },100);
+  1381→};
+  1382→function printReceipt(sale){
+  1383→  const w=window.open('','_blank','width=380,height=600');
+  1384→  if(!w)return;
+  1385→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+  1386→  w.document.write(`<html><head><title>Receipt ${sale.id}</title><style>body{font-family:monospace;font-size:12px;padding:14px;color:#000}h2{text-align:center;margin:0;font-size:16px}.ctr{text-align:center}.r{display:flex;justify-content:space-between;border-bottom:1px dashed #000;padding:3px 0}.t{font-size:16px;font-weight:bold;border-top:2px solid #000;margin-top:8px;padding-top:6px}</style></head><body>
+  1387→    <h2>VinoCellar Pro</h2><div class="ctr">${store.name}<br>${store.location}<br>Tel: +254 700 000 000</div><hr>
+  1388→    <div class="r"><span>Receipt:</span><span>${sale.id}</span></div>
+  1389→    <div class="r"><span>Date:</span><span>${new Date(sale.timestamp).toLocaleString()}</span></div>
+  1390→    <div class="r"><span>Cashier:</span><span>${currentUser.name}</span></div>
+  1391→    <hr>${sale.items.map(i=>`<div class="r"><span>${i.qty}× ${i.name}</span><span>${fmt(i.price*i.qty)}</span></div>`).join('')}
+  1392→    <div class="t r"><span>TOTAL (${sale.paymentMethod.toUpperCase()})</span><span>${fmt(sale.total)}</span></div>
+  1393→    <div class="ctr" style="margin-top:18px">Thank you!<br>Powered by VinoCellar Pro</div>
+  1394→    <script>window.print()<\/script></body></html>`);
+  1395→  w.document.close();
+  1396→}
+  1397→
+  1398→/* ----- SUPPLIERS ----- */
+  1399→RENDERERS.suppliers=function(){
+  1400→  let html=`<div class="page-header"><div><h2>Suppliers</h2><p>${state.suppliers.length} suppliers</p></div><div class="page-actions"><button class="btn btn-primary btn-sm" onclick="openSupplierModal()"><i class="fa-solid fa-plus"></i> Add Supplier</button></div></div>
+  1401→  <div class="card" style="padding:0"><div class="table-wrap"><table><thead><tr><th>Name</th><th>Contact</th><th>Phone</th><th>Email</th><th>Products</th><th>Items Supplied</th><th>Actions</th></tr></thead><tbody>
+  1402→    ${state.suppliers.map(s=>{const cnt=state.inventory.filter(p=>p.supplierId===s.id).length;return `<tr><td><b>${s.name}</b></td><td>${s.contact}</td><td>${s.phone}</td><td>${s.email}</td><td><span class="badge badge-purple">${s.products}</span></td><td>${cnt}</td><td><div class="row-actions"><button onclick="openSupplierModal('${s.id}')"><i class="fa-solid fa-pen"></i></button><button class="delete" onclick="deleteSupplier('${s.id}')"><i class="fa-solid fa-trash"></i></button></div></td></tr>`}).join('')}
+  1403→  </tbody></table></div></div>`;
+  1404→  $('#content').innerHTML=html;
+  1405→};
+  1406→window.openSupplierModal=function(id){
+  1407→  const s=id?state.suppliers.find(x=>x.id===id):null;
+  1408→  openModal(s?'Edit Supplier':'Add Supplier',
+  1409→    `<div class="form-grid">
+  1410→      <div class="form-group"><label>Company Name</label><input id="supName" class="form-control" value="${s?s.name:''}"></div>
+  1411→      <div class="form-group"><label>Contact Person</label><input id="supContact" class="form-control" value="${s?s.contact:''}"></div>
+  1412→      <div class="form-group"><label>Phone</label><input id="supPhone" class="form-control" value="${s?s.phone:''}"></div>
+  1413→      <div class="form-group"><label>Email</label><input id="supEmail" class="form-control" value="${s?s.email:''}"></div>
+  1414→      <div class="form-group"><label>Products/Category</label><input id="supProducts" class="form-control" value="${s?s.products:''}"></div>
+  1415→    </div>`,
+  1416→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveSupplier('${id||''}')"><i class="fa-solid fa-check"></i> Save</button>`);
+  1417→};
+  1418→window.saveSupplier=function(id){
+  1419→  const get=v=>$('#'+v).value.trim();
+  1420→  if(!get('supName')){toast('Name required','error');return}
+  1421→  if(id){Object.assign(state.suppliers.find(x=>x.id===id),{name:get('supName'),contact:get('supContact'),phone:get('supPhone'),email:get('supEmail'),products:get('supProducts')})}
+  1422→  else{state.suppliers.push({id:uid('sup'),name:get('supName'),contact:get('supContact'),phone:get('supPhone'),email:get('supEmail'),products:get('supProducts')})}
+  1423→  saveState();closeModal();toast('Supplier saved','success');navigate('suppliers');
+  1424→};
+  1425→window.deleteSupplier=function(id){if(!confirm('Delete supplier?'))return;state.suppliers=state.suppliers.filter(s=>s.id!==id);saveState();toast('Deleted','success');navigate('suppliers')};
+  1426→
+  1427→/* ----- SALES ANALYTICS ----- */
+  1428→RENDERERS.analytics=function(){
+  1429→  const sales=state.sales.filter(s=>s.storeId===state.currentStoreId);
+  1430→  const totalRev=sales.reduce((a,b)=>a+b.total,0);
+  1431→  const totalUnits=sales.reduce((a,b)=>a+b.items.reduce((x,y)=>x+y.qty,0),0);
+  1432→  const avg=sales.length?totalRev/sales.length:0;
+  1433→  let html=`<div class="page-header"><div><h2>Sales Analytics</h2><p>Performance insights for ${state.stores.find(s=>s.id===state.currentStoreId).name}</p></div></div>
+  1434→  <div class="stat-grid">
+  1435→    <div class="stat-card stat-crimson"><div class="label">Total Revenue</div><div class="value">${fmt(totalRev)}</div><div class="delta">All time</div><i class="fa-solid fa-money-bill icon"></i></div>
+  1436→    <div class="stat-card stat-emerald"><div class="label">Units Sold</div><div class="value">${totalUnits}</div><div class="delta">units</div><i class="fa-solid fa-cubes icon"></i></div>
+  1437→    <div class="stat-card stat-blue"><div class="label">Transactions</div><div class="value">${sales.length}</div><div class="delta">total sales</div><i class="fa-solid fa-receipt icon"></i></div>
+  1438→    <div class="stat-card stat-amber"><div class="label">Avg Sale Value</div><div class="value">${fmt(avg)}</div><div class="delta">per transaction</div><i class="fa-solid fa-chart-line icon"></i></div>
+  1439→  </div>
+  1440→  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
+  1441→    <div class="card"><div class="card-header"><h3>30-Day Sales Trend</h3></div><canvas id="trendChart" height="200"></canvas></div>
+  1442→    <div class="card"><div class="card-header"><h3>Sales by Category</h3></div><canvas id="catChart" height="200"></canvas></div>
+  1443→  </div>
+  1444→  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
+  1445→    <div class="card"><div class="card-header"><h3>Top 10 Products (Revenue)</h3></div><canvas id="top10Chart" height="220"></canvas></div>
+  1446→    <div class="card"><div class="card-header"><h3>Payment Methods</h3></div><canvas id="payChart" height="220"></canvas></div>
+  1447→  </div>`;
+  1448→  $('#content').innerHTML=html;
+  1449→  if(window.innerWidth<=1024)$$('.dash-grid').forEach(g=>g.style.gridTemplateColumns='1fr');
+  1450→  // 30-day trend
+  1451→  const days=[];const revs=[];
+  1452→  for(let d=29;d>=0;d--){const dt=new Date(Date.now()-d*86400000);days.push(dt.getDate());revs.push(sales.filter(s=>new Date(s.timestamp).toDateString()===dt.toDateString()).reduce((a,b)=>a+b.total,0))}
+  1453→  charts.trend=new Chart($('#trendChart'),{type:'line',data:{labels:days,datasets:[{label:'Revenue',data:revs,borderColor:'#DC2626',backgroundColor:'rgba(220,38,38,.1)',fill:true,tension:.3}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+  1454→  // category
+  1455→  const catMap={};sales.forEach(s=>s.items.forEach(i=>{const p=state.inventory.find(x=>x.id===i.id);const cat=p?p.category:'Other';catMap[cat]=(catMap[cat]||0)+i.price*i.qty}));
+  1456→  charts.cat=new Chart($('#catChart'),{type:'doughnut',data:{labels:Object.keys(catMap),datasets:[{data:Object.values(catMap),backgroundColor:['#DC2626','#F59E0B','#10B981','#3B82F6','#8B5CF6','#14B8A6','#EC4899','#F97316','#6366F1','#A855F7']}]},options:{responsive:true,plugins:{legend:{position:'right'}}}});
+  1457→  // top 10
+  1458→  const sellerMap={};sales.forEach(s=>s.items.forEach(i=>{sellerMap[i.name]=(sellerMap[i.name]||0)+i.price*i.qty}));
+  1459→  const top10=Object.entries(sellerMap).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  1460→  charts.top10=new Chart($('#top10Chart'),{type:'bar',data:{labels:top10.map(t=>t[0].split(' ').slice(0,2).join(' ')),datasets:[{data:top10.map(t=>t[1]),backgroundColor:'#F59E0B',borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+  1461→  // payment
+  1462→  const payMap={};sales.forEach(s=>payMap[s.paymentMethod]=(payMap[s.paymentMethod]||0)+s.total);
+  1463→  charts.pay=new Chart($('#payChart'),{type:'pie',data:{labels:Object.keys(payMap).map(k=>k.charAt(0).toUpperCase()+k.slice(1)),datasets:[{data:Object.values(payMap),backgroundColor:['#10B981','#3B82F6','#F59E0B']}]},options:{responsive:true,plugins:{legend:{position:'right'}}}});
+  1464→};
+  1465→
+  1466→/* ----- PROFIT ANALYTICS ----- */
+  1467→RENDERERS.profit=function(){
+  1468→  const sales=state.sales.filter(s=>s.storeId===state.currentStoreId);
+  1469→  const exps=state.expenses.filter(e=>e.storeId===state.currentStoreId);
+  1470→  let rev=0,cost=0;
+  1471→  sales.forEach(s=>s.items.forEach(i=>{rev+=i.price*i.qty;cost+=i.cost*i.qty}));
+  1472→  const profit=rev-cost;const pct=rev?(profit/rev*100).toFixed(1):0;
+  1473→  const totalExp=exps.reduce((a,b)=>a+b.amount,0);
+  1474→  const netProfit=profit-totalExp;
+  1475→  const netPct=rev?(netProfit/rev*100).toFixed(1):0;
+  1476→  let html=`<div class="page-header"><div><h2>Profit Analytics</h2><p>Margin and profitability analysis</p></div>
+  1477→    <div class="page-actions"><button class="btn btn-emerald btn-sm" onclick="exportProfitReport()"><i class="fa-solid fa-file-pdf"></i> Export PDF</button></div></div>
+  1478→  <div class="stat-grid">
+  1479→    <div class="stat-card stat-emerald"><div class="label">Gross Profit</div><div class="value">${fmt(profit)}</div><div class="delta">${pct}% margin</div><i class="fa-solid fa-coins icon"></i></div>
+  1480→    <div class="stat-card stat-blue"><div class="label">Revenue</div><div class="value">${fmt(rev)}</div><div class="delta">total sales</div><i class="fa-solid fa-money-bill-trend-up icon"></i></div>
+  1481→    <div class="stat-card stat-crimson"><div class="label">Cost of Goods</div><div class="value">${fmt(cost)}</div><div class="delta">inventory cost</div><i class="fa-solid fa-warehouse icon"></i></div>
+  1482→    <div class="stat-card stat-amber"><div class="label">Operating Expenses</div><div class="value">${fmt(totalExp)}</div><div class="delta">${exps.length} entries</div><i class="fa-solid fa-receipt icon"></i></div>
+  1483→    <div class="stat-card stat-purple"><div class="label">Net Profit</div><div class="value">${fmt(netProfit)}</div><div class="delta">${netPct}% net margin</div><i class="fa-solid fa-piggy-bank icon"></i></div>
+  1484→  </div>
+  1485→  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
+  1486→    <div class="card"><div class="card-header"><h3>Daily Profit Trend (30 days)</h3></div><canvas id="profChart" height="200"></canvas></div>
+  1487→    <div class="card"><div class="card-header"><h3>Top 10 by Profit</h3></div><canvas id="profTopChart" height="200"></canvas></div>
+  1488→  </div>
+  1489→  <div class="card"><div class="card-header"><h3>Expense Breakdown by Category</h3></div>
+  1490→    <div style="display:flex;gap:8px;flex-wrap:wrap">${['Rent','Utilities','Salaries','Inventory','Marketing','Maintenance','Other'].map(c=>{const t=exps.filter(e=>e.category===c).reduce((a,b)=>a+b.amount,0);if(!t)return'';const cls={Rent:'badge-red',Utilities:'badge-gold',Salaries:'badge-blue',Inventory:'badge-green',Marketing:'badge-purple',Maintenance:'badge-teal',Other:'badge-gray'}[c];return `<div style="flex:1;min-width:120px;text-align:center;padding:10px;background:var(--bg-alt);border-radius:10px"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase">${c}</div><div style="font-size:16px;font-weight:800;margin-top:4px">${fmt(t)}</div></div>`}).join('')}</div>
+  1491→  </div>
+  1492→  <div class="card"><div class="card-header"><h3>Profit by Product</h3></div>
+  1493→    <div class="table-wrap"><table><thead><tr><th>Product</th><th>Units Sold</th><th>Revenue</th><th>Cost</th><th>Profit</th><th>Margin</th></tr></thead><tbody>
+  1494→      ${(()=>{const m={};sales.forEach(s=>s.items.forEach(i=>{if(!m[i.id])m[i.id]={name:i.name,units:0,rev:0,cost:0};m[i.id].units+=i.qty;m[i.id].rev+=i.price*i.qty;m[i.id].cost+=i.cost*i.qty}));return Object.values(m).sort((a,b)=>(b.rev-b.cost)-(a.rev-a.cost)).map(x=>{const p=x.rev-x.cost;const pc=x.rev?(p/x.rev*100).toFixed(0):0;return `<tr><td><b>${x.name}</b></td><td>${x.units}</td><td>${fmt(x.rev)}</td><td>${fmt(x.cost)}</td><td><b class="text-emerald">${fmt(p)}</b></td><td><span class="badge ${pc>=40?'badge-green':pc>=20?'badge-gold':'badge-red'}">${pc}%</span></td></tr>`}).join('')})()}
+  1495→    </tbody></table></div></div>`;
+  1496→  $('#content').innerHTML=html;
+  1497→  if(window.innerWidth<=1024)$$('.dash-grid').forEach(g=>g.style.gridTemplateColumns='1fr');
+  1498→  const days=[],profits=[];
+  1499→  for(let d=29;d>=0;d--){const dt=new Date(Date.now()-d*86400000);days.push(dt.getDate());const ss=sales.filter(s=>new Date(s.timestamp).toDateString()===dt.toDateString());profits.push(ss.reduce((a,b)=>a+b.items.reduce((x,y)=>x+(y.price-y.cost)*y.qty,0),0))}
+
+[showing lines 1000-1499 of 1939; use offset=1500 with limit to continue reading]

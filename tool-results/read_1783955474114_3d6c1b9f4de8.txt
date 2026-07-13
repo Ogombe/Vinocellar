@@ -1,0 +1,502 @@
+     1→     1→     1→  1000→  if(slowMovers.length){
+     2→     2→     2→  1001→    insights.push({type:'warn',icon:'fa-hourglass-half',text:`<b>${slowMovers[0].name}</b> hasn't sold this week but you have ${slowMovers[0].current} units. Consider a discount bundle or staff recommendation push.`});
+     3→     3→     3→  1002→  }
+     4→     4→     4→  1003→  // health
+     5→     5→     5→  1004→  if(health.score<60){
+     6→     6→     6→  1005→    insights.push({type:'warn',icon:'fa-heart-pulse',text:`Inventory Health Score is ${health.score}/100 (${health.label}). Address ${inv.filter(p=>p.current<=p.reorder).length} low-stock items to improve coverage.`});
+     7→     7→     7→  1006→  }else{
+     8→     8→     8→  1007→    insights.push({type:'success',icon:'fa-heart-pulse',text:`Inventory Health Score is ${health.score}/100 (${health.label}). Stock levels are well balanced.`});
+     9→     9→     9→  1008→  }
+    10→    10→    10→  1009→  if(!insights.length)insights.push({type:'info',icon:'fa-circle-info',text:'Not enough data for insights yet. Make a few sales and check back.'});
+    11→    11→    11→  1010→  $('#aiInsights').innerHTML=insights.map(i=>`<div class="ai-insight ${i.type}"><i class="fa-solid ${i.icon}"></i><div>${i.text}</div></div>`).join('');
+    12→    12→    12→  1011→}
+    13→    13→    13→  1012→
+    14→    14→    14→  1013→window.quickReorder=function(pid){
+    15→    15→    15→  1014→  const p=currentStoreInv().find(x=>x.id===pid);if(!p)return;
+    16→    16→    16→  1015→  openModal('Reorder: '+p.name,
+    17→    17→    17→  1016→    `<div class="form-group"><label>Supplier</label><input class="form-control" value="${supplierName(p.supplierId)}" disabled></div>
+    18→    18→    18→  1017→     <div class="form-group"><label>Quantity to order</label><input type="number" id="roQty" class="form-control" value="${p.reorder*2}" min="1"></div>
+    19→    19→    19→  1018→     <div class="form-group"><label>Estimated cost</label><input class="form-control" id="roCost" disabled></div>`,
+    20→    20→    20→  1019→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmReorder('${pid}')"><i class="fa-solid fa-check"></i> Place Order</button>`);
+    21→    21→    21→  1020→  const calc=()=>{$('#roCost').value=fmt(($('#roQty').value||0)*p.cost)};
+    22→    22→    22→  1021→  $('#roQty').addEventListener('input',calc);calc();
+    23→    23→    23→  1022→};
+    24→    24→    24→  1023→window.confirmReorder=function(pid){
+    25→    25→    25→  1024→  const qty=parseInt($('#roQty').value);if(!qty||qty<1){toast('Enter valid quantity','error');return}
+    26→    26→    26→  1025→  const p=currentStoreInv().find(x=>x.id===pid);
+    27→    27→    27→  1026→  p.current+=qty;p.opening=p.current;
+    28→    28→    28→  1027→  saveState();
+    29→    29→    29→  1028→  closeModal();toast('Order received. '+qty+' units of '+p.name+' added.','success');
+    30→    30→    30→  1029→  navigate('inventory');
+    31→    31→    31→  1030→};
+    32→    32→    32→  1031→
+    33→    33→    33→  1032→/* ----- INVENTORY ----- */
+    34→    34→    34→  1033→RENDERERS.inventory=function(){
+    35→    35→    35→  1034→  const inv=currentStoreInv();
+    36→    36→    36→  1035→  const cats=['All',...new Set(inv.map(p=>p.category))];
+    37→    37→    37→  1036→  let html=`
+    38→    38→    38→  1037→  <div class="page-header"><div><h2>Inventory Management</h2><p>${inv.length} products in ${state.stores.find(s=>s.id===state.currentStoreId).name}</p></div>
+    39→    39→    39→  1038→    <div class="page-actions">
+    40→    40→    40→  1039→      <button class="btn btn-outline btn-sm" id="invScanBtn"><i class="fa-solid fa-barcode"></i> Scan</button>
+    41→    41→    41→  1040→      <button class="btn btn-amber btn-sm" onclick="navigate('stocktake')"><i class="fa-solid fa-clipboard-check"></i> Stock Count</button>
+    42→    42→    42→  1041→      <button class="btn btn-primary btn-sm" onclick="openProductModal()"><i class="fa-solid fa-plus"></i> Add Product</button>
+    43→    43→    43→  1042→    </div>
+    44→    44→    44→  1043→  </div>
+    45→    45→    45→  1044→  <div class="flex gap-8 items-center mb-12 flex-wrap">
+    46→    46→    46→  1045→    <div class="search-bar"><i class="fa-solid fa-magnifying-glass"></i><input id="invSearch" placeholder="Search by name, SKU, barcode..."></div>
+    47→    47→    47→  1046→    <div class="filter-chips" id="catChips">${cats.map((c,i)=>`<button class="chip ${i===0?'active':''}" data-cat="${c}">${c}</button>`).join('')}</div>
+    48→    48→    48→  1047→  </div>
+    49→    49→    49→  1048→  <div class="card" style="padding:0">
+    50→    50→    50→  1049→    <div class="table-wrap"><table><thead><tr><th>Product</th><th>Category</th><th>SKU</th><th>Stock</th><th>Cost</th><th>Price</th><th>Margin</th><th>Status</th><th>Actions</th></tr></thead><tbody id="invBody"></tbody></table></div>
+    51→    51→    51→  1050→  </div>`;
+    52→    52→    52→  1051→  $('#content').innerHTML=html;
+    53→    53→    53→  1052→  let curCat='All',curSearch='';
+    54→    54→    54→  1053→  function draw(){
+    55→    55→    55→  1054→    let rows=inv.filter(p=>(curCat==='All'||p.category===curCat)&&(p.name+p.sku+p.barcode).toLowerCase().includes(curSearch.toLowerCase()));
+    56→    56→    56→  1055→    $('#invBody').innerHTML=rows.length?rows.map(p=>{
+    57→    57→    57→  1056→      const margin=p.sell-p.cost;const pct=(margin/p.sell*100).toFixed(0);
+    58→    58→    58→  1057→      const status=p.current===0?'<span class="badge badge-red">Out</span>':p.current<=p.reorder?'<span class="badge badge-gold">Low</span>':'<span class="badge badge-green">OK</span>';
+    59→    59→    59→  1058→      return `<tr><td><b>${p.name}</b><br><small class="text-muted">${p.barcode}</small></td><td><span class="badge badge-purple">${p.category}</span></td><td>${p.sku}</td><td><b style="font-size:15px;color:${p.current<=p.reorder?'var(--crimson)':'var(--sidebar)'}">${p.current}</b><br><small class="text-muted">min ${p.reorder}</small></td><td>${fmt(p.cost)}</td><td>${fmt(p.sell)}</td><td><b class="text-emerald">${fmt(margin)}</b><br><small class="text-muted">${pct}%</small></td><td>${status}</td><td><div class="row-actions"><button onclick="openProductModal('${p.id}')" title="Edit"><i class="fa-solid fa-pen"></i></button><button class="delete" onclick="deleteProduct('${p.id}')" title="Delete"><i class="fa-solid fa-trash"></i></button></div></td></tr>`;
+    60→    60→    60→  1059→    }).join(''):'<tr><td colspan="9"><div class="empty-state"><i class="fa-solid fa-box-open"></i><h3>No products found</h3></div></td></tr>';
+    61→    61→    61→  1060→  }
+    62→    62→    62→  1061→  draw();
+    63→    63→    63→  1062→  $('#invSearch').addEventListener('input',e=>{curSearch=e.target.value;draw()});
+    64→    64→    64→  1063→  $$('#catChips .chip').forEach(c=>c.addEventListener('click',()=>{$$('#catChips .chip').forEach(x=>x.classList.remove('active'));c.classList.add('active');curCat=c.dataset.cat;draw()}));
+    65→    65→    65→  1064→  $('#invScanBtn').addEventListener('click',startScanner);
+    66→    66→    66→  1065→};
+    67→    67→    67→  1066→
+    68→    68→    68→  1067→window.openProductModal=function(id){
+    69→    69→    69→  1068→  const p=id?currentStoreInv().find(x=>x.id===id):null;
+    70→    70→    70→  1069→  const cats=['Wine','Whisky','Vodka','Gin','Rum','Champagne','Beer','Cognac','Tequila','Liqueur','Other'];
+    71→    71→    71→  1070→  const sizes=['750ml','1L','700ml','375ml','1.75L','330ml','500ml','50ml'];
+    72→    72→    72→  1071→  openModal(p?'Edit Product':'Add Product',
+    73→    73→    73→  1072→    `<div class="form-grid">
+    74→    74→    74→  1073→      <div class="form-group"><label>Product Name</label><input id="pName" class="form-control" value="${p?p.name:''}"></div>
+    75→    75→    75→  1074→      <div class="form-group"><label>SKU</label><input id="pSku" class="form-control" value="${p?p.sku:''}"></div>
+    76→    76→    76→  1075→      <div class="form-group"><label>Barcode</label><div style="display:flex;gap:6px"><input id="pBarcode" class="form-control" value="${p?p.barcode:''}"><button class="btn btn-ghost" onclick="document.getElementById('pBarcode').value=generateBarcode()"><i class="fa-solid fa-dice"></i></button></div></div>
+    77→    77→    77→  1076→      <div class="form-group"><label>Category</label><select id="pCategory" class="form-control">${cats.map(c=>`<option ${p&&p.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+    78→    78→    78→  1077→      <div class="form-group"><label>Size</label><select id="pSize" class="form-control">${sizes.map(s=>`<option ${p&&p.size===s?'selected':''}>${s}</option>`).join('')}</select></div>
+    79→    79→    79→  1078→      <div class="form-group"><label>Supplier</label><select id="pSupplier" class="form-control">${state.suppliers.map(s=>`<option value="${s.id}" ${p&&p.supplierId===s.id?'selected':''}>${s.name}</option>`).join('')}</select></div>
+    80→    80→    80→  1079→      <div class="form-group"><label>Opening Stock</label><input type="number" id="pOpening" class="form-control" value="${p?p.opening:0}"></div>
+    81→    81→    81→  1080→      <div class="form-group"><label>Current Stock</label><input type="number" id="pCurrent" class="form-control" value="${p?p.current:0}"></div>
+    82→    82→    82→  1081→      <div class="form-group"><label>Reorder Level</label><input type="number" id="pReorder" class="form-control" value="${p?p.reorder:5}"></div>
+    83→    83→    83→  1082→      <div class="form-group"><label>Cost Price (KSh)</label><input type="number" id="pCost" class="form-control" value="${p?p.cost:0}"></div>
+    84→    84→    84→  1083→      <div class="form-group"><label>Sell Price (KSh)</label><input type="number" id="pSell" class="form-control" value="${p?p.sell:0}"></div>
+    85→    85→    85→  1084→    </div>`,
+    86→    86→    86→  1085→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveProduct('${id||''}')"><i class="fa-solid fa-check"></i> ${p?'Save Changes':'Add Product'}</button>`,true);
+    87→    87→    87→  1086→};
+    88→    88→    88→  1087→window.generateBarcode=function(){return '600'+Math.floor(Math.random()*9000000000+1000000000)};
+    89→    89→    89→  1088→window.saveProduct=function(id){
+    90→    90→    90→  1089→  const get=v=>$('#'+v).value.trim();
+    91→    91→    91→  1090→  if(!get('pName')||!get('pSku')){toast('Name and SKU required','error');return}
+    92→    92→    92→  1091→  const data={name:get('pName'),sku:get('pSku'),barcode:get('pBarcode')||generateBarcode(),category:get('pCategory'),size:get('pSize'),supplierId:get('pSupplier'),opening:parseInt(get('pOpening'))||0,current:parseInt(get('pCurrent'))||0,reorder:parseInt(get('pReorder'))||5,cost:parseInt(get('pCost'))||0,sell:parseInt(get('pSell'))||0};
+    93→    93→    93→  1092→  if(id){Object.assign(currentStoreInv().find(x=>x.id===id),data);toast('Product updated','success')}
+    94→    94→    94→  1093→  else{data.id=uid('p');data.storeId=state.currentStoreId;state.inventory.push(data);toast('Product added','success')}
+    95→    95→    95→  1094→  saveState();closeModal();navigate('inventory');
+    96→    96→    96→  1095→};
+    97→    97→    97→  1096→window.deleteProduct=function(id){
+    98→    98→    98→  1097→  if(!confirm('Delete this product?'))return;
+    99→    99→    99→  1098→  state.inventory=state.inventory.filter(p=>p.id!==id);saveState();toast('Product deleted','success');navigate('inventory');
+   100→   100→   100→  1099→};
+   101→   101→   101→  1100→
+   102→   102→   102→  1101→/* ----- STOCK TAKE ----- */
+   103→   103→   103→  1102→RENDERERS.stocktake=function(){
+   104→   104→   104→  1103→  const myTakes=state.stockTakes.filter(t=>t.storeId===state.currentStoreId).sort((a,b)=>b.startedAt-a.startedAt);
+   105→   105→   105→  1104→  let html=`
+   106→   106→   106→  1105→  <div class="page-header"><div><h2>Stock Counting</h2><p>Physical count with variance tracking and manager approval</p></div>
+   107→   107→   107→  1106→    <div class="page-actions"><button class="btn btn-primary btn-sm" onclick="startStockTake()"><i class="fa-solid fa-play"></i> Start New Count</button></div>
+   108→   108→   108→  1107→  </div>`;
+   109→   109→   109→  1108→  if(pendingStockTake){
+   110→   110→   110→  1109→    const inv=currentStoreInv();
+   111→   111→   111→  1110→    html+=`<div class="card" style="background:linear-gradient(135deg,#FFFBEB,#FEF3C7);border-left:4px solid var(--amber)">
+   112→   112→   112→  1111→      <div class="flex items-center justify-between flex-wrap gap-8">
+   113→   113→   113→  1112→        <div><h3 style="color:#92400E"><i class="fa-solid fa-clipboard-list"></i> Count in Progress</h3><p class="text-muted" style="font-size:12px">Started ${new Date(pendingStockTake.startedAt).toLocaleString()} by ${staffName(pendingStockTake.startedBy)}</p></div>
+   114→   114→   114→  1113→        <div class="flex gap-8"><button class="btn btn-ghost btn-sm" onclick="cancelStockTake()">Cancel</button><button class="btn btn-emerald btn-sm" onclick="submitStockTake()"><i class="fa-solid fa-paper-plane"></i> Submit for Approval</button></div>
+   115→   115→   115→  1114→      </div>
+   116→   116→   116→  1115→    </div>
+   117→   117→   117→  1116→    <div class="search-bar mb-12"><i class="fa-solid fa-magnifying-glass"></i><input id="stSearch" placeholder="Search items to count..."></div>
+   118→   118→   118→  1117→    <div id="stItems"></div>`;
+   119→   119→   119→  1118→  }
+   120→   120→   120→  1119→  html+=`<div class="card"><div class="card-header"><h3>Count History</h3></div>
+   121→   121→   121→  1120→    ${myTakes.length?`<div class="table-wrap"><table><thead><tr><th>Date</th><th>Started By</th><th>Items</th><th>Variance</th><th>Status</th><th>Action</th></tr></thead><tbody>
+   122→   122→   122→  1121→      ${myTakes.map(t=>{const v=t.items.reduce((a,b)=>a+(b.counted-b.expected),0);return `<tr><td>${new Date(t.startedAt).toLocaleString()}</td><td>${staffName(t.startedBy)}</td><td>${t.items.length}</td><td><b class="${v===0?'text-emerald':v>0?'text-amber':'text-crimson'}">${v>0?'+':''}${v}</b></td><td><span class="badge ${t.status==='approved'?'badge-green':t.status==='pending'?'badge-gold':'badge-gray'}">${t.status}</span></td><td>${t.status==='pending'&&currentUser.role==='manager'?'<button class="btn btn-amber btn-sm" onclick="approveStockTake(\''+t.id+'\')"><i class="fa-solid fa-check"></i> Approve</button>':'<button class="btn btn-ghost btn-sm" onclick="viewStockTake(\''+t.id+'\')">View</button>'}</td></tr>`}).join('')}
+   123→   123→   123→  1122→    </tbody></table></div>`:'<div class="empty-state"><i class="fa-solid fa-clipboard-check"></i><h3>No counts yet</h3><p>Start a new physical count above.</p></div>'}
+   124→   124→   124→  1123→  </div>`;
+   125→   125→   125→  1124→  $('#content').innerHTML=html;
+   126→   126→   126→  1125→  if(pendingStockTake){
+   127→   127→   127→  1126→    drawStockTakeItems();
+   128→   128→   128→  1127→    $('#stSearch').addEventListener('input',drawStockTakeItems);
+   129→   129→   129→  1128→  }
+   130→   130→   130→  1129→};
+   131→   131→   131→  1130→function drawStockTakeItems(){
+   132→   132→   132→  1131→  const inv=currentStoreInv();
+   133→   133→   133→  1132→  const q=($('#stSearch')?.value||'').toLowerCase();
+   134→   134→   134→  1133→  const rows=inv.filter(p=>(p.name+p.sku).toLowerCase().includes(q));
+   135→   135→   135→  1134→  $('#stItems').innerHTML=rows.map(p=>{
+   136→   136→   136→  1135→    const item=pendingStockTake.items.find(i=>i.inventoryId===p.id)||{expected:p.current,counted:null};
+   137→   137→   137→  1136→    const v=item.counted===null?null:item.counted-item.expected;
+   138→   138→   138→  1137→    return `<div class="stocktake-item">
+   139→   139→   139→  1138→      <div><div class="st-name">${p.name}</div><div class="st-meta">${p.category} · ${p.size} · SKU ${p.sku}</div></div>
+   140→   140→   140→  1139→      <div style="text-align:center"><div style="font-size:10px;color:var(--text-muted)">EXPECTED</div><div style="font-weight:700;font-size:16px">${item.expected}</div></div>
+   141→   141→   141→  1140→      <input type="number" class="stocktake-input" placeholder="0" value="${item.counted??''}" data-id="${p.id}" onchange="updateStockTakeCount('${p.id}',this.value)">
+   142→   142→   142→  1141→      <div class="st-variance ${v===null?'':v===0?'zero':v>0?'pos':'neg'}">${v===null?'—':(v>0?'+':'')+v}</div>
+   143→   143→   143→  1142→    </div>`;
+   144→   144→   144→  1143→  }).join('');
+   145→   145→   145→  1144→}
+   146→   146→   146→  1145→window.startStockTake=function(){
+   147→   147→   147→  1146→  const inv=currentStoreInv();
+   148→   148→   148→  1147→  if(!inv.length){toast('No inventory to count','warn');return}
+   149→   149→   149→  1148→  pendingStockTake={id:uid('st'),storeId:state.currentStoreId,startedBy:currentUser.id,startedAt:Date.now(),status:'in_progress',items:inv.map(p=>({inventoryId:p.id,expected:p.current,counted:null})),approvedBy:null};
+   150→   150→   150→  1149→  toast('Stock count started','success');navigate('stocktake');
+   151→   151→   151→  1150→};
+   152→   152→   152→  1151→window.updateStockTakeCount=function(id,val){
+   153→   153→   153→  1152→  const item=pendingStockTake.items.find(i=>i.inventoryId===id);
+   154→   154→   154→  1153→  if(item)item.counted=val===''?null:parseInt(val);
+   155→   155→   155→  1154→  // refresh just that row's variance
+   156→   156→   156→  1155→  drawStockTakeItems();
+   157→   157→   157→  1156→};
+   158→   158→   158→  1157→window.cancelStockTake=function(){
+   159→   159→   159→  1158→  if(!confirm('Cancel this stock count? Progress will be lost.'))return;
+   160→   160→   160→  1159→  pendingStockTake=null;navigate('stocktake');
+   161→   161→   161→  1160→};
+   162→   162→   162→  1161→window.submitStockTake=function(){
+   163→   163→   163→  1162→  const counted=pendingStockTake.items.filter(i=>i.counted!==null).length;
+   164→   164→   164→  1163→  if(!counted){toast('Count at least one item before submitting','warn');return}
+   165→   165→   165→  1164→  pendingStockTake.status='pending';
+   166→   166→   166→  1165→  pendingStockTake.submittedAt=Date.now();
+   167→   167→   167→  1166→  state.stockTakes.push(pendingStockTake);
+   168→   168→   168→  1167→  pendingStockTake=null;
+   169→   169→   169→  1168→  saveState();
+   170→   170→   170→  1169→  toast('Stock count submitted for approval','success');
+   171→   171→   171→  1170→  navigate('stocktake');
+   172→   172→   172→  1171→};
+   173→   173→   173→  1172→window.approveStockTake=function(id){
+   174→   174→   174→  1173→  const t=state.stockTakes.find(x=>x.id===id);if(!t)return;
+   175→   175→   175→  1174→  openModal('Approve Stock Count',
+   176→   176→   176→  1175→    `<p>This will update system stock levels with counted quantities.</p>
+   177→   177→   177→  1176→     <div class="table-wrap mt-12"><table><thead><tr><th>Product</th><th>Expected</th><th>Counted</th><th>Variance</th></tr></thead><tbody>
+   178→   178→   178→  1177→     ${t.items.filter(i=>i.counted!==null).map(i=>{const p=state.inventory.find(x=>x.id===i.inventoryId);const v=i.counted-i.expected;return `<tr><td>${p?p.name:'?'}</td><td>${i.expected}</td><td><b>${i.counted}</b></td><td class="${v===0?'text-emerald':v>0?'text-amber':'text-crimson'}">${v>0?'+':''}${v}</td></tr>`}).join('')}
+   179→   179→   179→  1178→     </tbody></table></div>`,
+   180→   180→   180→  1179→    `<button class="btn btn-ghost" onclick="closeModal()">Reject</button><button class="btn btn-emerald" onclick="confirmApproveStockTake('${id}')"><i class="fa-solid fa-check"></i> Approve & Apply</button>`,true);
+   181→   181→   181→  1180→};
+   182→   182→   182→  1181→window.confirmApproveStockTake=function(id){
+   183→   183→   183→  1182→  const t=state.stockTakes.find(x=>x.id===id);
+   184→   184→   184→  1183→  t.items.filter(i=>i.counted!==null).forEach(i=>{const p=state.inventory.find(x=>x.id===i.inventoryId);if(p){p.current=i.counted;p.opening=i.counted}});
+   185→   185→   185→  1184→  t.status='approved';t.approvedBy=currentUser.id;t.approvedAt=Date.now();
+   186→   186→   186→  1185→  saveState();closeModal();toast('Stock count approved and applied','success');navigate('stocktake');
+   187→   187→   187→  1186→};
+   188→   188→   188→  1187→window.viewStockTake=function(id){
+   189→   189→   189→  1188→  const t=state.stockTakes.find(x=>x.id===id);
+   190→   190→   190→  1189→  openModal('Stock Count Detail',
+   191→   191→   191→  1190→    `<p class="text-muted">${new Date(t.startedAt).toLocaleString()} · ${staffName(t.startedBy)}</p>
+   192→   192→   192→  1191→     <div class="table-wrap mt-12"><table><thead><tr><th>Product</th><th>Expected</th><th>Counted</th><th>Variance</th></tr></thead><tbody>
+   193→   193→   193→  1192→     ${t.items.filter(i=>i.counted!==null).map(i=>{const p=state.inventory.find(x=>x.id===i.inventoryId);const v=i.counted-i.expected;return `<tr><td>${p?p.name:'?'}</td><td>${i.expected}</td><td>${i.counted}</td><td class="${v===0?'text-emerald':v>0?'text-amber':'text-crimson'}">${v>0?'+':''}${v}</td></tr>`}).join('')}
+   194→   194→   194→  1193→     </tbody></table></div>`,
+   195→   195→   195→  1194→    `<button class="btn btn-ghost" onclick="closeModal()">Close</button>`,true);
+   196→   196→   196→  1195→};
+   197→   197→   197→  1196→
+   198→   198→   198→  1197→/* ----- DAILY RECONCILIATION ----- */
+   199→   199→   199→  1198→RENDERERS.reconciliation=function(){
+   200→   200→   200→  1199→  // defensive: ensure arrays exist
+   201→   201→   201→  1200→  if(!Array.isArray(state.reconciliation))state.reconciliation=[];
+   202→   202→   202→  1201→  if(!Array.isArray(state.sales))state.sales=[];
+   203→   203→   203→  1202→  if(!Array.isArray(state.inventory))state.inventory=[];
+   204→   204→   204→  1203→  const inv=currentStoreInv();
+   205→   205→   205→  1204→  const today=todayKey();
+   206→   206→   206→  1205→  let rec=state.reconciliation.find(r=>r.storeId===state.currentStoreId&&r.date===today);
+   207→   207→   207→  1206→
+   208→   208→   208→  1207→  if(!rec){
+   209→   209→   209→  1208→    // auto-build today's record from sales + inventory opening
+   210→   210→   210→  1209→    rec={id:uid('rec'),storeId:state.currentStoreId,date:today,items:inv.map(p=>buildRecItem(p))};
+   211→   211→   211→  1210→    state.reconciliation.push(rec);saveState();
+   212→   212→   212→  1211→  } else {
+   213→   213→   213→  1212→    // sync: add any new inventory items not yet in today's reconciliation
+   214→   214→   214→  1213→    inv.forEach(p=>{
+   215→   215→   215→  1214→      if(!rec.items.find(it=>it.inventoryId===p.id)){
+   216→   216→   216→  1215→        rec.items.push(buildRecItem(p));
+   217→   217→   217→  1216→      }
+   218→   218→   218→  1217→    });
+   219→   219→   219→  1218→    // remove items whose inventory has been deleted
+   220→   220→   220→  1219→    rec.items=rec.items.filter(it=>inv.find(p=>p.id===it.inventoryId));
+   221→   221→   221→  1220→    saveState();
+   222→   222→   222→  1221→  }
+   223→   223→   223→  1222→
+   224→   224→   224→  1223→  // history (excluding today)
+   225→   225→   225→  1224→  const history=state.reconciliation.filter(r=>r.storeId===state.currentStoreId&&r.date!==today).sort((a,b)=>b.date.localeCompare(a.date));
+   226→   226→   226→  1225→
+   227→   227→   227→  1226→  let html=`
+   228→   228→   228→  1227→  <div class="page-header"><div><h2>Daily Reconciliation</h2><p>${new Date().toLocaleDateString('en-KE',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p></div>
+   229→   229→   229→  1228→    <div class="page-actions"><button class="btn btn-emerald btn-sm" onclick="saveReconciliation()"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+   230→   230→   230→  1229→    <button class="btn btn-outline btn-sm" onclick="exportReconciliationReport()"><i class="fa-solid fa-file-pdf"></i> PDF</button></div>
+   231→   231→   231→  1230→  </div>
+   232→   232→   232→  1231→  <div class="stat-grid">
+   233→   233→   233→  1232→    <div class="stat-card stat-blue"><div class="label">Total Opening Stock</div><div class="value">${rec.items.reduce((a,b)=>a+(b.opening||0),0)}</div><div class="delta">units</div><i class="fa-solid fa-door-open icon"></i></div>
+   234→   234→   234→  1233→    <div class="stat-card stat-crimson"><div class="label">Units Sold Today</div><div class="value">${rec.items.reduce((a,b)=>a+(b.salesToday||0),0)}</div><div class="delta">units</div><i class="fa-solid fa-cart-shopping icon"></i></div>
+   235→   235→   235→  1234→    <div class="stat-card stat-emerald"><div class="label">Units Added</div><div class="value">${rec.items.reduce((a,b)=>a+(b.stockAdded||0),0)}</div><div class="delta">units</div><i class="fa-solid fa-truck icon"></i></div>
+   236→   236→   236→  1235→    <div class="stat-card stat-amber"><div class="label">Total Variance</div><div class="value" id="totalVariance">0</div><div class="delta">units</div><i class="fa-solid fa-scale-balanced icon"></i></div>
+   237→   237→   237→  1236→  </div>`;
+   238→   238→   238→  1237→  if(!rec.items.length){
+   239→   239→   239→  1238→    html+=`<div class="card"><div class="empty-state"><i class="fa-solid fa-box-open"></i><h3>No inventory to reconcile</h3><p>Add products to your inventory first, then come back here.</p>
+   240→   240→   240→  1239→      <button class="btn btn-primary mt-12" onclick="navigate('inventory')"><i class="fa-solid fa-plus"></i> Go to Inventory</button></div></div>`;
+   241→   241→   241→  1240→  } else {
+   242→   242→   242→  1241→    html+=`<div class="card" style="padding:0">
+   243→   243→   243→  1242→      <div class="table-wrap"><table><thead><tr><th>Product</th><th>Opening</th><th>Sales</th><th>Added</th><th>Expected Closing</th><th>Actual Closing</th><th>Variance</th></tr></thead><tbody>
+   244→   244→   244→  1243→        ${rec.items.map((it,i)=>`<tr><td><b>${it.name||'—'}</b></td><td>${it.opening||0}</td><td>${it.salesToday||0}</td><td><input type="number" value="${it.stockAdded||0}" style="width:60px;padding:5px;border:1px solid var(--border);border-radius:6px;text-align:center" onchange="updateRecField(${i},'stockAdded',this.value);updateRecExpected(${i})"></td><td id="recExp${i}">${it.expectedClosing||0}</td><td><input type="number" value="${it.actualClosing===null?'':it.actualClosing}" placeholder="—" style="width:70px;padding:5px;border:1px solid var(--border);border-radius:6px;text-align:center;font-weight:700" onchange="updateRecField(${i},'actualClosing',this.value);updateRecVar(${i})"></td><td id="recVar${i}" style="font-weight:700">—</td></tr>`).join('')}
+   245→   245→   245→  1244→      </tbody></table></div>
+   246→   246→   246→  1245→    </div>`;
+   247→   247→   247→  1246→  }
+   248→   248→   248→  1247→  // history section
+   249→   249→   249→  1248→  html+=`<div class="card"><div class="card-header"><h3>Reconciliation History</h3><div class="sub">${history.length} past record(s)</div></div>
+   250→   250→   250→  1249→    ${history.length?`<div class="table-wrap"><table><thead><tr><th>Date</th><th>Items</th><th>Opening</th><th>Sold</th><th>Added</th><th>Counted</th><th>Variance</th><th>Action</th></tr></thead><tbody>
+   251→   251→   251→  1250→      ${history.map(r=>{const items=r.items||[];const opening=items.reduce((a,b)=>a+(b.opening||0),0);const sold=items.reduce((a,b)=>a+(b.salesToday||0),0);const added=items.reduce((a,b)=>a+(b.stockAdded||0),0);const counted=items.filter(it=>it.actualClosing!==null).length;const variance=items.filter(it=>it.actualClosing!==null).reduce((a,b)=>a+((b.actualClosing||0)-(b.expectedClosing||0)),0);return `<tr><td>${new Date(r.date).toLocaleDateString('en-KE',{day:'numeric',month:'short',year:'numeric'})}</td><td>${items.length}</td><td>${opening}</td><td>${sold}</td><td>${added}</td><td>${counted}/${items.length}</td><td><b class="${variance===0?'text-emerald':variance>0?'text-amber':'text-crimson'}">${variance>0?'+':''}${variance}</b></td><td><button class="btn btn-ghost btn-sm" onclick="viewReconciliation('${r.id}')"><i class="fa-solid fa-eye"></i> View</button></td></tr>`}).join('')}
+   252→   252→   252→  1251→    </tbody></table></div>`:'<div class="empty-state" style="padding:30px"><i class="fa-solid fa-clock-rotate-left"></i><h3>No past records</h3><p>Previous reconciliations will appear here.</p></div>'}
+   253→   253→   253→  1252→  </div>`;
+   254→   254→   254→  1253→  $('#content').innerHTML=html;
+   255→   255→   255→  1254→  rec.items.forEach((it,i)=>updateRecVar(i));
+   256→   256→   256→  1255→  updateTotalVariance(rec);
+   257→   257→   257→  1256→  window._currentRec=rec;
+   258→   258→   258→  1257→};
+   259→   259→   259→  1258→function buildRecItem(p){
+   260→   260→   260→  1259→  const soldToday=state.sales.filter(s=>s.storeId===state.currentStoreId&&new Date(s.timestamp).toDateString()===new Date().toDateString()&&s.items.some(i=>i.id===p.id)).reduce((a,b)=>{const it=b.items.find(i=>i.id===p.id);return a+(it?it.qty:0)},0);
+   261→   261→   261→  1260→  return {inventoryId:p.id,name:p.name,opening:p.opening||0,salesToday:soldToday,stockAdded:0,expectedClosing:(p.opening||0)-soldToday,actualClosing:null};
+   262→   262→   262→  1261→}
+   263→   263→   263→  1262→window.updateRecField=function(i,field,val){if(!window._currentRec)return;window._currentRec.items[i][field]=val===''?null:parseInt(val);saveState()};
+   264→   264→   264→  1263→window.updateRecExpected=function(i){if(!window._currentRec)return;const it=window._currentRec.items[i];it.expectedClosing=(it.opening||0)-(it.salesToday||0)+(it.stockAdded||0);const c=$('#recExp'+i);if(c)c.textContent=it.expectedClosing;updateRecVar(i);updateTotalVariance(window._currentRec)};
+   265→   265→   265→  1264→window.updateRecVar=function(i){if(!window._currentRec)return;const it=window._currentRec.items[i];const cell=$('#recVar'+i);if(!cell)return;if(it.actualClosing===null){cell.textContent='—';cell.className='';return}const v=it.actualClosing-(it.expectedClosing||0);cell.textContent=(v>0?'+':'')+v;cell.className=v===0?'text-emerald':v>0?'text-amber':'text-crimson';cell.style.fontWeight='700';updateTotalVariance(window._currentRec)};
+   266→   266→   266→  1265→window.updateTotalVariance=function(rec){const v=(rec.items||[]).filter(it=>it.actualClosing!==null).reduce((a,b)=>a+((b.actualClosing||0)-(b.expectedClosing||0)),0);const cell=$('#totalVariance');if(cell)cell.textContent=(v>0?'+':'')+v};
+   267→   267→   267→  1266→window.saveReconciliation=function(){saveState();toast('Daily reconciliation saved','success')};
+   268→   268→   268→  1267→window.viewReconciliation=function(id){
+   269→   269→   269→  1268→  const r=state.reconciliation.find(x=>x.id===id);if(!r)return;
+   270→   270→   270→  1269→  const items=r.items||[];
+   271→   271→   271→  1270→  const variance=items.filter(it=>it.actualClosing!==null).reduce((a,b)=>a+((b.actualClosing||0)-(b.expectedClosing||0)),0);
+   272→   272→   272→  1271→  openModal('Reconciliation · '+new Date(r.date).toLocaleDateString('en-KE',{weekday:'long',day:'numeric',month:'long',year:'numeric'}),
+   273→   273→   273→  1272→    `<div class="kpi-row mb-12">
+   274→   274→   274→  1273→      <div class="mini-kpi"><div class="l">Items</div><div class="v">${items.length}</div></div>
+   275→   275→   275→  1274→      <div class="mini-kpi"><div class="l">Counted</div><div class="v">${items.filter(it=>it.actualClosing!==null).length}/${items.length}</div></div>
+   276→   276→   276→  1275→      <div class="mini-kpi"><div class="l">Variance</div><div class="v ${variance===0?'pos':variance<0?'neg':''}">${variance>0?'+':''}${variance}</div></div>
+   277→   277→   277→  1276→    </div>
+   278→   278→   278→  1277→    <div class="table-wrap"><table><thead><tr><th>Product</th><th>Opening</th><th>Sales</th><th>Added</th><th>Expected</th><th>Actual</th><th>Variance</th></tr></thead><tbody>
+   279→   279→   279→  1278→      ${items.map(it=>{const v=it.actualClosing===null?null:(it.actualClosing||0)-(it.expectedClosing||0);return `<tr><td><b>${it.name||'—'}</b></td><td>${it.opening||0}</td><td>${it.salesToday||0}</td><td>${it.stockAdded||0}</td><td>${it.expectedClosing||0}</td><td>${it.actualClosing===null?'<span class="text-muted">—</span>':it.actualClosing}</td><td>${v===null?'<span class="text-muted">—</span>':`<b class="${v===0?'text-emerald':v>0?'text-amber':'text-crimson'}">${v>0?'+':''}${v}</b>`}</td></tr>`}).join('')}
+   280→   280→   280→  1279→    </tbody></table></div>`,
+   281→   281→   281→  1280→    `<button class="btn btn-outline" onclick="exportPastReconciliation('${r.id}')"><i class="fa-solid fa-file-pdf"></i> Export PDF</button><button class="btn btn-ghost" onclick="closeModal()">Close</button>`,true);
+   282→   282→   282→  1281→};
+   283→   283→   283→  1282→window.exportPastReconciliation=function(id){
+   284→   284→   284→  1283→  const r=state.reconciliation.find(x=>x.id===id);if(!r)return;
+   285→   285→   285→  1284→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+   286→   286→   286→  1285→  const items=r.items||[];
+   287→   287→   287→  1286→  const variance=items.filter(it=>it.actualClosing!==null).reduce((a,b)=>a+((b.actualClosing||0)-(b.expectedClosing||0)),0);
+   288→   288→   288→  1287→  const {jsPDF}=window.jspdf;const doc=new jsPDF();
+   289→   289→   289→  1288→  pdfHeader(doc,'Daily Reconciliation Report',store.name+' · '+new Date(r.date).toLocaleDateString('en-KE',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+' · Variance: '+(variance>0?'+':'')+variance);
+   290→   290→   290→  1289→  doc.autoTable({startY:58,head:[['Product','Opening','Sales','Added','Expected','Actual','Variance']],body:items.map(it=>[it.name||'—',it.opening||0,it.salesToday||0,it.stockAdded||0,it.expectedClosing||0,it.actualClosing===null?'—':it.actualClosing,it.actualClosing===null?'—':((it.actualClosing-it.expectedClosing>0?'+':'')+(it.actualClosing-(it.expectedClosing||0)))]),headStyles:{fillColor:[139,92,246]},didParseCell:function(d){if(d.section==='body'&&d.column.index===6&&d.cell.raw!=='—'){const v=parseInt(d.cell.raw);d.cell.styles.textColor=v===0?[16,185,129]:v>0?[245,158,11]:[220,38,38];d.cell.styles.fontStyle='bold'}},styles:{fontSize:9}});
+   291→   291→   291→  1290→  downloadPdf(doc,'reconciliation-'+r.date+'.pdf');
+   292→   292→   292→  1291→};
+   293→   293→   293→  1292→
+   294→   294→   294→  1293→/* ----- POS ----- */
+   295→   295→   295→  1294→RENDERERS.pos=function(){
+   296→   296→   296→  1295→  const inv=currentStoreInv();
+   297→   297→   297→  1296→  const cats=['All',...new Set(inv.map(p=>p.category))];
+   298→   298→   298→  1297→  $('#content').innerHTML=`
+   299→   299→   299→  1298→  <div class="page-header"><div><h2>Point of Sale</h2><p>Ring up sales — stock updates automatically</p></div></div>
+   300→   300→   300→  1299→  <div class="pos-grid">
+   301→   301→   301→  1300→    <div>
+   302→   302→   302→  1301→      <div class="search-bar mb-12"><i class="fa-solid fa-magnifying-glass"></i><input id="posSearch" placeholder="Search products..."></div>
+   303→   303→   303→  1302→      <div class="filter-chips" id="posCats">${cats.map((c,i)=>`<button class="chip ${i===0?'active':''}" data-cat="${c}">${c}</button>`).join('')}</div>
+   304→   304→   304→  1303→      <div class="pos-products" id="posProducts"></div>
+   305→   305→   305→  1304→    </div>
+   306→   306→   306→  1305→    <div class="cart" id="cartPanel">
+   307→   307→   307→  1306→      <div class="cart-header"><h3><i class="fa-solid fa-cart-shopping"></i> Current Sale</h3><button class="btn btn-ghost btn-sm" onclick="clearCart()">Clear</button></div>
+   308→   308→   308→  1307→      <div class="cart-items" id="cartItems"></div>
+   309→   309→   309→  1308→      <div class="cart-footer">
+   310→   310→   310→  1309→        <div class="cart-total"><span>Total</span><span id="cartTotal">KSh 0</span></div>
+   311→   311→   311→  1310→        <div class="form-row mb-8"><select id="payMethod" class="form-control"><option value="cash">Cash</option><option value="card">Card</option><option value="mpesa">M-Pesa</option></select></div>
+   312→   312→   312→  1311→        <button class="btn btn-emerald btn-block" onclick="checkout()"><i class="fa-solid fa-cash-register"></i> Complete Sale</button>
+   313→   313→   313→  1312→      </div>
+   314→   314→   314→  1313→    </div>
+   315→   315→   315→  1314→  </div>`;
+   316→   316→   316→  1315→  let curCat='All',curSearch='';
+   317→   317→   317→  1316→  function drawProducts(){
+   318→   318→   318→  1317→    let rows=inv.filter(p=>(curCat==='All'||p.category===curCat)&&(p.name+p.sku).toLowerCase().includes(curSearch.toLowerCase()));
+   319→   319→   319→  1318→    const colors={Wine:'#DC2626',Whisky:'#92400E',Vodka:'#3B82F6',Gin:'#10B981',Rum:'#F59E0B',Champagne:'#EC4899',Beer:'#F97316',Cognac:'#8B5CF6',Tequila:'#14B8A6',Liqueur:'#A78BFA'};
+   320→   320→   320→  1319→    $('#posProducts').innerHTML=rows.length?rows.map(p=>{
+   321→   321→   321→  1320→      const c=colors[p.category]||'#6B7280';
+   322→   322→   322→  1321→      return `<div class="pos-product ${p.current===0?'out':''}" onclick="${p.current>0?`addToCart('${p.id}')`:''}">
+   323→   323→   323→  1322→        <div class="pp-icon" style="color:${c}"><i class="fa-solid fa-wine-bottle"></i></div>
+   324→   324→   324→  1323→        <div class="pp-name">${p.name}</div><div class="pp-price">${fmt(p.sell)}</div><div class="pp-stock">${p.current} in stock</div></div>`;
+   325→   325→   325→  1324→    }).join(''):'<div class="empty-state" style="grid-column:1/-1"><i class="fa-solid fa-box-open"></i><h3>No products</h3></div>';
+   326→   326→   326→  1325→  }
+   327→   327→   327→  1326→  drawProducts();drawCart();
+   328→   328→   328→  1327→  $('#posSearch').addEventListener('input',e=>{curSearch=e.target.value;drawProducts()});
+   329→   329→   329→  1328→  $$('#posCats .chip').forEach(c=>c.addEventListener('click',()=>{$$('#posCats .chip').forEach(x=>x.classList.remove('active'));c.classList.add('active');curCat=c.dataset.cat;drawProducts()}));
+   330→   330→   330→  1329→};
+   331→   331→   331→  1330→window.addToCart=function(id){
+   332→   332→   332→  1331→  const p=currentStoreInv().find(x=>x.id===id);if(!p||p.current===0)return;
+   333→   333→   333→  1332→  const ex=cart.find(c=>c.id===id);
+   334→   334→   334→  1333→  if(ex){if(ex.qty>=p.current){toast('Not enough stock','warn');return}ex.qty++}
+   335→   335→   335→  1334→  else cart.push({id,name:p.name,price:p.sell,qty:1,maxStock:p.current});
+   336→   336→   336→  1335→  drawCart();
+   337→   337→   337→  1336→};
+   338→   338→   338→  1337→window.removeFromCart=function(id){cart=cart.filter(c=>c.id!==id);drawCart()};
+   339→   339→   339→  1338→window.changeQty=function(id,d){
+   340→   340→   340→  1339→  const c=cart.find(x=>x.id===id);if(!c)return;
+   341→   341→   341→  1340→  c.qty+=d;if(c.qty<=0)cart=cart.filter(x=>x.id!==id);
+   342→   342→   342→  1341→  else if(c.qty>c.maxStock){c.qty=c.maxStock;toast('Reached stock limit','warn')}
+   343→   343→   343→  1342→  drawCart();
+   344→   344→   344→  1343→};
+   345→   345→   345→  1344→window.clearCart=function(){cart=[];drawCart()};
+   346→   346→   346→  1345→function drawCart(){
+   347→   347→   347→  1346→  const el=$('#cartItems');if(!el)return;
+   348→   348→   348→  1347→  el.innerHTML=cart.length?cart.map(c=>`<div class="cart-item">
+   349→   349→   349→  1348→    <div class="ci-name">${c.name}<br><small class="text-muted">${fmt(c.price)}</small></div>
+   350→   350→   350→  1349→    <div class="qty-ctrl"><button onclick="changeQty('${c.id}',-1)">−</button><span>${c.qty}</span><button onclick="changeQty('${c.id}',1)">+</button></div>
+   351→   351→   351→  1350→    <div class="ci-price">${fmt(c.price*c.qty)}</div>
+   352→   352→   352→  1351→    <button class="icon-btn" onclick="removeFromCart('${c.id}')"><i class="fa-solid fa-xmark"></i></button>
+   353→   353→   353→  1352→  </div>`).join(''):'<div class="empty-state" style="padding:30px 10px"><i class="fa-solid fa-cart-shopping"></i><h3>Cart empty</h3><p>Tap products to add</p></div>';
+   354→   354→   354→  1353→  const total=cart.reduce((a,b)=>a+b.price*b.qty,0);
+   355→   355→   355→  1354→  $('#cartTotal').textContent=fmt(total);
+   356→   356→   356→  1355→}
+   357→   357→   357→  1356→window.checkout=function(){
+   358→   358→   358→  1357→  if(!cart.length){toast('Cart is empty','warn');return}
+   359→   359→   359→  1358→  const total=cart.reduce((a,b)=>a+b.price*b.qty,0);
+   360→   360→   360→  1359→  openModal('Complete Sale',
+   361→   361→   361→  1360→    `<div class="text-center" style="padding:14px 0">
+   362→   362→   362→  1361→      <div style="font-size:13px;color:var(--text-muted)">Total Due</div>
+   363→   363→   363→  1362→      <div style="font-size:34px;font-weight:800;color:var(--crimson)">${fmt(total)}</div>
+   364→   364→   364→  1363→      <div style="margin-top:10px"><span class="badge badge-blue">${($('#payMethod').value||'cash').toUpperCase()}</span></div>
+   365→   365→   365→  1364→      <div style="margin-top:14px;font-size:12px;color:var(--text-muted)">${cart.length} item(s) · ${cart.reduce((a,b)=>a+b.qty,0)} units</div>
+   366→   366→   366→  1365→    </div>`,
+   367→   367→   367→  1366→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-emerald" onclick="confirmCheckout()"><i class="fa-solid fa-check"></i> Confirm Sale</button>`);
+   368→   368→   368→  1367→};
+   369→   369→   369→  1368→window.confirmCheckout=function(){
+   370→   370→   370→  1369→  const total=cart.reduce((a,b)=>a+b.price*b.qty,0);
+   371→   371→   371→  1370→  const sale={id:uid('sale'),items:cart.map(c=>({id:c.id,name:c.name,qty:c.qty,price:c.price,cost:currentStoreInv().find(p=>p.id===c.id).cost})),total,staffId:currentUser.id,storeId:state.currentStoreId,timestamp:Date.now(),paymentMethod:$('#payMethod').value||'cash'};
+   372→   372→   372→  1371→  state.sales.push(sale);
+   373→   373→   373→  1372→  // deduct stock
+   374→   374→   374→  1373→  cart.forEach(c=>{const p=currentStoreInv().find(x=>x.id===c.id);if(p){p.current-=c.qty;if(p.current<0)p.current=0}});
+   375→   375→   375→  1374→  saveState();cart=[];closeModal();
+   376→   376→   376→  1375→  toast('Sale completed: '+fmt(total),'success');
+   377→   377→   377→  1376→  navigate('pos');
+   378→   378→   378→  1377→  // ask whether to print receipt (non-blocking)
+   379→   379→   379→  1378→  setTimeout(()=>{
+   380→   380→   380→  1379→    if(confirm('Sale completed: '+fmt(total)+'\n\nPrint receipt?')) printReceipt(sale);
+   381→   381→   381→  1380→  },100);
+   382→   382→   382→  1381→};
+   383→   383→   383→  1382→function printReceipt(sale){
+   384→   384→   384→  1383→  const w=window.open('','_blank','width=380,height=600');
+   385→   385→   385→  1384→  if(!w)return;
+   386→   386→   386→  1385→  const store=state.stores.find(s=>s.id===state.currentStoreId);
+   387→   387→   387→  1386→  w.document.write(`<html><head><title>Receipt ${sale.id}</title><style>body{font-family:monospace;font-size:12px;padding:14px;color:#000}h2{text-align:center;margin:0;font-size:16px}.ctr{text-align:center}.r{display:flex;justify-content:space-between;border-bottom:1px dashed #000;padding:3px 0}.t{font-size:16px;font-weight:bold;border-top:2px solid #000;margin-top:8px;padding-top:6px}</style></head><body>
+   388→   388→   388→  1387→    <h2>VinoCellar Pro</h2><div class="ctr">${store.name}<br>${store.location}<br>Tel: +254 700 000 000</div><hr>
+   389→   389→   389→  1388→    <div class="r"><span>Receipt:</span><span>${sale.id}</span></div>
+   390→   390→   390→  1389→    <div class="r"><span>Date:</span><span>${new Date(sale.timestamp).toLocaleString()}</span></div>
+   391→   391→   391→  1390→    <div class="r"><span>Cashier:</span><span>${currentUser.name}</span></div>
+   392→   392→   392→  1391→    <hr>${sale.items.map(i=>`<div class="r"><span>${i.qty}× ${i.name}</span><span>${fmt(i.price*i.qty)}</span></div>`).join('')}
+   393→   393→   393→  1392→    <div class="t r"><span>TOTAL (${sale.paymentMethod.toUpperCase()})</span><span>${fmt(sale.total)}</span></div>
+   394→   394→   394→  1393→    <div class="ctr" style="margin-top:18px">Thank you!<br>Powered by VinoCellar Pro</div>
+   395→   395→   395→  1394→    <script>window.print()<\/script></body></html>`);
+   396→   396→   396→  1395→  w.document.close();
+   397→   397→   397→  1396→}
+   398→   398→   398→  1397→
+   399→   399→   399→  1398→/* ----- SUPPLIERS ----- */
+   400→   400→   400→  1399→RENDERERS.suppliers=function(){
+   401→   401→   401→  1400→  let html=`<div class="page-header"><div><h2>Suppliers</h2><p>${state.suppliers.length} suppliers</p></div><div class="page-actions"><button class="btn btn-primary btn-sm" onclick="openSupplierModal()"><i class="fa-solid fa-plus"></i> Add Supplier</button></div></div>
+   402→   402→   402→  1401→  <div class="card" style="padding:0"><div class="table-wrap"><table><thead><tr><th>Name</th><th>Contact</th><th>Phone</th><th>Email</th><th>Products</th><th>Items Supplied</th><th>Actions</th></tr></thead><tbody>
+   403→   403→   403→  1402→    ${state.suppliers.map(s=>{const cnt=state.inventory.filter(p=>p.supplierId===s.id).length;return `<tr><td><b>${s.name}</b></td><td>${s.contact}</td><td>${s.phone}</td><td>${s.email}</td><td><span class="badge badge-purple">${s.products}</span></td><td>${cnt}</td><td><div class="row-actions"><button onclick="openSupplierModal('${s.id}')"><i class="fa-solid fa-pen"></i></button><button class="delete" onclick="deleteSupplier('${s.id}')"><i class="fa-solid fa-trash"></i></button></div></td></tr>`}).join('')}
+   404→   404→   404→  1403→  </tbody></table></div></div>`;
+   405→   405→   405→  1404→  $('#content').innerHTML=html;
+   406→   406→   406→  1405→};
+   407→   407→   407→  1406→window.openSupplierModal=function(id){
+   408→   408→   408→  1407→  const s=id?state.suppliers.find(x=>x.id===id):null;
+   409→   409→   409→  1408→  openModal(s?'Edit Supplier':'Add Supplier',
+   410→   410→   410→  1409→    `<div class="form-grid">
+   411→   411→   411→  1410→      <div class="form-group"><label>Company Name</label><input id="supName" class="form-control" value="${s?s.name:''}"></div>
+   412→   412→   412→  1411→      <div class="form-group"><label>Contact Person</label><input id="supContact" class="form-control" value="${s?s.contact:''}"></div>
+   413→   413→   413→  1412→      <div class="form-group"><label>Phone</label><input id="supPhone" class="form-control" value="${s?s.phone:''}"></div>
+   414→   414→   414→  1413→      <div class="form-group"><label>Email</label><input id="supEmail" class="form-control" value="${s?s.email:''}"></div>
+   415→   415→   415→  1414→      <div class="form-group"><label>Products/Category</label><input id="supProducts" class="form-control" value="${s?s.products:''}"></div>
+   416→   416→   416→  1415→    </div>`,
+   417→   417→   417→  1416→    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveSupplier('${id||''}')"><i class="fa-solid fa-check"></i> Save</button>`);
+   418→   418→   418→  1417→};
+   419→   419→   419→  1418→window.saveSupplier=function(id){
+   420→   420→   420→  1419→  const get=v=>$('#'+v).value.trim();
+   421→   421→   421→  1420→  if(!get('supName')){toast('Name required','error');return}
+   422→   422→   422→  1421→  if(id){Object.assign(state.suppliers.find(x=>x.id===id),{name:get('supName'),contact:get('supContact'),phone:get('supPhone'),email:get('supEmail'),products:get('supProducts')})}
+   423→   423→   423→  1422→  else{state.suppliers.push({id:uid('sup'),name:get('supName'),contact:get('supContact'),phone:get('supPhone'),email:get('supEmail'),products:get('supProducts')})}
+   424→   424→   424→  1423→  saveState();closeModal();toast('Supplier saved','success');navigate('suppliers');
+   425→   425→   425→  1424→};
+   426→   426→   426→  1425→window.deleteSupplier=function(id){if(!confirm('Delete supplier?'))return;state.suppliers=state.suppliers.filter(s=>s.id!==id);saveState();toast('Deleted','success');navigate('suppliers')};
+   427→   427→   427→  1426→
+   428→   428→   428→  1427→/* ----- SALES ANALYTICS ----- */
+   429→   429→   429→  1428→RENDERERS.analytics=function(){
+   430→   430→   430→  1429→  const sales=state.sales.filter(s=>s.storeId===state.currentStoreId);
+   431→   431→   431→  1430→  const totalRev=sales.reduce((a,b)=>a+b.total,0);
+   432→   432→   432→  1431→  const totalUnits=sales.reduce((a,b)=>a+b.items.reduce((x,y)=>x+y.qty,0),0);
+   433→   433→   433→  1432→  const avg=sales.length?totalRev/sales.length:0;
+   434→   434→   434→  1433→  let html=`<div class="page-header"><div><h2>Sales Analytics</h2><p>Performance insights for ${state.stores.find(s=>s.id===state.currentStoreId).name}</p></div></div>
+   435→   435→   435→  1434→  <div class="stat-grid">
+   436→   436→   436→  1435→    <div class="stat-card stat-crimson"><div class="label">Total Revenue</div><div class="value">${fmt(totalRev)}</div><div class="delta">All time</div><i class="fa-solid fa-money-bill icon"></i></div>
+   437→   437→   437→  1436→    <div class="stat-card stat-emerald"><div class="label">Units Sold</div><div class="value">${totalUnits}</div><div class="delta">units</div><i class="fa-solid fa-cubes icon"></i></div>
+   438→   438→   438→  1437→    <div class="stat-card stat-blue"><div class="label">Transactions</div><div class="value">${sales.length}</div><div class="delta">total sales</div><i class="fa-solid fa-receipt icon"></i></div>
+   439→   439→   439→  1438→    <div class="stat-card stat-amber"><div class="label">Avg Sale Value</div><div class="value">${fmt(avg)}</div><div class="delta">per transaction</div><i class="fa-solid fa-chart-line icon"></i></div>
+   440→   440→   440→  1439→  </div>
+   441→   441→   441→  1440→  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
+   442→   442→   442→  1441→    <div class="card"><div class="card-header"><h3>30-Day Sales Trend</h3></div><canvas id="trendChart" height="200"></canvas></div>
+   443→   443→   443→  1442→    <div class="card"><div class="card-header"><h3>Sales by Category</h3></div><canvas id="catChart" height="200"></canvas></div>
+   444→   444→   444→  1443→  </div>
+   445→   445→   445→  1444→  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
+   446→   446→   446→  1445→    <div class="card"><div class="card-header"><h3>Top 10 Products (Revenue)</h3></div><canvas id="top10Chart" height="220"></canvas></div>
+   447→   447→   447→  1446→    <div class="card"><div class="card-header"><h3>Payment Methods</h3></div><canvas id="payChart" height="220"></canvas></div>
+   448→   448→   448→  1447→  </div>`;
+   449→   449→   449→  1448→  $('#content').innerHTML=html;
+   450→   450→   450→  1449→  if(window.innerWidth<=1024)$$('.dash-grid').forEach(g=>g.style.gridTemplateColumns='1fr');
+   451→   451→   451→  1450→  // 30-day trend
+   452→   452→   452→  1451→  const days=[];const revs=[];
+   453→   453→   453→  1452→  for(let d=29;d>=0;d--){const dt=new Date(Date.now()-d*86400000);days.push(dt.getDate());revs.push(sales.filter(s=>new Date(s.timestamp).toDateString()===dt.toDateString()).reduce((a,b)=>a+b.total,0))}
+   454→   454→   454→  1453→  charts.trend=new Chart($('#trendChart'),{type:'line',data:{labels:days,datasets:[{label:'Revenue',data:revs,borderColor:'#DC2626',backgroundColor:'rgba(220,38,38,.1)',fill:true,tension:.3}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+   455→   455→   455→  1454→  // category
+   456→   456→   456→  1455→  const catMap={};sales.forEach(s=>s.items.forEach(i=>{const p=state.inventory.find(x=>x.id===i.id);const cat=p?p.category:'Other';catMap[cat]=(catMap[cat]||0)+i.price*i.qty}));
+   457→   457→   457→  1456→  charts.cat=new Chart($('#catChart'),{type:'doughnut',data:{labels:Object.keys(catMap),datasets:[{data:Object.values(catMap),backgroundColor:['#DC2626','#F59E0B','#10B981','#3B82F6','#8B5CF6','#14B8A6','#EC4899','#F97316','#6366F1','#A855F7']}]},options:{responsive:true,plugins:{legend:{position:'right'}}}});
+   458→   458→   458→  1457→  // top 10
+   459→   459→   459→  1458→  const sellerMap={};sales.forEach(s=>s.items.forEach(i=>{sellerMap[i.name]=(sellerMap[i.name]||0)+i.price*i.qty}));
+   460→   460→   460→  1459→  const top10=Object.entries(sellerMap).sort((a,b)=>b[1]-a[1]).slice(0,10);
+   461→   461→   461→  1460→  charts.top10=new Chart($('#top10Chart'),{type:'bar',data:{labels:top10.map(t=>t[0].split(' ').slice(0,2).join(' ')),datasets:[{data:top10.map(t=>t[1]),backgroundColor:'#F59E0B',borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+   462→   462→   462→  1461→  // payment
+   463→   463→   463→  1462→  const payMap={};sales.forEach(s=>payMap[s.paymentMethod]=(payMap[s.paymentMethod]||0)+s.total);
+   464→   464→   464→  1463→  charts.pay=new Chart($('#payChart'),{type:'pie',data:{labels:Object.keys(payMap).map(k=>k.charAt(0).toUpperCase()+k.slice(1)),datasets:[{data:Object.values(payMap),backgroundColor:['#10B981','#3B82F6','#F59E0B']}]},options:{responsive:true,plugins:{legend:{position:'right'}}}});
+   465→   465→   465→  1464→};
+   466→   466→   466→  1465→
+   467→   467→   467→  1466→/* ----- PROFIT ANALYTICS ----- */
+   468→   468→   468→  1467→RENDERERS.profit=function(){
+   469→   469→   469→  1468→  const sales=state.sales.filter(s=>s.storeId===state.currentStoreId);
+   470→   470→   470→  1469→  const exps=state.expenses.filter(e=>e.storeId===state.currentStoreId);
+   471→   471→   471→  1470→  let rev=0,cost=0;
+   472→   472→   472→  1471→  sales.forEach(s=>s.items.forEach(i=>{rev+=i.price*i.qty;cost+=i.cost*i.qty}));
+   473→   473→   473→  1472→  const profit=rev-cost;const pct=rev?(profit/rev*100).toFixed(1):0;
+   474→   474→   474→  1473→  const totalExp=exps.reduce((a,b)=>a+b.amount,0);
+   475→   475→   475→  1474→  const netProfit=profit-totalExp;
+   476→   476→   476→  1475→  const netPct=rev?(netProfit/rev*100).toFixed(1):0;
+   477→   477→   477→  1476→  let html=`<div class="page-header"><div><h2>Profit Analytics</h2><p>Margin and profitability analysis</p></div>
+   478→   478→   478→  1477→    <div class="page-actions"><button class="btn btn-emerald btn-sm" onclick="exportProfitReport()"><i class="fa-solid fa-file-pdf"></i> Export PDF</button></div></div>
+   479→   479→   479→  1478→  <div class="stat-grid">
+   480→   480→   480→  1479→    <div class="stat-card stat-emerald"><div class="label">Gross Profit</div><div class="value">${fmt(profit)}</div><div class="delta">${pct}% margin</div><i class="fa-solid fa-coins icon"></i></div>
+   481→   481→   481→  1480→    <div class="stat-card stat-blue"><div class="label">Revenue</div><div class="value">${fmt(rev)}</div><div class="delta">total sales</div><i class="fa-solid fa-money-bill-trend-up icon"></i></div>
+   482→   482→   482→  1481→    <div class="stat-card stat-crimson"><div class="label">Cost of Goods</div><div class="value">${fmt(cost)}</div><div class="delta">inventory cost</div><i class="fa-solid fa-warehouse icon"></i></div>
+   483→   483→   483→  1482→    <div class="stat-card stat-amber"><div class="label">Operating Expenses</div><div class="value">${fmt(totalExp)}</div><div class="delta">${exps.length} entries</div><i class="fa-solid fa-receipt icon"></i></div>
+   484→   484→   484→  1483→    <div class="stat-card stat-purple"><div class="label">Net Profit</div><div class="value">${fmt(netProfit)}</div><div class="delta">${netPct}% net margin</div><i class="fa-solid fa-piggy-bank icon"></i></div>
+   485→   485→   485→  1484→  </div>
+   486→   486→   486→  1485→  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
+   487→   487→   487→  1486→    <div class="card"><div class="card-header"><h3>Daily Profit Trend (30 days)</h3></div><canvas id="profChart" height="200"></canvas></div>
+   488→   488→   488→  1487→    <div class="card"><div class="card-header"><h3>Top 10 by Profit</h3></div><canvas id="profTopChart" height="200"></canvas></div>
+   489→   489→   489→  1488→  </div>
+   490→   490→   490→  1489→  <div class="card"><div class="card-header"><h3>Expense Breakdown by Category</h3></div>
+   491→   491→   491→  1490→    <div style="display:flex;gap:8px;flex-wrap:wrap">${['Rent','Utilities','Salaries','Inventory','Marketing','Maintenance','Other'].map(c=>{const t=exps.filter(e=>e.category===c).reduce((a,b)=>a+b.amount,0);if(!t)return'';const cls={Rent:'badge-red',Utilities:'badge-gold',Salaries:'badge-blue',Inventory:'badge-green',Marketing:'badge-purple',Maintenance:'badge-teal',Other:'badge-gray'}[c];return `<div style="flex:1;min-width:120px;text-align:center;padding:10px;background:var(--bg-alt);border-radius:10px"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase">${c}</div><div style="font-size:16px;font-weight:800;margin-top:4px">${fmt(t)}</div></div>`}).join('')}</div>
+   492→   492→   492→  1491→  </div>
+   493→   493→   493→  1492→  <div class="card"><div class="card-header"><h3>Profit by Product</h3></div>
+   494→   494→   494→  1493→    <div class="table-wrap"><table><thead><tr><th>Product</th><th>Units Sold</th><th>Revenue</th><th>Cost</th><th>Profit</th><th>Margin</th></tr></thead><tbody>
+   495→   495→   495→  1494→      ${(()=>{const m={};sales.forEach(s=>s.items.forEach(i=>{if(!m[i.id])m[i.id]={name:i.name,units:0,rev:0,cost:0};m[i.id].units+=i.qty;m[i.id].rev+=i.price*i.qty;m[i.id].cost+=i.cost*i.qty}));return Object.values(m).sort((a,b)=>(b.rev-b.cost)-(a.rev-a.cost)).map(x=>{const p=x.rev-x.cost;const pc=x.rev?(p/x.rev*100).toFixed(0):0;return `<tr><td><b>${x.name}</b></td><td>${x.units}</td><td>${fmt(x.rev)}</td><td>${fmt(x.cost)}</td><td><b class="text-emerald">${fmt(p)}</b></td><td><span class="badge ${pc>=40?'badge-green':pc>=20?'badge-gold':'badge-red'}">${pc}%</span></td></tr>`}).join('')})()}
+   496→   496→   496→  1495→    </tbody></table></div></div>`;
+   497→   497→   497→  1496→  $('#content').innerHTML=html;
+   498→   498→   498→  1497→  if(window.innerWidth<=1024)$$('.dash-grid').forEach(g=>g.style.gridTemplateColumns='1fr');
+   499→   499→   499→  1498→  const days=[],profits=[];
+   500→   500→   500→  1499→  for(let d=29;d>=0;d--){const dt=new Date(Date.now()-d*86400000);days.push(dt.getDate());const ss=sales.filter(s=>new Date(s.timestamp).toDateString()===dt.toDateString());profits.push(ss.reduce((a,b)=>a+b.items.reduce((x,y)=>x+(y.price-y.cost)*y.qty,0),0))}
+   501→   501→   501→
+   502→   502→   502→[showing lines 1000-1499 of 1939; use offset=1500 with limit to continue reading]
