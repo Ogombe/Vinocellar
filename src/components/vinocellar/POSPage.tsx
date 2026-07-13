@@ -1,600 +1,681 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
-import { useAppStore } from '@/lib/store'
-import { api } from '@/lib/api'
 
-// --- Constants ---
-const CATEGORY_COLORS: Record<string, string> = {
-  Wine: '#DC2626',
-  Whisky: '#92400E',
-  Vodka: '#3B82F6',
-  Gin: '#10B981',
-  Rum: '#F97316',
-  Champagne: '#F59E0B',
-  Beer: '#FBBF24',
-  Cognac: '#78350F',
-  Tequila: '#059669',
-  Liqueur: '#8B5CF6',
-  Other: '#6B7280',
-}
+import { useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/contexts/auth-context'
+import type { Product } from '@/lib/types'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
+import {
+  Search,
+  Plus,
+  Minus,
+  Trash2,
+  ShoppingCart,
+  CreditCard,
+  Banknote,
+  Smartphone,
+  CheckCircle,
+  Package,
+} from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useToast } from '@/hooks/use-toast'
 
-const CATEGORIES = ['All', 'Wine', 'Whisky', 'Vodka', 'Gin', 'Rum', 'Champagne', 'Beer', 'Cognac', 'Tequila', 'Liqueur']
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
 
-const PAYMENT_METHODS = ['Cash', 'Card', 'M-Pesa'] as const
+const ACCENT = '#7C3AED'
 
-const fmt = (n: number) => 'KSh ' + n.toLocaleString('en-KE')
+const formatKES = (amount: number): string =>
+  new Intl.NumberFormat('en-KE', {
+    style: 'currency',
+    currency: 'KES',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount)
 
-// --- Types ---
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+
 interface CartItem {
-  id: string
   productId: string
   name: string
   qty: number
   price: number
   cost: number
-  maxStock: number
-  category?: string
-  size?: string
 }
 
-// --- Component ---
-export function POSPage() {
-  const { user, org, storeId, setStoreId, setData, products } = useAppStore()
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
 
-  // Local state
-  const [localProducts, setLocalProducts] = useState<any[]>([])
-  const [cart, setCart] = useState<CartItem[]>([])
-  const [activeCategory, setActiveCategory] = useState('All')
+export default function POSPage() {
+  const { store, appUser } = useAuth()
+  const { toast } = useToast()
+  const queryClient = useQueryClient()
+
   const [search, setSearch] = useState('')
-  const [paymentMethod, setPaymentMethod] = useState<string>('Cash')
+  const [cart, setCart] = useState<CartItem[]>([])
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'mpesa'>('cash')
+  const [successOpen, setSuccessOpen] = useState(false)
+  const [lastSaleId, setLastSaleId] = useState<string>('')
   const [mobileTab, setMobileTab] = useState<'products' | 'cart'>('products')
-  const [loading, setLoading] = useState(false)
-  const [checkoutLoading, setCheckoutLoading] = useState(false)
 
-  // Modals
-  const [confirmModal, setConfirmModal] = useState(false)
-  const [receiptModal, setReceiptModal] = useState(false)
-  const [lastSale, setLastSale] = useState<any>(null)
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  /* ---------------------------------------------------------------- */
+  /*  Data fetching                                                    */
+  /* ---------------------------------------------------------------- */
 
-  // Fetch products
-  const fetchProducts = useCallback(async () => {
-    try {
-      setLoading(true)
-      const params = storeId ? `storeId=${storeId}` : ''
-      const data = await api.getProducts(params)
-      const list = Array.isArray(data) ? data : (data.products || data.data || [])
-      setLocalProducts(list)
-      setData('products', list)
-    } catch {
-      showToast('Failed to load products', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }, [storeId, setData])
+  const { data: products, isLoading } = useQuery({
+    queryKey: ['pos-products', store?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('products')
+        .select('*')
+        .eq('store_id', store!.id)
+        .gt('current_stock', 0)
+        .order('name')
+      return (data || []) as Product[]
+    },
+    enabled: !!store?.id,
+  })
 
-  useEffect(() => {
-    fetchProducts()
-  }, [fetchProducts])
+  /* ---------------------------------------------------------------- */
+  /*  Filtered products                                                */
+  /* ---------------------------------------------------------------- */
 
-  // Toast
-  const showToast = (message: string, type: 'success' | 'error') => {
-    setToast({ message, type })
-    setTimeout(() => setToast(null), 3000)
-  }
+  const filteredProducts = (products || []).filter((p) => {
+    if (!search) return true
+    const q = search.toLowerCase()
+    return (
+      p.name.toLowerCase().includes(q) ||
+      p.barcode?.toLowerCase().includes(q)
+    )
+  })
 
-  // Cart actions
-  const addToCart = (product: any) => {
-    if (!product.stock || product.stock <= 0) return
-    setCart(prev => {
-      const existing = prev.find(i => i.productId === product.id)
+  /* ---------------------------------------------------------------- */
+  /*  Cart helpers                                                     */
+  /* ---------------------------------------------------------------- */
+
+  const addToCart = (product: Product) => {
+    setCart((prev) => {
+      const existing = prev.find((i) => i.productId === product.id)
       if (existing) {
-        if (existing.qty >= existing.maxStock) return prev
-        return prev.map(i =>
-          i.productId === product.id
-            ? { ...i, qty: i.qty + 1 }
-            : i
+        if (existing.qty >= product.current_stock) return prev
+        return prev.map((i) =>
+          i.productId === product.id ? { ...i, qty: i.qty + 1 } : i
         )
       }
-      return [...prev, {
-        id: crypto.randomUUID(),
-        productId: product.id,
-        name: product.name,
-        qty: 1,
-        price: product.sellPrice ?? product.price ?? 0,
-        cost: product.costPrice ?? product.cost ?? 0,
-        maxStock: product.stock ?? 0,
-        category: product.category,
-        size: product.size,
-      }]
+      return [
+        ...prev,
+        {
+          productId: product.id,
+          name: product.name,
+          qty: 1,
+          price: product.sell_price,
+          cost: product.cost_price,
+        },
+      ]
     })
   }
 
-  const removeFromCart = (id: string) => {
-    setCart(prev => prev.filter(i => i.id !== id))
+  const updateQty = (productId: string, delta: number) => {
+    setCart((prev) =>
+      prev
+        .map((i) => {
+          if (i.productId !== productId) return i
+          const newQty = i.qty + delta
+          if (newQty < 1) return null
+          return { ...i, qty: newQty }
+        })
+        .filter(Boolean) as CartItem[]
+    )
   }
 
-  const updateQty = (id: string, qty: number) => {
-    if (qty < 1) {
-      removeFromCart(id)
-      return
-    }
-    setCart(prev => prev.map(i => {
-      if (i.id !== id) return i
-      const clampedQty = Math.min(qty, i.maxStock)
-      return { ...i, qty: clampedQty }
-    }))
+  const removeFromCart = (productId: string) => {
+    setCart((prev) => prev.filter((i) => i.productId !== productId))
   }
 
-  const clearCart = () => {
-    setCart([])
-    setConfirmModal(false)
-  }
+  const clearCart = () => setCart([])
 
-  // Cart totals
   const cartTotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0)
   const cartCount = cart.reduce((sum, i) => sum + i.qty, 0)
 
-  // Filter products
-  const filteredProducts = localProducts.filter(p => {
-    const matchCategory = activeCategory === 'All' || p.category === activeCategory
-    const matchSearch = !search || p.name?.toLowerCase().includes(search.toLowerCase())
-    return matchCategory && matchSearch
-  })
+  /* ---------------------------------------------------------------- */
+  /*  Complete sale mutation                                           */
+  /* ---------------------------------------------------------------- */
 
-  // Checkout
-  const handleCheckout = async () => {
-    if (cart.length === 0) return
-    setCheckoutLoading(true)
-    try {
-      const sale = await api.createSale({
-        items: cart.map(i => ({
+  const completeSaleMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.rpc('complete_sale', {
+        p_store_id: store!.id,
+        p_staff_id: appUser!.id,
+        p_payment_method: paymentMethod,
+        p_items: cart.map((i) => ({
+          productId: i.productId,
           name: i.name,
           qty: i.qty,
           price: i.price,
           cost: i.cost,
-          productId: i.productId,
         })),
-        paymentMethod,
-        storeId: storeId || undefined,
       })
-      setLastSale(sale)
-      setConfirmModal(false)
-      setReceiptModal(true)
+      if (error) throw error
+      return data
+    },
+    onSuccess: (data) => {
+      const saleId =
+        typeof data === 'string'
+          ? data
+          : data?.id ?? data?.sale_id ?? 'Unknown'
+      setLastSaleId(saleId)
+      setSuccessOpen(true)
       setCart([])
-      showToast('Sale completed successfully', 'success')
-      fetchProducts()
-    } catch (err: any) {
-      showToast(err.message || 'Checkout failed', 'error')
-    } finally {
-      setCheckoutLoading(false)
-    }
-  }
+      toast({
+        title: 'Sale completed!',
+        description: `Sale #${typeof saleId === 'string' ? saleId.slice(0, 8).toUpperCase() : saleId} recorded successfully.`,
+      })
+      queryClient.invalidateQueries({ queryKey: ['pos-products'] })
+    },
+    onError: (error) => {
+      toast({
+        title: 'Sale failed',
+        description: error.message || 'Something went wrong. Please try again.',
+        variant: 'destructive',
+      })
+    },
+  })
 
-  const getCategoryColor = (cat: string) => CATEGORY_COLORS[cat] || CATEGORY_COLORS['Other']
+  /* ---------------------------------------------------------------- */
+  /*  Render                                                           */
+  /* ---------------------------------------------------------------- */
 
   return (
-    <div className="h-full flex flex-col" style={{ background: '#FAF7F2' }}>
-      {/* Toast */}
-      {toast && (
-        <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-2">
-          <div
-            className={`px-4 py-3 rounded-[10px] shadow-lg text-white text-sm font-medium ${
-              toast.type === 'success' ? 'bg-emerald-600' : 'bg-red-600'
-            }`}
-          >
-            {toast.message}
-          </div>
+    <div className="space-y-4">
+      {/* Page Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            Point of Sale
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Ring up sales quickly and efficiently.
+          </p>
         </div>
-      )}
+        {cartCount > 0 && (
+          <Badge
+            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 text-sm font-semibold text-white"
+            style={{ backgroundColor: ACCENT }}
+          >
+            <ShoppingCart className="h-3.5 w-3.5" />
+            {cartCount} item{cartCount !== 1 ? 's' : ''}
+          </Badge>
+        )}
+      </div>
 
-      {/* Mobile Tabs */}
-      <div className="md:hidden flex border-b" style={{ borderColor: '#E5E1DB' }}>
+      {/* Mobile Tab Switcher */}
+      <div className="flex gap-1 rounded-lg bg-muted p-1 lg:hidden">
         <button
           onClick={() => setMobileTab('products')}
-          className="flex-1 py-3 text-sm font-semibold text-center transition-colors"
-          style={{
-            background: mobileTab === 'products' ? '#FFFFFF' : 'transparent',
-            color: mobileTab === 'products' ? '#DC2626' : '#9CA3AF',
-            borderBottom: mobileTab === 'products' ? '2px solid #DC2626' : '2px solid transparent',
-          }}
+          className={`relative flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all ${
+            mobileTab === 'products'
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
         >
           Products
+          <Package className="ml-1.5 inline h-3.5 w-3.5" />
         </button>
         <button
           onClick={() => setMobileTab('cart')}
-          className="flex-1 py-3 text-sm font-semibold text-center transition-colors relative"
-          style={{
-            background: mobileTab === 'cart' ? '#FFFFFF' : 'transparent',
-            color: mobileTab === 'cart' ? '#DC2626' : '#9CA3AF',
-            borderBottom: mobileTab === 'cart' ? '2px solid #DC2626' : '2px solid transparent',
-          }}
+          className={`relative flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all ${
+            mobileTab === 'cart'
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
         >
           Cart
+          <ShoppingCart className="ml-1.5 inline h-3.5 w-3.5" />
           {cartCount > 0 && (
-            <span className="absolute -top-1 right-4 min-w-[20px] h-5 flex items-center justify-center rounded-full text-xs text-white font-bold px-1"
-              style={{ background: '#DC2626' }}>
+            <span
+              className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
+              style={{ backgroundColor: ACCENT }}
+            >
               {cartCount}
             </span>
           )}
         </button>
       </div>
 
-      {/* Main Layout */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Product Grid - Left (70%) */}
-        <div className={`${mobileTab === 'products' ? 'flex' : 'hidden'} md:flex flex-col w-full md:w-[70%] overflow-hidden`}>
-          {/* Filters */}
-          <div className="px-4 pt-4 pb-2 space-y-3 flex-shrink-0">
-            {/* Search */}
-            <div className="relative">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                placeholder="Search products..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-[10px] border text-sm focus:outline-none focus:ring-2 focus:ring-red-200 transition-shadow"
-                style={{ background: '#FFFFFF', borderColor: '#E5E1DB' }}
-              />
+      {/* Two-column Layout */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        {/* ====== LEFT PANEL — Products (2/3) ====== */}
+        <div
+          className={`${
+            mobileTab === 'products' ? 'block' : 'hidden'
+          } lg:block lg:col-span-2`}
+        >
+          <Card className="gap-0 overflow-hidden p-0">
+            {/* Search Bar */}
+            <div className="border-b p-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name or barcode..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
             </div>
 
-            {/* Category Chips */}
-            <div className="flex flex-wrap gap-1.5">
-              {CATEGORIES.map(cat => {
-                const color = cat === 'All' ? '#6B7280' : getCategoryColor(cat)
-                const isActive = activeCategory === cat
-                return (
-                  <button
-                    key={cat}
-                    onClick={() => setActiveCategory(cat)}
-                    className="px-3 py-1 rounded-full text-xs font-semibold transition-all"
-                    style={{
-                      background: isActive ? color : 'transparent',
-                      color: isActive ? '#FFFFFF' : color,
-                      border: `1.5px solid ${color}`,
-                      opacity: isActive ? 1 : 0.8,
-                    }}
+            {/* Product Grid */}
+            <CardContent className="p-4">
+              {isLoading ? (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="h-36 animate-pulse rounded-xl bg-muted"
+                    />
+                  ))}
+                </div>
+              ) : filteredProducts.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <div
+                    className="mb-3 flex h-14 w-14 items-center justify-center rounded-full"
+                    style={{ backgroundColor: `${ACCENT}15` }}
                   >
-                    {cat}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+                    <Package className="h-6 w-6" style={{ color: ACCENT }} />
+                  </div>
+                  <p className="text-sm font-medium">
+                    {search ? 'No products match your search' : 'No products in stock'}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {search
+                      ? 'Try a different search term.'
+                      : 'Add inventory from the Inventory page first.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {filteredProducts.map((product) => {
+                    const isLowStock =
+                      product.current_stock > 0 &&
+                      product.current_stock <= product.reorder_level
+                    const cartItem = cart.find(
+                      (i) => i.productId === product.id
+                    )
+                    const maxedOut =
+                      cartItem && cartItem.qty >= product.current_stock
 
-          {/* Product Cards Grid */}
-          <div className="flex-1 overflow-y-auto px-4 pb-4">
-            {loading ? (
-              <div className="flex items-center justify-center h-40">
-                <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#DC2626', borderTopColor: 'transparent' }} />
-              </div>
-            ) : filteredProducts.length === 0 ? (
-              <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
-                No products found
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
-                {filteredProducts.map(product => {
-                  const inStock = product.stock > 0
-                  const catColor = getCategoryColor(product.category)
-                  return (
-                    <button
-                      key={product.id}
-                      onClick={() => inStock && addToCart(product)}
-                      disabled={!inStock}
-                      className="bg-white rounded-[14px] p-3 text-left transition-all hover:shadow-md relative group"
-                      style={{
-                        borderLeft: `4px solid ${catColor}`,
-                        opacity: inStock ? 1 : 0.45,
-                        cursor: inStock ? 'pointer' : 'not-allowed',
-                      }}
-                    >
-                      {/* Category Label */}
-                      <span
-                        className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
-                        style={{ background: catColor + '15', color: catColor }}
+                    return (
+                      <button
+                        key={product.id}
+                        onClick={() => addToCart(product)}
+                        disabled={maxedOut}
+                        className={`group relative flex flex-col justify-between rounded-xl border bg-background p-3 text-left transition-all hover:shadow-md active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${
+                          maxedOut ? 'ring-1' : ''
+                        }`}
+                        style={
+                          maxedOut
+                            ? { borderColor: `${ACCENT}40`, ringColor: `${ACCENT}40` }
+                            : undefined
+                        }
                       >
-                        {product.category || 'Other'}
-                      </span>
-
-                      {/* Name */}
-                      <h3 className="mt-1.5 text-sm font-semibold text-gray-800 leading-tight line-clamp-2">
-                        {product.name}
-                      </h3>
-
-                      {/* Size */}
-                      {product.size && (
-                        <p className="text-[11px] text-gray-400 mt-0.5">{product.size}</p>
-                      )}
-
-                      {/* Stock */}
-                      <p className="text-[11px] mt-1" style={{ color: inStock ? '#059669' : '#DC2626' }}>
-                        {inStock ? `${product.stock} in stock` : 'Out of stock'}
-                      </p>
-
-                      {/* Price */}
-                      <p className="text-sm font-bold mt-1.5" style={{ color: '#DC2626' }}>
-                        {fmt(product.sellPrice ?? product.price ?? 0)}
-                      </p>
-
-                      {/* Add indicator on hover */}
-                      {inStock && (
-                        <div className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                          style={{ background: catColor + '20', color: catColor }}>
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                          </svg>
+                        {/* Badges row */}
+                        <div className="flex items-center justify-between">
+                          {isLowStock && (
+                            <Badge
+                              variant="outline"
+                              className="border-amber-300 bg-amber-50 text-[10px] font-semibold text-amber-700"
+                            >
+                              Low Stock
+                            </Badge>
+                          )}
+                          {cartItem && (
+                            <Badge
+                              className="ml-auto text-[10px] font-bold text-white"
+                              style={{ backgroundColor: ACCENT }}
+                            >
+                              {cartItem.qty}
+                            </Badge>
+                          )}
                         </div>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+
+                        {/* Name */}
+                        <h3 className="mt-2 line-clamp-2 text-sm font-semibold leading-tight">
+                          {product.name}
+                        </h3>
+
+                        {/* Size & stock */}
+                        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>{product.size}</span>
+                          <span>·</span>
+                          <span>{product.current_stock} left</span>
+                        </div>
+
+                        {/* Price & add button */}
+                        <div className="mt-2 flex items-center justify-between">
+                          <span
+                            className="text-base font-bold"
+                            style={{ color: ACCENT }}
+                          >
+                            {formatKES(product.sell_price)}
+                          </span>
+                          <span
+                            className="flex h-7 w-7 items-center justify-center rounded-full text-white opacity-0 transition-all group-hover:opacity-100"
+                            style={{ backgroundColor: ACCENT }}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Cart Panel - Right (30%) */}
-        <div className={`${mobileTab === 'cart' ? 'flex' : 'hidden'} md:flex flex-col w-full md:w-[30%] border-l overflow-hidden`}
-          style={{ background: '#FFFFFF', borderColor: '#E5E1DB' }}>
-          {/* Cart Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0" style={{ borderColor: '#E5E1DB' }}>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-gray-800">Cart</h2>
-              {cartCount > 0 && (
-                <span className="min-w-[22px] h-[22px] flex items-center justify-center rounded-full text-xs text-white font-bold px-1"
-                  style={{ background: '#DC2626' }}>
-                  {cartCount}
-                </span>
-              )}
-            </div>
-            {cart.length > 0 && (
-              <button
-                onClick={clearCart}
-                className="text-xs font-medium text-gray-400 hover:text-red-500 transition-colors"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-
-          {/* Cart Items */}
-          <div className="flex-1 overflow-y-auto">
-            {cart.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-gray-300 px-4">
-                <svg className="w-12 h-12 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" />
-                </svg>
-                <p className="text-sm">Cart is empty</p>
+        {/* ====== RIGHT PANEL — Cart (1/3) ====== */}
+        <div
+          className={`${
+            mobileTab === 'cart' ? 'block' : 'hidden'
+          } lg:block lg:col-span-1`}
+        >
+          <Card className="sticky top-4 flex flex-col gap-0 overflow-hidden p-0">
+            {/* Cart Header */}
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                  <ShoppingCart className="h-5 w-5" style={{ color: ACCENT }} />
+                  Current Sale
+                  {cartCount > 0 && (
+                    <Badge
+                      className="ml-1 text-[11px] font-bold text-white"
+                      style={{ backgroundColor: ACCENT }}
+                    >
+                      {cartCount}
+                    </Badge>
+                  )}
+                </CardTitle>
+                {cart.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearCart}
+                    className="h-8 text-xs text-muted-foreground hover:text-destructive"
+                  >
+                    Clear
+                  </Button>
+                )}
               </div>
-            ) : (
-              <div className="divide-y" style={{ borderColor: '#F3F0EB' }}>
-                {cart.map(item => {
-                  const lineTotal = item.price * item.qty
-                  return (
-                    <div key={item.id} className="px-4 py-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-800 truncate">{item.name}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">{fmt(item.price)} each</p>
-                        </div>
-                        <button
-                          onClick={() => removeFromCart(item.id)}
-                          className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-full hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors"
-                          title="Remove"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
+            </CardHeader>
 
-                      <div className="flex items-center justify-between mt-2">
-                        {/* Quantity Controls */}
-                        <div className="flex items-center gap-0 rounded-lg overflow-hidden border" style={{ borderColor: '#E5E1DB' }}>
+            {/* Cart Items */}
+            <div className="flex-1">
+              <ScrollArea className="max-h-80">
+                {cart.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
+                    <div
+                      className="mb-3 flex h-14 w-14 items-center justify-center rounded-full"
+                      style={{ backgroundColor: `${ACCENT}10` }}
+                    >
+                      <ShoppingCart
+                        className="h-6 w-6"
+                        style={{ color: `${ACCENT}40` }}
+                      />
+                    </div>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Cart is empty
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Click a product to add it
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-1 px-4">
+                    {cart.map((item) => (
+                      <div
+                        key={item.productId}
+                        className="flex items-center gap-2 rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/50"
+                      >
+                        {/* Item info */}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">
+                            {item.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatKES(item.price)} each
+                          </p>
+                        </div>
+
+                        {/* Quantity controls */}
+                        <div className="flex items-center gap-0.5 rounded-lg border">
                           <button
-                            onClick={() => updateQty(item.id, item.qty - 1)}
-                            className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors text-sm font-bold"
+                            onClick={() => updateQty(item.productId, -1)}
+                            className="flex h-7 w-7 items-center justify-center rounded-l-lg text-muted-foreground transition-colors hover:bg-muted"
                           >
-                            -
+                            <Minus className="h-3 w-3" />
                           </button>
-                          <span className="w-10 h-8 flex items-center justify-center text-sm font-bold text-gray-800 border-x" style={{ borderColor: '#E5E1DB' }}>
+                          <span className="flex h-7 w-8 items-center justify-center border-x text-xs font-bold">
                             {item.qty}
                           </span>
                           <button
-                            onClick={() => updateQty(item.id, item.qty + 1)}
-                            disabled={item.qty >= item.maxStock}
-                            className="w-8 h-8 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed"
+                            onClick={() => updateQty(item.productId, 1)}
+                            className="flex h-7 w-7 items-center justify-center rounded-r-lg text-muted-foreground transition-colors hover:bg-muted"
                           >
-                            +
+                            <Plus className="h-3 w-3" />
                           </button>
                         </div>
 
-                        {/* Line Total */}
-                        <span className="text-sm font-bold text-gray-800">{fmt(lineTotal)}</span>
+                        {/* Line total */}
+                        <span className="w-16 text-right text-sm font-semibold">
+                          {formatKES(item.price * item.qty)}
+                        </span>
+
+                        {/* Remove */}
+                        <button
+                          onClick={() => removeFromCart(item.productId)}
+                          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Cart Footer */}
-          {cart.length > 0 && (
-            <div className="border-t px-4 py-4 space-y-3 flex-shrink-0" style={{ borderColor: '#E5E1DB' }}>
-              {/* Payment Method */}
-              <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Payment Method</p>
-                <div className="flex gap-1.5">
-                  {PAYMENT_METHODS.map(method => (
-                    <button
-                      key={method}
-                      onClick={() => setPaymentMethod(method)}
-                      className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all border"
-                      style={{
-                        background: paymentMethod === method ? '#DC2626' : '#FFFFFF',
-                        color: paymentMethod === method ? '#FFFFFF' : '#6B7280',
-                        borderColor: paymentMethod === method ? '#DC2626' : '#E5E1DB',
-                      }}
-                    >
-                      {method}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Total */}
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-500">Total</span>
-                <span className="text-xl font-bold" style={{ color: '#DC2626' }}>
-                  {fmt(cartTotal)}
-                </span>
-              </div>
-
-              {/* Checkout Button */}
-              <button
-                onClick={() => setConfirmModal(true)}
-                disabled={checkoutLoading}
-                className="w-full py-3 rounded-xl text-white font-bold text-sm transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50"
-                style={{ background: '#DC2626' }}
-              >
-                {checkoutLoading ? 'Processing...' : 'Checkout'}
-              </button>
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
             </div>
-          )}
+
+            {cart.length > 0 && (
+              <>
+                <Separator />
+
+                {/* Totals & Checkout */}
+                <div className="flex-shrink-0 p-4">
+                  {/* Subtotal */}
+                  <div className="mb-4 flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Subtotal</span>
+                    <span className="text-sm font-medium">
+                      {cart.length} item{cart.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+
+                  {/* Spacer to push payment down */}
+                  <div className="h-4" />
+
+                  {/* Payment method selector */}
+                  <div className="mb-4">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Payment Method
+                    </p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        onClick={() => setPaymentMethod('cash')}
+                        className={`flex flex-col items-center gap-1.5 rounded-lg border p-2.5 text-xs font-semibold transition-all ${
+                          paymentMethod === 'cash'
+                            ? 'border-transparent text-white shadow-sm'
+                            : 'border-border text-muted-foreground hover:border-foreground/20 hover:text-foreground'
+                        }`}
+                        style={
+                          paymentMethod === 'cash'
+                            ? { backgroundColor: ACCENT, borderColor: ACCENT }
+                            : undefined
+                        }
+                      >
+                        <Banknote className="h-4 w-4" />
+                        Cash
+                      </button>
+                      <button
+                        onClick={() => setPaymentMethod('card')}
+                        className={`flex flex-col items-center gap-1.5 rounded-lg border p-2.5 text-xs font-semibold transition-all ${
+                          paymentMethod === 'card'
+                            ? 'border-transparent text-white shadow-sm'
+                            : 'border-border text-muted-foreground hover:border-foreground/20 hover:text-foreground'
+                        }`}
+                        style={
+                          paymentMethod === 'card'
+                            ? { backgroundColor: ACCENT, borderColor: ACCENT }
+                            : undefined
+                        }
+                      >
+                        <CreditCard className="h-4 w-4" />
+                        Card
+                      </button>
+                      <button
+                        onClick={() => setPaymentMethod('mpesa')}
+                        className={`flex flex-col items-center gap-1.5 rounded-lg border p-2.5 text-xs font-semibold transition-all ${
+                          paymentMethod === 'mpesa'
+                            ? 'border-transparent text-white shadow-sm'
+                            : 'border-border text-muted-foreground hover:border-foreground/20 hover:text-foreground'
+                        }`}
+                        style={
+                          paymentMethod === 'mpesa'
+                            ? { backgroundColor: ACCENT, borderColor: ACCENT }
+                            : undefined
+                        }
+                      >
+                        <Smartphone className="h-4 w-4" />
+                        M-Pesa
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Total */}
+                  <div className="mb-4 flex items-center justify-between">
+                    <span className="text-base font-medium">Total</span>
+                    <span
+                      className="text-2xl font-bold tracking-tight"
+                      style={{ color: ACCENT }}
+                    >
+                      {formatKES(cartTotal)}
+                    </span>
+                  </div>
+
+                  {/* Complete Sale Button */}
+                  <Button
+                    onClick={() => completeSaleMutation.mutate()}
+                    disabled={completeSaleMutation.isPending || cart.length === 0}
+                    className="w-full py-6 text-base font-bold text-white transition-all hover:opacity-90 active:scale-[0.98]"
+                    style={{ backgroundColor: ACCENT }}
+                  >
+                    {completeSaleMutation.isPending ? (
+                      <span className="flex items-center gap-2">
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                        Processing...
+                      </span>
+                    ) : (
+                      <>
+                        Complete Sale
+                        <span className="ml-2 text-sm font-medium opacity-80">
+                          {formatKES(cartTotal)}
+                        </span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </>
+            )}
+          </Card>
         </div>
       </div>
 
-      {/* Confirmation Modal */}
-      {confirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)' }}>
-          <div className="bg-white rounded-[14px] shadow-2xl w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden">
-            <div className="px-5 py-4 border-b" style={{ borderColor: '#E5E1DB' }}>
-              <h3 className="text-lg font-bold text-gray-800">Confirm Sale</h3>
-            </div>
-
-            <div className="px-5 py-4 overflow-y-auto flex-1 space-y-4">
-              {/* Items */}
-              <div className="space-y-2">
-                {cart.map(item => (
-                  <div key={item.id} className="flex items-center justify-between text-sm">
-                    <span className="text-gray-700">
-                      <span className="font-medium">{item.name}</span>
-                      <span className="text-gray-400 ml-1">x{item.qty}</span>
-                    </span>
-                    <span className="font-semibold text-gray-800">{fmt(item.price * item.qty)}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="border-t pt-3" style={{ borderColor: '#E5E1DB' }}>
-                <div className="flex items-center justify-between">
-                  <span className="text-base font-bold text-gray-800">Total</span>
-                  <span className="text-xl font-bold" style={{ color: '#DC2626' }}>{fmt(cartTotal)}</span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Payment Method</span>
-                <span className="font-semibold text-gray-800">{paymentMethod}</span>
-              </div>
-            </div>
-
-            <div className="px-5 py-4 border-t flex gap-3" style={{ borderColor: '#E5E1DB' }}>
-              <button
-                onClick={() => setConfirmModal(false)}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-colors hover:bg-gray-50"
-                style={{ borderColor: '#E5E1DB', color: '#6B7280' }}
+      {/* ====== SUCCESS DIALOG ====== */}
+      <Dialog open={successOpen} onOpenChange={setSuccessOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader className="items-center text-center">
+            {/* Animated checkmark */}
+            <div className="mx-auto mb-2 flex h-20 w-20 items-center justify-center rounded-full">
+              <div
+                className="absolute flex h-20 w-20 animate-ping items-center justify-center rounded-full opacity-20"
+                style={{ backgroundColor: ACCENT }}
+              />
+              <div
+                className="relative flex h-16 w-16 items-center justify-center rounded-full text-white shadow-lg"
+                style={{ backgroundColor: ACCENT }}
               >
-                Cancel
-              </button>
-              <button
-                onClick={handleCheckout}
-                disabled={checkoutLoading}
-                className="flex-1 py-2.5 rounded-xl text-white text-sm font-bold transition-all hover:opacity-90 disabled:opacity-50"
-                style={{ background: '#DC2626' }}
-              >
-                {checkoutLoading ? 'Processing...' : 'Confirm'}
-              </button>
+                <CheckCircle className="h-8 w-8" />
+              </div>
             </div>
+            <DialogTitle className="text-xl font-bold">
+              Sale Completed!
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3 text-center">
+            <div className="rounded-lg bg-muted/50 p-4">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Sale ID
+              </p>
+              <p
+                className="mt-1 text-lg font-mono font-bold"
+                style={{ color: ACCENT }}
+              >
+                {typeof lastSaleId === 'string'
+                  ? lastSaleId.slice(0, 8).toUpperCase()
+                  : lastSaleId}
+              </p>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Payment:{' '}
+              <span className="font-semibold capitalize text-foreground">
+                {paymentMethod}
+              </span>
+            </p>
           </div>
-        </div>
-      )}
 
-      {/* Receipt Modal */}
-      {receiptModal && lastSale && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)' }}>
-          <div className="bg-white rounded-[14px] shadow-2xl w-full max-w-sm max-h-[85vh] flex flex-col overflow-hidden">
-            <div className="px-5 py-4 border-b" style={{ borderColor: '#E5E1DB' }}>
-              <h3 className="text-lg font-bold text-gray-800">Receipt</h3>
-            </div>
-
-            <div className="px-5 py-4 overflow-y-auto flex-1 space-y-4">
-              {/* Store & Receipt Info */}
-              <div className="text-center space-y-1">
-                <p className="text-base font-bold text-gray-800">{org?.name || 'VinoCellar Pro'}</p>
-                <p className="text-xs text-gray-400 font-mono">
-                  Receipt #{typeof lastSale.id === 'string' ? lastSale.id.slice(0, 8).toUpperCase() : '---'}
-                </p>
-                <p className="text-xs text-gray-400">
-                  {new Date().toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric' })}{' '}
-                  {new Date().toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}
-                </p>
-                <p className="text-xs text-gray-500">Cashier: {user?.name || 'N/A'}</p>
-              </div>
-
-              <div className="border-t border-dashed" style={{ borderColor: '#D1D5DB' }} />
-
-              {/* Items */}
-              <div className="space-y-1.5">
-                {lastSale.items?.map((item: any, idx: number) => (
-                  <div key={idx} className="flex items-center justify-between text-sm">
-                    <span className="text-gray-700 flex-1 min-w-0">
-                      <span className="block truncate">{item.name}</span>
-                      <span className="text-xs text-gray-400">{item.qty} x {fmt(item.price)}</span>
-                    </span>
-                    <span className="font-semibold text-gray-800 ml-2">{fmt(item.price * item.qty)}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="border-t border-dashed" style={{ borderColor: '#D1D5DB' }} />
-
-              {/* Total */}
-              <div className="flex items-center justify-between">
-                <span className="text-base font-bold text-gray-800">Total</span>
-                <span className="text-lg font-bold" style={{ color: '#DC2626' }}>
-                  {fmt(lastSale.total ?? cartTotal)}
-                </span>
-              </div>
-
-              {/* Payment */}
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Payment</span>
-                <span className="font-semibold text-gray-800">{lastSale.paymentMethod || paymentMethod}</span>
-              </div>
-
-              <div className="border-t border-dashed" style={{ borderColor: '#D1D5DB' }} />
-
-              <p className="text-center text-xs text-gray-400">Thank you for your purchase!</p>
-            </div>
-
-            <div className="px-5 py-4 border-t" style={{ borderColor: '#E5E1DB' }}>
-              <button
-                onClick={() => { setReceiptModal(false); setLastSale(null) }}
-                className="w-full py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90"
-                style={{ background: '#DC2626' }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          <DialogFooter className="sm:justify-center">
+            <Button
+              onClick={() => setSuccessOpen(false)}
+              className="px-8 font-semibold text-white"
+              style={{ backgroundColor: ACCENT }}
+            >
+              New Sale
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

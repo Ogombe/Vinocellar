@@ -1,0 +1,1393 @@
+     1→     1→'use client'
+     2→     2→import { useEffect, useState, useCallback } from 'react'
+     3→     3→import { useAppStore } from '@/lib/store'
+     4→     4→import { api } from '@/lib/api'
+     5→     5→import { Skeleton } from '@/components/ui/skeleton'
+     6→     6→import { Input } from '@/components/ui/input'
+     7→     7→import {
+     8→     8→  Dialog,
+     9→     9→  DialogContent,
+    10→    10→  DialogHeader,
+    11→    11→  DialogTitle,
+    12→    12→  DialogDescription,
+    13→    13→  DialogFooter,
+    14→    14→} from '@/components/ui/dialog'
+    15→    15→import {
+    16→    16→  AlertDialog,
+    17→    17→  AlertDialogContent,
+    18→    18→  AlertDialogHeader,
+    19→    19→  AlertDialogTitle,
+    20→    20→  AlertDialogDescription,
+    21→    21→  AlertDialogFooter,
+    22→    22→  AlertDialogCancel,
+    23→    23→  AlertDialogAction,
+    24→    24→} from '@/components/ui/alert-dialog'
+    25→    25→
+    26→    26→/* ─── Constants ─────────────────────────────────────────────────────── */
+    27→    27→
+    28→    28→const CATEGORY_COLOURS: Record<string, string> = {
+    29→    29→  Wine: '#DC2626',
+    30→    30→  Whisky: '#92400E',
+    31→    31→  Vodka: '#3B82F6',
+    32→    32→  Gin: '#10B981',
+    33→    33→  Rum: '#F97316',
+    34→    34→  Champagne: '#F59E0B',
+    35→    35→  Beer: '#FBBF24',
+    36→    36→  Cognac: '#78350F',
+    37→    37→  Tequila: '#059669',
+    38→    38→  Liqueur: '#8B5CF6',
+    39→    39→  Other: '#6B7280',
+    40→    40→}
+    41→    41→
+    42→    42→const SIZE_OPTIONS = [
+    43→    43→  '750ml',
+    44→    44→  '1L',
+    45→    45→  '700ml',
+    46→    46→  '375ml',
+    47→    47→  '1.75L',
+    48→    48→  '330ml',
+    49→    49→  '500ml',
+    50→    50→  '50ml',
+    51→    51→]
+    52→    52→
+    53→    53→/* ─── Types ─────────────────────────────────────────────────────────── */
+    54→    54→
+    55→    55→interface Product {
+    56→    56→  id: string
+    57→    57→  name: string
+    58→    58→  sku: string
+    59→    59→  barcode: string
+    60→    60→  category: string
+    61→    61→  size: string
+    62→    62→  openingStock: number
+    63→    63→  currentStock: number
+    64→    64→  reorderLevel: number
+    65→    65→  costPrice: number
+    66→    66→  sellPrice: number
+    67→    67→  supplierId?: string
+    68→    68→  storeId?: string
+    69→    69→}
+    70→    70→
+    71→    71→interface Category {
+    72→    72→  id: string
+    73→    73→  name: string
+    74→    74→}
+    75→    75→
+    76→    76→interface Supplier {
+    77→    77→  id: string
+    78→    78→  name: string
+    79→    79→}
+    80→    80→
+    81→    81→/* ─── Helpers ───────────────────────────────────────────────────────── */
+    82→    82→
+    83→    83→function generateSKU() {
+    84→    84→  const prefix = 'VC'
+    85→    85→  const ts = Date.now().toString(36).toUpperCase().slice(-6)
+    86→    86→  const rand = Math.random().toString(36).toUpperCase().slice(2, 5)
+    87→    87→  return `${prefix}-${ts}${rand}`
+    88→    88→}
+    89→    89→
+    90→    90→function generateBarcode() {
+    91→    91→  let barcode = '60'
+    92→    92→  for (let i = 0; i < 11; i++) {
+    93→    93→    barcode += Math.floor(Math.random() * 10)
+    94→    94→  }
+    95→    95→  return barcode
+    96→    96→}
+    97→    97→
+    98→    98→function formatKSh(n: number) {
+    99→    99→  return `KSh ${Number(n || 0).toLocaleString('en-KE')}`
+   100→   100→}
+   101→   101→
+   102→   102→function getMargin(cost: number, sell: number) {
+   103→   103→  if (!sell || sell <= 0) return '0.0%'
+   104→   104→  return ((sell - cost) / sell * 100).toFixed(1) + '%'
+   105→   105→}
+   106→   106→
+   107→   107→function getCategoryColor(cat: string) {
+   108→   108→  return CATEGORY_COLOURS[cat] || CATEGORY_COLOURS.Other
+   109→   109→}
+   110→   110→
+   111→   111→/* ─── Icon components (inline SVG, no emoji) ────────────────────────── */
+   112→   112→
+   113→   113→function SearchIcon() {
+   114→   114→  return (
+   115→   115→    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+   116→   116→      <circle cx="11" cy="11" r="8" />
+   117→   117→      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+   118→   118→    </svg>
+   119→   119→  )
+   120→   120→}
+   121→   121→
+   122→   122→function PlusIcon() {
+   123→   123→  return (
+   124→   124→    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+   125→   125→      <line x1="12" y1="5" x2="12" y2="19" />
+   126→   126→      <line x1="5" y1="12" x2="19" y2="12" />
+   127→   127→    </svg>
+   128→   128→  )
+   129→   129→}
+   130→   130→
+   131→   131→function EditIcon() {
+   132→   132→  return (
+   133→   133→    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+   134→   134→      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+   135→   135→      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+   136→   136→    </svg>
+   137→   137→  )
+   138→   138→}
+   139→   139→
+   140→   140→function TrashIcon() {
+   141→   141→  return (
+   142→   142→    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+   143→   143→      <polyline points="3,6 5,6 21,6" />
+   144→   144→      <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+   145→   145→    </svg>
+   146→   146→  )
+   147→   147→}
+   148→   148→
+   149→   149→function RefreshIcon() {
+   150→   150→  return (
+   151→   151→    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+   152→   152→      <polyline points="23,4 23,10 17,10" />
+   153→   153→      <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+   154→   154→    </svg>
+   155→   155→  )
+   156→   156→}
+   157→   157→
+   158→   158→function PackageIcon({ size = 40 }: { size?: number }) {
+   159→   159→  return (
+   160→   160→    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+   161→   161→      <line x1="16.5" y1="9.4" x2="7.5" y2="4.21" />
+   162→   162→      <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
+   163→   163→      <polyline points="3.27,6.96 12,12.01 20.73,6.96" />
+   164→   164→      <line x1="12" y1="22.08" x2="12" y2="12" />
+   165→   165→    </svg>
+   166→   166→  )
+   167→   167→}
+   168→   168→
+   169→   169→function ChevronDownIcon() {
+   170→   170→  return (
+   171→   171→    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+   172→   172→      <polyline points="6,9 12,15 18,9" />
+   173→   173→    </svg>
+   174→   174→  )
+   175→   175→}
+   176→   176→
+   177→   177→function CloseIcon() {
+   178→   178→  return (
+   179→   179→    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+   180→   180→      <line x1="18" y1="6" x2="6" y2="18" />
+   181→   181→      <line x1="6" y1="6" x2="18" y2="18" />
+   182→   182→    </svg>
+   183→   183→  )
+   184→   184→}
+   185→   185→
+   186→   186→/* ─── Skeleton Loader ───────────────────────────────────────────────── */
+   187→   187→
+   188→   188→function TableSkeleton() {
+   189→   189→  return (
+   190→   190→    <div className="space-y-3">
+   191→   191→      {Array.from({ length: 6 }).map((_, i) => (
+   192→   192→        <div
+   193→   193→          key={i}
+   194→   194→          className="bg-white rounded-[14px] p-4 flex items-center gap-4"
+   195→   195→          style={{ boxShadow: '0 4px 12px rgba(31,17,41,.06)' }}
+   196→   196→        >
+   197→   197→          <Skeleton className="h-4 w-32 flex-shrink-0" />
+   198→   198→          <Skeleton className="h-4 w-20 flex-shrink-0" />
+   199→   199→          <Skeleton className="h-5 w-16 rounded-full flex-shrink-0" />
+   200→   200→          <Skeleton className="h-4 w-14 flex-shrink-0 hidden md:block" />
+   201→   201→          <Skeleton className="h-4 w-10 flex-shrink-0" />
+   202→   202→          <Skeleton className="h-4 w-16 flex-shrink-0 hidden lg:block" />
+   203→   203→          <Skeleton className="h-4 w-16 flex-shrink-0 hidden lg:block" />
+   204→   204→          <Skeleton className="h-4 w-12 flex-shrink-0 hidden lg:block" />
+   205→   205→          <div className="ml-auto flex gap-2 flex-shrink-0">
+   206→   206→            <Skeleton className="h-8 w-8 rounded-md" />
+   207→   207→            <Skeleton className="h-8 w-8 rounded-md" />
+   208→   208→          </div>
+   209→   209→        </div>
+   210→   210→      ))}
+   211→   211→    </div>
+   212→   212→  )
+   213→   213→}
+   214→   214→
+   215→   215→/* ─── Empty State ───────────────────────────────────────────────────── */
+   216→   216→
+   217→   217→function EmptyState({ isManager, onAdd }: { isManager: boolean; onAdd: () => void }) {
+   218→   218→  return (
+   219→   219→    <div className="flex flex-col items-center justify-center py-20 px-4">
+   220→   220→      <div
+   221→   221→        className="w-20 h-20 rounded-full flex items-center justify-center mb-6"
+   222→   222→        style={{ background: 'rgba(220,38,38,0.06)' }}
+   223→   223→      >
+   224→   224→        <PackageIcon size={36} />
+   225→   225→      </div>
+   226→   226→      <h3 className="text-lg font-semibold text-[#1F1129] mb-2">
+   227→   227→        No products yet
+   228→   228→      </h3>
+   229→   229→      <p className="text-sm text-[#6B7280] text-center max-w-sm mb-6">
+   230→   230→        Start building your inventory by adding your first product. You can organize
+   231→   231→        products by category, track stock levels, and manage pricing.
+   232→   232→      </p>
+   233→   233→      {isManager && (
+   234→   234→        <button
+   235→   235→          onClick={onAdd}
+   236→   236→          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] text-sm font-semibold text-white transition-colors cursor-pointer hover:opacity-90"
+   237→   237→          style={{ background: '#DC2626' }}
+   238→   238→        >
+   239→   239→          <PlusIcon />
+   240→   240→          Add Your First Product
+   241→   241→        </button>
+   242→   242→      )}
+   243→   243→    </div>
+   244→   244→  )
+   245→   245→}
+   246→   246→
+   247→   247→/* ─── Product Form Modal ────────────────────────────────────────────── */
+   248→   248→
+   249→   249→const EMPTY_FORM = {
+   250→   250→  name: '',
+   251→   251→  sku: '',
+   252→   252→  barcode: '',
+   253→   253→  category: '',
+   254→   254→  size: '750ml',
+   255→   255→  openingStock: 0,
+   256→   256→  reorderLevel: 5,
+   257→   257→  costPrice: 0,
+   258→   258→  sellPrice: 0,
+   259→   259→  supplierId: '',
+   260→   260→}
+   261→   261→
+   262→   262→function ProductModal({
+   263→   263→  open,
+   264→   264→  onClose,
+   265→   265→  editing,
+   266→   266→  categories,
+   267→   267→  suppliers,
+   268→   268→  onSave,
+   269→   269→  onDelete,
+   270→   270→}: {
+   271→   271→  open: boolean
+   272→   272→  onClose: () => void
+   273→   273→  editing: Product | null
+   274→   274→  categories: Category[]
+   275→   275→  suppliers: Supplier[]
+   276→   276→  onSave: (data: any) => Promise<void>
+   277→   277→  onDelete: (id: string) => Promise<void>
+   278→   278→}) {
+   279→   279→  const [form, setForm] = useState({ ...EMPTY_FORM })
+   280→   280→  const [saving, setSaving] = useState(false)
+   281→   281→  const [deleting, setDeleting] = useState(false)
+   282→   282→  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+   283→   283→  const isNew = !editing
+   284→   284→
+   285→   285→  useEffect(() => {
+   286→   286→    if (open) {
+   287→   287→      if (editing) {
+   288→   288→        setForm({
+   289→   289→          name: editing.name || '',
+   290→   290→          sku: editing.sku || '',
+   291→   291→          barcode: editing.barcode || '',
+   292→   292→          category: editing.category || '',
+   293→   293→          size: editing.size || '750ml',
+   294→   294→          openingStock: editing.openingStock || 0,
+   295→   295→          reorderLevel: editing.reorderLevel ?? 5,
+   296→   296→          costPrice: editing.costPrice || 0,
+   297→   297→          sellPrice: editing.sellPrice || 0,
+   298→   298→          supplierId: editing.supplierId || '',
+   299→   299→        })
+   300→   300→      } else {
+   301→   301→        setForm({ ...EMPTY_FORM, sku: generateSKU(), barcode: generateBarcode() })
+   302→   302→      }
+   303→   303→      setShowDeleteConfirm(false)
+   304→   304→    }
+   305→   305→  }, [open, editing])
+   306→   306→
+   307→   307→  const updateField = (key: string, value: string | number) => {
+   308→   308→    setForm((prev) => ({ ...prev, [key]: value }))
+   309→   309→  }
+   310→   310→
+   311→   311→  const handleSave = async () => {
+   312→   312→    if (!form.name.trim()) return
+   313→   313→    setSaving(true)
+   314→   314→    try {
+   315→   315→      await onSave({
+   316→   316→        ...(editing ? { id: editing.id } : {}),
+   317→   317→        ...form,
+   318→   318→        currentStock: isNew ? form.openingStock : undefined,
+   319→   319→      })
+   320→   320→      onClose()
+   321→   321→    } catch {
+   322→   322→      /* handled silently - API layer throws */
+   323→   323→    } finally {
+   324→   324→      setSaving(false)
+   325→   325→    }
+   326→   326→  }
+   327→   327→
+   328→   328→  const handleDelete = async () => {
+   329→   329→    if (!editing) return
+   330→   330→    setDeleting(true)
+   331→   331→    try {
+   332→   332→      await onDelete(editing.id)
+   333→   333→      setShowDeleteConfirm(false)
+   334→   334→      onClose()
+   335→   335→    } catch {
+   336→   336→      /* handled silently */
+   337→   337→    } finally {
+   338→   338→      setDeleting(false)
+   339→   339→    }
+   340→   340→  }
+   341→   341→
+   342→   342→  const fieldClass =
+   343→   343→    'w-full h-9 px-3 text-sm rounded-[8px] border border-[#E5E7EB] bg-white text-[#1F1129] outline-none transition-colors focus:border-[#DC2626]/40 focus:ring-2 focus:ring-[#DC2626]/10'
+   344→   344→  const labelClass = 'block text-xs font-medium text-[#374151] mb-1.5'
+   345→   345→  const selectClass =
+   346→   346→    'w-full h-9 px-3 text-sm rounded-[8px] border border-[#E5E7EB] bg-white text-[#1F1129] outline-none transition-colors focus:border-[#DC2626]/40 focus:ring-2 focus:ring-[#DC2626]/10 appearance-none cursor-pointer'
+   347→   347→
+   348→   348→  return (
+   349→   349→    <>
+   350→   350→      <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
+   351→   351→        <DialogContent
+   352→   352→          className="bg-white sm:max-w-[560px] p-0 overflow-hidden max-h-[90vh] flex flex-col rounded-[14px]"
+   353→   353→          style={{ boxShadow: '0 20px 60px rgba(31,17,41,.15)' }}
+   354→   354→        >
+   355→   355→          {/* Header */}
+   356→   356→          <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-[#F3F0EB]">
+   357→   357→            <DialogHeader className="p-0">
+   358→   358→              <DialogTitle className="text-base font-semibold text-[#1F1129]">
+   359→   359→                {isNew ? 'Add New Product' : 'Edit Product'}
+   360→   360→              </DialogTitle>
+   361→   361→              <DialogDescription className="text-xs text-[#6B7280] mt-0.5">
+   362→   362→                {isNew
+   363→   363→                  ? 'Fill in the product details below to add it to your inventory.'
+   364→   364→                  : 'Update product information. Changes are saved immediately.'}
+   365→   365→              </DialogDescription>
+   366→   366→            </DialogHeader>
+   367→   367→            <button
+   368→   368→              onClick={onClose}
+   369→   369→              className="p-1.5 rounded-lg text-[#9CA3AF] hover:text-[#1F1129] hover:bg-[#F3F0EB] transition-colors cursor-pointer"
+   370→   370→            >
+   371→   371→              <CloseIcon />
+   372→   372→            </button>
+   373→   373→          </div>
+   374→   374→
+   375→   375→          {/* Body */}
+   376→   376→          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+   377→   377→            {/* Name */}
+   378→   378→            <div>
+   379→   379→              <label className={labelClass}>Product Name *</label>
+   380→   380→              <input
+   381→   381→                className={fieldClass}
+   382→   382→                placeholder="e.g. Jameson Irish Whisky"
+   383→   383→                value={form.name}
+   384→   384→                onChange={(e) => updateField('name', e.target.value)}
+   385→   385→              />
+   386→   386→            </div>
+   387→   387→
+   388→   388→            {/* SKU & Barcode */}
+   389→   389→            <div className="grid grid-cols-2 gap-3">
+   390→   390→              <div>
+   391→   391→                <label className={labelClass}>SKU</label>
+   392→   392→                <div className="flex items-center gap-1.5">
+   393→   393→                  <input
+   394→   394→                    className={`${fieldClass} bg-[#FAF7F2] text-[#6B7280]`}
+   395→   395→                    value={form.sku}
+   396→   396→                    readOnly
+   397→   397→                  />
+   398→   398→                  {!editing && (
+   399→   399→                    <button
+   400→   400→                      type="button"
+   401→   401→                      onClick={() => updateField('sku', generateSKU())}
+   402→   402→                      className="p-2 rounded-[8px] text-[#6B7280] hover:text-[#1F1129] hover:bg-[#F3F0EB] transition-colors cursor-pointer flex-shrink-0"
+   403→   403→                      title="Regenerate SKU"
+   404→   404→                    >
+   405→   405→                      <RefreshIcon />
+   406→   406→                    </button>
+   407→   407→                  )}
+   408→   408→                </div>
+   409→   409→              </div>
+   410→   410→              <div>
+   411→   411→                <label className={labelClass}>Barcode</label>
+   412→   412→                <div className="flex items-center gap-1.5">
+   413→   413→                  <input
+   414→   414→                    className={`${fieldClass} bg-[#FAF7F2] text-[#6B7280]`}
+   415→   415→                    value={form.barcode}
+   416→   416→                    readOnly
+   417→   417→                  />
+   418→   418→                  {!editing && (
+   419→   419→                    <button
+   420→   420→                      type="button"
+   421→   421→                      onClick={() => updateField('barcode', generateBarcode())}
+   422→   422→                      className="p-2 rounded-[8px] text-[#6B7280] hover:text-[#1F1129] hover:bg-[#F3F0EB] transition-colors cursor-pointer flex-shrink-0"
+   423→   423→                      title="Regenerate Barcode"
+   424→   424→                    >
+   425→   425→                      <RefreshIcon />
+   426→   426→                    </button>
+   427→   427→                  )}
+   428→   428→                </div>
+   429→   429→              </div>
+   430→   430→            </div>
+   431→   431→
+   432→   432→            {/* Category & Size */}
+   433→   433→            <div className="grid grid-cols-2 gap-3">
+   434→   434→              <div>
+   435→   435→                <label className={labelClass}>Category *</label>
+   436→   436→                <div className="relative">
+   437→   437→                  <select
+   438→   438→                    className={selectClass}
+   439→   439→                    value={form.category}
+   440→   440→                    onChange={(e) => updateField('category', e.target.value)}
+   441→   441→                  >
+   442→   442→                    <option value="">Select category</option>
+   443→   443→                    {categories.map((c) => (
+   444→   444→                      <option key={c.id} value={c.name}>
+   445→   445→                        {c.name}
+   446→   446→                      </option>
+   447→   447→                    ))}
+   448→   448→                  </select>
+   449→   449→                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#9CA3AF]">
+   450→   450→                    <ChevronDownIcon />
+   451→   451→                  </div>
+   452→   452→                </div>
+   453→   453→              </div>
+   454→   454→              <div>
+   455→   455→                <label className={labelClass}>Size</label>
+   456→   456→                <div className="relative">
+   457→   457→                  <select
+   458→   458→                    className={selectClass}
+   459→   459→                    value={form.size}
+   460→   460→                    onChange={(e) => updateField('size', e.target.value)}
+   461→   461→                  >
+   462→   462→                    {SIZE_OPTIONS.map((s) => (
+   463→   463→                      <option key={s} value={s}>
+   464→   464→                        {s}
+   465→   465→                      </option>
+   466→   466→                    ))}
+   467→   467→                  </select>
+   468→   468→                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#9CA3AF]">
+   469→   469→                    <ChevronDownIcon />
+   470→   470→                  </div>
+   471→   471→                </div>
+   472→   472→              </div>
+   473→   473→            </div>
+   474→   474→
+   475→   475→            {/* Stock fields */}
+   476→   476→            <div className="grid grid-cols-3 gap-3">
+   477→   477→              <div>
+   478→   478→                <label className={labelClass}>{isNew ? 'Opening Stock' : 'Opening Stock'}</label>
+   479→   479→                <input
+   480→   480→                  type="number"
+   481→   481→                  min="0"
+   482→   482→                  className={fieldClass}
+   483→   483→                  value={form.openingStock}
+   484→   484→                  onChange={(e) => updateField('openingStock', Number(e.target.value) || 0)}
+   485→   485→                />
+   486→   486→              </div>
+   487→   487→              <div>
+   488→   488→                <label className={labelClass}>Reorder Level</label>
+   489→   489→                <input
+   490→   490→                  type="number"
+   491→   491→                  min="0"
+   492→   492→                  className={fieldClass}
+   493→   493→                  value={form.reorderLevel}
+   494→   494→                  onChange={(e) => updateField('reorderLevel', Number(e.target.value) || 0)}
+   495→   495→                />
+   496→   496→              </div>
+   497→   497→              <div>
+   498→   498→                <label className={labelClass}>Supplier</label>
+   499→   499→                <div className="relative">
+   500→   500→                  <select
+   501→   501→                    className={selectClass}
+   502→   502→                    value={form.supplierId}
+   503→   503→                    onChange={(e) => updateField('supplierId', e.target.value)}
+   504→   504→                  >
+   505→   505→                    <option value="">None</option>
+   506→   506→                    {suppliers.map((s) => (
+   507→   507→                      <option key={s.id} value={s.id}>
+   508→   508→                        {s.name}
+   509→   509→                      </option>
+   510→   510→                    ))}
+   511→   511→                  </select>
+   512→   512→                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#9CA3AF]">
+   513→   513→                    <ChevronDownIcon />
+   514→   514→                  </div>
+   515→   515→                </div>
+   516→   516→              </div>
+   517→   517→            </div>
+   518→   518→
+   519→   519→            {/* Price fields */}
+   520→   520→            <div className="grid grid-cols-2 gap-3">
+   521→   521→              <div>
+   522→   522→                <label className={labelClass}>Cost Price (KSh)</label>
+   523→   523→                <input
+   524→   524→                  type="number"
+   525→   525→                  min="0"
+   526→   526→                  step="0.01"
+   527→   527→                  className={fieldClass}
+   528→   528→                  placeholder="0.00"
+   529→   529→                  value={form.costPrice || ''}
+   530→   530→                  onChange={(e) => updateField('costPrice', Number(e.target.value) || 0)}
+   531→   531→                />
+   532→   532→              </div>
+   533→   533→              <div>
+   534→   534→                <label className={labelClass}>Sell Price (KSh)</label>
+   535→   535→                <input
+   536→   536→                  type="number"
+   537→   537→                  min="0"
+   538→   538→                  step="0.01"
+   539→   539→                  className={fieldClass}
+   540→   540→                  placeholder="0.00"
+   541→   541→                  value={form.sellPrice || ''}
+   542→   542→                  onChange={(e) => updateField('sellPrice', Number(e.target.value) || 0)}
+   543→   543→                />
+   544→   544→              </div>
+   545→   545→            </div>
+   546→   546→          </div>
+   547→   547→
+   548→   548→          {/* Footer */}
+   549→   549→          <div className="flex items-center justify-between px-6 py-4 border-t border-[#F3F0EB]">
+   550→   550→            {editing ? (
+   551→   551→              <button
+   552→   552→                type="button"
+   553→   553→                onClick={() => setShowDeleteConfirm(true)}
+   554→   554→                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[8px] text-xs font-medium text-[#DC2626] hover:bg-[#DC2626]/5 transition-colors cursor-pointer"
+   555→   555→              >
+   556→   556→                <TrashIcon />
+   557→   557→                Delete
+   558→   558→              </button>
+   559→   559→            ) : (
+   560→   560→              <div />
+   561→   561→            )}
+   562→   562→            <div className="flex items-center gap-2">
+   563→   563→              <button
+   564→   564→                type="button"
+   565→   565→                onClick={onClose}
+   566→   566→                className="px-4 py-2 rounded-[8px] text-sm font-medium text-[#374151] hover:bg-[#F3F0EB] transition-colors cursor-pointer"
+   567→   567→              >
+   568→   568→                Cancel
+   569→   569→              </button>
+   570→   570→              <button
+   571→   571→                type="button"
+   572→   572→                onClick={handleSave}
+   573→   573→                disabled={saving || !form.name.trim()}
+   574→   574→                className="px-5 py-2 rounded-[8px] text-sm font-semibold text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+   575→   575→                style={{ background: '#DC2626' }}
+   576→   576→              >
+   577→   577→                {saving ? 'Saving...' : isNew ? 'Add Product' : 'Save Changes'}
+   578→   578→              </button>
+   579→   579→            </div>
+   580→   580→          </div>
+   581→   581→        </DialogContent>
+   582→   582→      </Dialog>
+   583→   583→
+   584→   584→      {/* Delete confirmation */}
+   585→   585→      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+   586→   586→        <AlertDialogContent className="bg-white rounded-[14px]" style={{ boxShadow: '0 20px 60px rgba(31,17,41,.15)' }}>
+   587→   587→          <AlertDialogHeader>
+   588→   588→            <AlertDialogTitle className="text-[#1F1129]">Delete Product</AlertDialogTitle>
+   589→   589→            <AlertDialogDescription className="text-[#6B7280]">
+   590→   590→              Are you sure you want to delete &quot;{editing?.name}&quot;? This action cannot be undone and will
+   591→   591→              permanently remove the product from your inventory.
+   592→   592→            </AlertDialogDescription>
+   593→   593→          </AlertDialogHeader>
+   594→   594→          <AlertDialogFooter>
+   595→   595→            <AlertDialogCancel
+   596→   596→              className="border-[#E5E7EB] text-[#374151] hover:bg-[#F3F0EB] rounded-[8px] cursor-pointer"
+   597→   597→            >
+   598→   598→              Cancel
+   599→   599→            </AlertDialogCancel>
+   600→   600→            <AlertDialogAction
+   601→   601→              onClick={handleDelete}
+   602→   602→              disabled={deleting}
+   603→   603→              className="bg-[#DC2626] text-white hover:bg-[#B91C1C] rounded-[8px] cursor-pointer"
+   604→   604→            >
+   605→   605→              {deleting ? 'Deleting...' : 'Delete'}
+   606→   606→            </AlertDialogAction>
+   607→   607→          </AlertDialogFooter>
+   608→   608→        </AlertDialogContent>
+   609→   609→      </AlertDialog>
+   610→   610→    </>
+   611→   611→  )
+   612→   612→}
+   613→   613→
+   614→   614→/* ─── Quick Reorder Modal ───────────────────────────────────────────── */
+   615→   615→
+   616→   616→function ReorderModal({
+   617→   617→  open,
+   618→   618→  onClose,
+   619→   619→  product,
+   620→   620→  onConfirm,
+   621→   621→}: {
+   622→   622→  open: boolean
+   623→   623→  onClose: () => void
+   624→   624→  product: Product | null
+   625→   625→  onConfirm: (data: any) => Promise<void>
+   626→   626→}) {
+   627→   627→  const [saving, setSaving] = useState(false)
+   628→   628→
+   629→   629→  if (!product) return null
+   630→   630→
+   631→   631→  const suggestedQty = (product.reorderLevel || 5) * 2
+   632→   632→  const estimatedCost = suggestedQty * (product.costPrice || 0)
+   633→   633→
+   634→   634→  const handleConfirm = async () => {
+   635→   635→    setSaving(true)
+   636→   636→    try {
+   637→   637→      await onConfirm({
+   638→   638→        id: product.id,
+   639→   639→        currentStock: (product.currentStock || 0) + suggestedQty,
+   640→   640→        openingStock: suggestedQty,
+   641→   641→      })
+   642→   642→      onClose()
+   643→   643→    } catch {
+   644→   644→      /* handled silently */
+   645→   645→    } finally {
+   646→   646→      setSaving(false)
+   647→   647→    }
+   648→   648→  }
+   649→   649→
+   650→   650→  return (
+   651→   651→    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
+   652→   652→      <DialogContent
+   653→   653→        className="bg-white sm:max-w-[400px] p-0 overflow-hidden rounded-[14px]"
+   654→   654→        style={{ boxShadow: '0 20px 60px rgba(31,17,41,.15)' }}
+   655→   655→      >
+   656→   656→        <div className="px-6 pt-5 pb-4 border-b border-[#F3F0EB]">
+   657→   657→          <DialogHeader className="p-0">
+   658→   658→            <DialogTitle className="text-base font-semibold text-[#1F1129]">
+   659→   659→              Quick Reorder
+   660→   660→            </DialogTitle>
+   661→   661→            <DialogDescription className="text-xs text-[#6B7280] mt-0.5">
+   662→   662→              Confirm the reorder quantity for this product.
+   663→   663→            </DialogDescription>
+   664→   664→          </DialogHeader>
+   665→   665→        </div>
+   666→   666→
+   667→   667→        <div className="px-6 py-5 space-y-4">
+   668→   668→          <div className="rounded-[10px] p-4 space-y-3" style={{ background: '#FAF7F2' }}>
+   669→   669→            <div>
+   670→   670→              <div className="text-xs text-[#6B7280]">Product</div>
+   671→   671→              <div className="text-sm font-semibold text-[#1F1129]">{product.name}</div>
+   672→   672→            </div>
+   673→   673→            <div className="grid grid-cols-2 gap-3">
+   674→   674→              <div>
+   675→   675→                <div className="text-xs text-[#6B7280]">Current Stock</div>
+   676→   676→                <div className="text-sm font-medium text-[#DC2626]">{product.currentStock || 0}</div>
+   677→   677→              </div>
+   678→   678→              <div>
+   679→   679→                <div className="text-xs text-[#6B7280]">Reorder Level</div>
+   680→   680→                <div className="text-sm font-medium text-[#F59E0B]">{product.reorderLevel || 0}</div>
+   681→   681→              </div>
+   682→   682→            </div>
+   683→   683→          </div>
+   684→   684→
+   685→   685→          <div className="rounded-[10px] border border-[#E5E7EB] p-4 space-y-3">
+   686→   686→            <div className="flex items-center justify-between">
+   687→   687→              <span className="text-sm text-[#374151]">Suggested Quantity</span>
+   688→   688→              <span className="text-sm font-bold text-[#1F1129]">{suggestedQty} units</span>
+   689→   689→            </div>
+   690→   690→            <div className="flex items-center justify-between">
+   691→   691→              <span className="text-sm text-[#374151]">Estimated Cost</span>
+   692→   692→              <span className="text-sm font-bold" style={{ color: '#DC2626' }}>
+   693→   693→                {formatKSh(estimatedCost)}
+   694→   694→              </span>
+   695→   695→            </div>
+   696→   696→          </div>
+   697→   697→        </div>
+   698→   698→
+   699→   699→        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-[#F3F0EB]">
+   700→   700→          <button
+   701→   701→            type="button"
+   702→   702→            onClick={onClose}
+   703→   703→            className="px-4 py-2 rounded-[8px] text-sm font-medium text-[#374151] hover:bg-[#F3F0EB] transition-colors cursor-pointer"
+   704→   704→          >
+   705→   705→            Cancel
+   706→   706→          </button>
+   707→   707→          <button
+   708→   708→            type="button"
+   709→   709→            onClick={handleConfirm}
+   710→   710→            disabled={saving}
+   711→   711→            className="px-5 py-2 rounded-[8px] text-sm font-semibold text-white transition-colors cursor-pointer disabled:opacity-50"
+   712→   712→            style={{ background: '#10B981' }}
+   713→   713→          >
+   714→   714→            {saving ? 'Processing...' : 'Confirm Reorder'}
+   715→   715→          </button>
+   716→   716→        </div>
+   717→   717→      </DialogContent>
+   718→   718→    </Dialog>
+   719→   719→  )
+   720→   720→}
+   721→   721→
+   722→   722→/* ─── Main Inventory Page ───────────────────────────────────────────── */
+   723→   723→
+   724→   724→export function InventoryPage() {
+   725→   725→  const { isManager, storeId, suppliers: storeSuppliers } = useAppStore()
+   726→   726→
+   727→   727→  // Local state
+   728→   728→  const [products, setProducts] = useState<Product[]>([])
+   729→   729→  const [categories, setCategories] = useState<Category[]>([])
+   730→   730→  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+   731→   731→  const [loading, setLoading] = useState(true)
+   732→   732→  const [search, setSearch] = useState('')
+   733→   733→  const [categoryFilter, setCategoryFilter] = useState('')
+   734→   734→
+   735→   735→  // Modal state
+   736→   736→  const [modalOpen, setModalOpen] = useState(false)
+   737→   737→  const [receiveModalOpen, setReceiveModalOpen] = useState(false)
+   738→   738→  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+   739→   739→  const [reorderProduct, setReorderProduct] = useState<Product | null>(null)
+   740→   740→
+   741→   741→  // Fetch data
+   742→   742→  const fetchProducts = useCallback(async () => {
+   743→   743→    try {
+   744→   744→      const data = await api.getProducts(storeId ? `storeId=${storeId}` : '')
+   745→   745→      setProducts(Array.isArray(data) ? data : data?.products || [])
+   746→   746→    } catch {
+   747→   747→      setProducts([])
+   748→   748→    }
+   749→   749→  }, [storeId])
+   750→   750→
+   751→   751→  const fetchCategories = useCallback(async () => {
+   752→   752→    try {
+   753→   753→      const data = await api.getCategories()
+   754→   754→      setCategories(Array.isArray(data) ? data : data?.categories || [])
+   755→   755→    } catch {
+   756→   756→      setCategories([])
+   757→   757→    }
+   758→   758→  }, [])
+   759→   759→
+   760→   760→  const fetchSuppliers = useCallback(async () => {
+   761→   761→    try {
+   762→   762→      const data = await api.getSuppliers()
+   763→   763→      const list = Array.isArray(data) ? data : data?.suppliers || []
+   764→   764→      setSuppliers(list)
+   765→   765→    } catch {
+   766→   766→      setSuppliers([])
+   767→   767→    }
+   768→   768→  }, [])
+   769→   769→
+   770→   770→  useEffect(() => {
+   771→   771→    let mounted = true
+   772→   772→    const load = async () => {
+   773→   773→      try {
+   774→   774→        const [prodData, catData, supData] = await Promise.all([
+   775→   775→          api.getProducts(storeId ? `storeId=${storeId}` : ''),
+   776→   776→          api.getCategories(),
+   777→   777→          api.getSuppliers(),
+   778→   778→        ])
+   779→   779→        if (!mounted) return
+   780→   780→        setProducts(Array.isArray(prodData) ? prodData : prodData?.products || [])
+   781→   781→        setCategories(Array.isArray(catData) ? catData : catData?.categories || [])
+   782→   782→        const supList = Array.isArray(supData) ? supData : supData?.suppliers || []
+   783→   783→        setSuppliers(supList)
+   784→   784→      } catch {
+   785→   785→        if (mounted) {
+   786→   786→          setProducts([])
+   787→   787→          setCategories([])
+   788→   788→          setSuppliers([])
+   789→   789→        }
+   790→   790→      } finally {
+   791→   791→        if (mounted) setLoading(false)
+   792→   792→      }
+   793→   793→    }
+   794→   794→    load()
+   795→   795→    return () => { mounted = false }
+   796→   796→  }, [storeId])
+   797→   797→
+   798→   798→  // Use store suppliers if local fetch is empty (fallback)
+   799→   799→  const effectiveSuppliers = suppliers.length > 0 ? suppliers : (storeSuppliers || [])
+   800→   800→
+   801→   801→  // Filter products
+   802→   802→  const filtered = products.filter((p) => {
+   803→   803→    const q = search.toLowerCase()
+   804→   804→    const matchesSearch =
+   805→   805→      !q ||
+   806→   806→      p.name?.toLowerCase().includes(q) ||
+   807→   807→      p.sku?.toLowerCase().includes(q) ||
+   808→   808→      p.barcode?.toLowerCase().includes(q)
+   809→   809→    const matchesCategory = !categoryFilter || p.category === categoryFilter
+   810→   810→    return matchesSearch && matchesCategory
+   811→   811→  })
+   812→   812→
+   813→   813→  // CRUD handlers
+   814→   814→  const handleSave = async (data: any) => {
+   815→   815→    if (data.id) {
+   816→   816→      await api.updateProduct(data)
+   817→   817→    } else {
+   818→   818→      await api.createProduct({ ...data, storeId })
+   819→   819→    }
+   820→   820→    await fetchProducts()
+   821→   821→  }
+   822→   822→
+   823→   823→  const handleDelete = async (id: string) => {
+   824→   824→    await api.deleteProduct(id)
+   825→   825→    await fetchProducts()
+   826→   826→  }
+   827→   827→
+   828→   828→  const handleReorder = async (data: any) => {
+   829→   829→    await api.updateProduct(data)
+   830→   830→    await fetchProducts()
+   831→   831→  }
+   832→   832→
+   833→   833→  const openAddModal = () => {
+   834→   834→    setEditingProduct(null)
+   835→   835→    setModalOpen(true)
+   836→   836→  }
+   837→   837→
+   838→   838→  const openEditModal = (product: Product) => {
+   839→   839→    setEditingProduct(product)
+   840→   840→    setModalOpen(true)
+   841→   841→  }
+   842→   842→
+   843→   843→  // Stock status helpers
+   844→   844→  const getStockColor = (current: number, reorder: number) => {
+   845→   845→    if (current <= 0) return '#DC2626'
+   846→   846→    if (current <= (reorder || 0)) return '#F59E0B'
+   847→   847→    return '#10B981'
+   848→   848→  }
+   849→   849→
+   850→   850→  const getStockLabel = (current: number, reorder: number) => {
+   851→   851→    if (current <= 0) return 'Out of stock'
+   852→   852→    if (current <= (reorder || 0)) return 'Low stock'
+   853→   853→    return 'In stock'
+   854→   854→  }
+   855→   855→
+   856→   856→  /* ─── Render ─────────────────────────────────────────────────────── */
+   857→   857→
+   858→   858→  return (
+   859→   859→    <div className="h-full overflow-y-auto" style={{ background: '#FAF7F2' }}>
+   860→   860→      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+   861→   861→        {/* Header */}
+   862→   862→        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+   863→   863→          <div className="flex items-center gap-3">
+   864→   864→            <h1 className="text-2xl font-bold text-[#1F1129]">Inventory</h1>
+   865→   865→            <span
+   866→   866→              className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-semibold text-white"
+   867→   867→              style={{ background: '#DC2626' }}
+   868→   868→            >
+   869→   869→              {filtered.length}
+   870→   870→            </span>
+   871→   871→          </div>
+   872→   872→          {isManager && (
+   873→   873→            <div className="flex gap-2 self-start sm:self-auto">
+   874→   874→              <button
+   875→   875→                onClick={() => setReceiveModalOpen(true)}
+   876→   876→                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-sm font-semibold text-[#065F46] border border-[#D1FAE5] bg-[#ECFDF5] transition-colors cursor-pointer hover:bg-[#D1FAE5] self-start sm:self-auto"
+   877→   877→              >
+   878→   878→                <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path d="M3 3a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V3zm0 6a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V9zm0 6a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2z"/></svg>
+   879→   879→                Receive Stock
+   880→   880→              </button>
+   881→   881→              <button
+   882→   882→                onClick={openAddModal}
+   883→   883→                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-sm font-semibold text-white transition-colors cursor-pointer hover:opacity-90 self-start sm:self-auto"
+   884→   884→                style={{ background: '#DC2626' }}
+   885→   885→              >
+   886→   886→                <PlusIcon />
+   887→   887→                Add Product
+   888→   888→              </button>
+   889→   889→            </div>
+   890→   890→          )}
+   891→   891→        </div>
+   892→   892→
+   893→   893→        {/* Search & Filter Bar */}
+   894→   894→        <div
+   895→   895→          className="bg-white rounded-[14px] p-4 mb-5 flex flex-col sm:flex-row gap-3"
+   896→   896→          style={{ boxShadow: '0 4px 12px rgba(31,17,41,.06)' }}
+   897→   897→        >
+   898→   898→          <div className="relative flex-1">
+   899→   899→            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]">
+   900→   900→              <SearchIcon />
+   901→   901→            </div>
+   902→   902→            <input
+   903→   903→              type="text"
+   904→   904→              placeholder="Search by name, SKU, or barcode..."
+   905→   905→              value={search}
+   906→   906→              onChange={(e) => setSearch(e.target.value)}
+   907→   907→              className="w-full h-9 pl-9 pr-3 text-sm rounded-[8px] border border-[#E5E7EB] bg-[#FAF7F2] text-[#1F1129] placeholder:text-[#9CA3AF] outline-none transition-colors focus:border-[#DC2626]/40 focus:ring-2 focus:ring-[#DC2626]/10"
+   908→   908→            />
+   909→   909→          </div>
+   910→   910→          <div className="relative sm:w-48">
+   911→   911→            <select
+   912→   912→              value={categoryFilter}
+   913→   913→              onChange={(e) => setCategoryFilter(e.target.value)}
+   914→   914→              className="w-full h-9 px-3 text-sm rounded-[8px] border border-[#E5E7EB] bg-[#FAF7F2] text-[#1F1129] outline-none transition-colors appearance-none cursor-pointer focus:border-[#DC2626]/40 focus:ring-2 focus:ring-[#DC2626]/10"
+   915→   915→            >
+   916→   916→              <option value="">All Categories</option>
+   917→   917→              {categories.map((c) => (
+   918→   918→                <option key={c.id} value={c.name}>
+   919→   919→                  {c.name}
+   920→   920→                </option>
+   921→   921→              ))}
+   922→   922→            </select>
+   923→   923→            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#9CA3AF]">
+   924→   924→              <ChevronDownIcon />
+   925→   925→            </div>
+   926→   926→          </div>
+   927→   927→        </div>
+   928→   928→
+   929→   929→        {/* Content */}
+   930→   930→        {loading ? (
+   931→   931→          <TableSkeleton />
+   932→   932→        ) : filtered.length === 0 ? (
+   933→   933→          <div
+   934→   934→            className="bg-white rounded-[14px]"
+   935→   935→            style={{ boxShadow: '0 4px 12px rgba(31,17,41,.06)' }}
+   936→   936→          >
+   937→   937→            <EmptyState isManager={isManager} onAdd={openAddModal} />
+   938→   938→          </div>
+   939→   939→        ) : (
+   940→   940→          <>
+   941→   941→            {/* Desktop Table View */}
+   942→   942→            <div
+   943→   943→              className="hidden lg:block bg-white rounded-[14px] overflow-hidden"
+   944→   944→              style={{ boxShadow: '0 4px 12px rgba(31,17,41,.06)' }}
+   945→   945→            >
+   946→   946→              <div className="overflow-x-auto">
+   947→   947→                <table className="w-full text-sm">
+   948→   948→                  <thead>
+   949→   949→                    <tr className="border-b border-[#F3F0EB]">
+   950→   950→                      <th className="text-left px-5 py-3.5 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
+   951→   951→                        Name
+   952→   952→                      </th>
+   953→   953→                      <th className="text-left px-4 py-3.5 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
+   954→   954→                        SKU
+   955→   955→                      </th>
+   956→   956→                      <th className="text-left px-4 py-3.5 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
+   957→   957→                        Category
+   958→   958→                      </th>
+   959→   959→                      <th className="text-left px-4 py-3.5 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
+   960→   960→                        Size
+   961→   961→                      </th>
+   962→   962→                      <th className="text-left px-4 py-3.5 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
+   963→   963→                        Stock
+   964→   964→                      </th>
+   965→   965→                      <th className="text-right px-4 py-3.5 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
+   966→   966→                        Cost
+   967→   967→                      </th>
+   968→   968→                      <th className="text-right px-4 py-3.5 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
+   969→   969→                        Sell
+   970→   970→                      </th>
+   971→   971→                      <th className="text-right px-4 py-3.5 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
+   972→   972→                        Margin
+   973→   973→                      </th>
+   974→   974→                      <th className="text-right px-5 py-3.5 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
+   975→   975→                        Actions
+   976→   976→                      </th>
+   977→   977→                    </tr>
+   978→   978→                  </thead>
+   979→   979→                  <tbody className="divide-y divide-[#F3F0EB]">
+   980→   980→                    {filtered.map((product) => {
+   981→   981→                      const stockColor = getStockColor(
+   982→   982→                        product.currentStock || 0,
+   983→   983→                        product.reorderLevel || 0,
+   984→   984→                      )
+   985→   985→                      const catColor = getCategoryColor(product.category || '')
+   986→   986→                      const margin = getMargin(
+   987→   987→                        product.costPrice || 0,
+   988→   988→                        product.sellPrice || 0,
+   989→   989→                      )
+   990→   990→                      const isLowStock =
+   991→   991→                        product.currentStock > 0 &&
+   992→   992→                        product.currentStock <= (product.reorderLevel || 0)
+   993→   993→
+   994→   994→                      return (
+   995→   995→                        <tr
+   996→   996→                          key={product.id}
+   997→   997→                          className="hover:bg-[#FAF7F2]/60 transition-colors"
+   998→   998→                        >
+   999→   999→                          <td className="px-5 py-3.5">
+  1000→  1000→                            <div className="font-medium text-[#1F1129]">{product.name}</div>
+  1001→  1001→                          </td>
+  1002→  1002→                          <td className="px-4 py-3.5 text-[#6B7280] font-mono text-xs">
+  1003→  1003→                            {product.sku}
+  1004→  1004→                          </td>
+  1005→  1005→                          <td className="px-4 py-3.5">
+  1006→  1006→                            <span
+  1007→  1007→                              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold text-white"
+  1008→  1008→                              style={{ background: catColor }}
+  1009→  1009→                            >
+  1010→  1010→                              {product.category || 'Other'}
+  1011→  1011→                            </span>
+  1012→  1012→                          </td>
+  1013→  1013→                          <td className="px-4 py-3.5 text-[#374151]">{product.size}</td>
+  1014→  1014→                          <td className="px-4 py-3.5">
+  1015→  1015→                            <div className="flex items-center gap-2">
+  1016→  1016→                              <span className="font-semibold text-[#1F1129]">
+  1017→  1017→                                {product.currentStock || 0}
+  1018→  1018→                              </span>
+  1019→  1019→                              <span
+  1020→  1020→                                className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold"
+  1021→  1021→                                style={{
+  1022→  1022→                                  color: stockColor,
+  1023→  1023→                                  background: `${stockColor}12`,
+  1024→  1024→                                }}
+  1025→  1025→                              >
+  1026→  1026→                                {getStockLabel(product.currentStock || 0, product.reorderLevel || 0)}
+  1027→  1027→                              </span>
+  1028→  1028→                            </div>
+  1029→  1029→                          </td>
+  1030→  1030→                          <td className="px-4 py-3.5 text-right text-[#374151]">
+  1031→  1031→                            {formatKSh(product.costPrice || 0)}
+  1032→  1032→                          </td>
+  1033→  1033→                          <td className="px-4 py-3.5 text-right text-[#374151]">
+  1034→  1034→                            {formatKSh(product.sellPrice || 0)}
+  1035→  1035→                          </td>
+  1036→  1036→                          <td className="px-4 py-3.5 text-right font-semibold text-[#1F1129]">
+  1037→  1037→                            {margin}
+  1038→  1038→                          </td>
+  1039→  1039→                          <td className="px-5 py-3.5">
+  1040→  1040→                            <div className="flex items-center justify-end gap-1">
+  1041→  1041→                              {isManager && isLowStock && (
+  1042→  1042→                                <button
+  1043→  1043→                                  onClick={() => setReorderProduct(product)}
+  1044→  1044→                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[6px] text-[11px] font-semibold text-[#059669] hover:bg-[#10B981]/8 transition-colors cursor-pointer"
+  1045→  1045→                                  title="Quick reorder"
+  1046→  1046→                                >
+  1047→  1047→                                  <RefreshIcon />
+  1048→  1048→                                  Reorder
+  1049→  1049→                                </button>
+  1050→  1050→                              )}
+  1051→  1051→                              {isManager && (
+  1052→  1052→                                <button
+  1053→  1053→                                  onClick={() => openEditModal(product)}
+  1054→  1054→                                  className="p-1.5 rounded-[6px] text-[#6B7280] hover:text-[#1F1129] hover:bg-[#F3F0EB] transition-colors cursor-pointer"
+  1055→  1055→                                  title="Edit product"
+  1056→  1056→                                >
+  1057→  1057→                                  <EditIcon />
+  1058→  1058→                                </button>
+  1059→  1059→                              )}
+  1060→  1060→                            </div>
+  1061→  1061→                          </td>
+  1062→  1062→                        </tr>
+  1063→  1063→                      )
+  1064→  1064→                    })}
+  1065→  1065→                  </tbody>
+  1066→  1066→                </table>
+  1067→  1067→              </div>
+  1068→  1068→            </div>
+  1069→  1069→
+  1070→  1070→            {/* Mobile Card View */}
+  1071→  1071→            <div className="lg:hidden space-y-3">
+  1072→  1072→              {filtered.map((product) => {
+  1073→  1073→                const stockColor = getStockColor(
+  1074→  1074→                  product.currentStock || 0,
+  1075→  1075→                  product.reorderLevel || 0,
+  1076→  1076→                )
+  1077→  1077→                const catColor = getCategoryColor(product.category || '')
+  1078→  1078→                const margin = getMargin(
+  1079→  1079→                  product.costPrice || 0,
+  1080→  1080→                  product.sellPrice || 0,
+  1081→  1081→                )
+  1082→  1082→                const isLowStock =
+  1083→  1083→                  product.currentStock > 0 &&
+  1084→  1084→                  product.currentStock <= (product.reorderLevel || 0)
+  1085→  1085→
+  1086→  1086→                return (
+  1087→  1087→                  <div
+  1088→  1088→                    key={product.id}
+  1089→  1089→                    className="bg-white rounded-[14px] p-4"
+  1090→  1090→                    style={{ boxShadow: '0 4px 12px rgba(31,17,41,.06)' }}
+  1091→  1091→                  >
+  1092→  1092→                    <div className="flex items-start justify-between mb-3">
+  1093→  1093→                      <div className="min-w-0 flex-1">
+  1094→  1094→                        <div className="font-semibold text-[#1F1129] text-sm truncate">
+  1095→  1095→                          {product.name}
+  1096→  1096→                        </div>
+  1097→  1097→                        <div className="text-xs text-[#9CA3AF] font-mono mt-0.5">
+  1098→  1098→                          {product.sku}
+  1099→  1099→                        </div>
+  1100→  1100→                      </div>
+  1101→  1101→                      <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
+  1102→  1102→                        {isManager && (
+  1103→  1103→                          <button
+  1104→  1104→                            onClick={() => openEditModal(product)}
+  1105→  1105→                            className="p-1.5 rounded-[6px] text-[#6B7280] hover:text-[#1F1129] hover:bg-[#F3F0EB] transition-colors cursor-pointer"
+  1106→  1106→                          >
+  1107→  1107→                            <EditIcon />
+  1108→  1108→                          </button>
+  1109→  1109→                        )}
+  1110→  1110→                      </div>
+  1111→  1111→                    </div>
+  1112→  1112→
+  1113→  1113→                    <div className="flex items-center gap-2 mb-3 flex-wrap">
+  1114→  1114→                      <span
+  1115→  1115→                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold text-white"
+  1116→  1116→                        style={{ background: catColor }}
+  1117→  1117→                      >
+  1118→  1118→                        {product.category || 'Other'}
+  1119→  1119→                      </span>
+  1120→  1120→                      <span className="text-xs text-[#6B7280]">{product.size}</span>
+  1121→  1121→                      <span
+  1122→  1122→                        className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ml-auto"
+  1123→  1123→                        style={{
+  1124→  1124→                          color: stockColor,
+  1125→  1125→                          background: `${stockColor}12`,
+  1126→  1126→                        }}
+  1127→  1127→                      >
+  1128→  1128→                        {product.currentStock || 0} in stock
+  1129→  1129→                      </span>
+  1130→  1130→                    </div>
+  1131→  1131→
+  1132→  1132→                    <div className="grid grid-cols-3 gap-2 text-center py-2.5 border-t border-[#F3F0EB]">
+  1133→  1133→                      <div>
+  1134→  1134→                        <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide mb-0.5">
+  1135→  1135→                          Cost
+  1136→  1136→                        </div>
+  1137→  1137→                        <div className="text-xs font-medium text-[#374151]">
+  1138→  1138→                          {formatKSh(product.costPrice || 0)}
+  1139→  1139→                        </div>
+  1140→  1140→                      </div>
+  1141→  1141→                      <div>
+  1142→  1142→                        <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide mb-0.5">
+  1143→  1143→                          Sell
+  1144→  1144→                        </div>
+  1145→  1145→                        <div className="text-xs font-medium text-[#374151]">
+  1146→  1146→                          {formatKSh(product.sellPrice || 0)}
+  1147→  1147→                        </div>
+  1148→  1148→                      </div>
+  1149→  1149→                      <div>
+  1150→  1150→                        <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide mb-0.5">
+  1151→  1151→                          Margin
+  1152→  1152→                        </div>
+  1153→  1153→                        <div className="text-xs font-bold text-[#1F1129]">{margin}</div>
+  1154→  1154→                      </div>
+  1155→  1155→                    </div>
+  1156→  1156→
+  1157→  1157→                    {isManager && isLowStock && (
+  1158→  1158→                      <div className="mt-3 pt-3 border-t border-[#F3F0EB]">
+  1159→  1159→                        <button
+  1160→  1160→                          onClick={() => setReorderProduct(product)}
+  1161→  1161→                          className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-[8px] text-xs font-semibold text-[#059669] border border-[#10B981]/20 hover:bg-[#10B981]/5 transition-colors cursor-pointer"
+  1162→  1162→                        >
+  1163→  1163→                          <RefreshIcon />
+  1164→  1164→                          Reorder Stock
+  1165→  1165→                        </button>
+  1166→  1166→                      </div>
+  1167→  1167→                    )}
+  1168→  1168→                  </div>
+  1169→  1169→                )
+  1170→  1170→              })}
+  1171→  1171→            </div>
+  1172→  1172→          </>
+  1173→  1173→        )}
+  1174→  1174→      </div>
+  1175→  1175→
+  1176→  1176→      {/* Product Add/Edit Modal */}
+  1177→  1177→      {isManager && (
+  1178→  1178→        <ProductModal
+  1179→  1179→          open={modalOpen}
+  1180→  1180→          onClose={() => setModalOpen(false)}
+  1181→  1181→          editing={editingProduct}
+  1182→  1182→          categories={categories}
+  1183→  1183→          suppliers={effectiveSuppliers}
+  1184→  1184→          onSave={handleSave}
+  1185→  1185→          onDelete={handleDelete}
+  1186→  1186→        />
+  1187→  1187→      )}
+  1188→  1188→
+  1189→  1189→      {/* Quick Reorder Modal */}
+  1190→  1190→      {isManager && (
+  1191→  1191→        <ReorderModal
+  1192→  1192→          open={!!reorderProduct}
+  1193→  1193→          onClose={() => setReorderProduct(null)}
+  1194→  1194→          product={reorderProduct}
+  1195→  1195→          onConfirm={handleReorder}
+  1196→  1196→        />
+  1197→  1197→      )}
+  1198→  1198→
+  1199→  1199→      {/* Receive Stock Modal */}
+  1200→  1200→      <ReceiveStockModal
+  1201→  1201→        open={receiveModalOpen}
+  1202→  1202→        onClose={() => setReceiveModalOpen(false)}
+  1203→  1203→        products={products}
+  1204→  1204→        onReceived={() => { fetchProducts(); setReceiveModalOpen(false) }}
+  1205→  1205→      />
+  1206→  1206→    </div>
+  1207→  1207→  )
+  1208→  1208→}
+  1209→  1209→
+  1210→  1210→/* ─── Receive Stock Modal ─── */
+  1211→  1211→function ReceiveStockModal({ open, onClose, products, onReceived }: {
+  1212→  1212→  open: boolean
+  1213→  1213→  onClose: () => void
+  1214→  1214→  products: Product[]
+  1215→  1215→  onReceived: () => void
+  1216→  1216→}) {
+  1217→  1217→  const [receiveItems, setReceiveItems] = useState<{ productId: string; qty: number; costPrice: number }[]>([])
+  1218→  1218→  const [saving, setSaving] = useState(false)
+  1219→  1219→  const [error, setError] = useState('')
+  1220→  1220→  const [search, setSearch] = useState('')
+  1221→  1221→  const storeId = useAppStore(s => s.storeId)
+  1222→  1222→
+  1223→  1223→  const addProduct = (product: Product) => {
+  1224→  1224→    if (receiveItems.find(i => i.productId === product.id)) return
+  1225→  1225→    setReceiveItems([...receiveItems, { productId: product.id, qty: 1, costPrice: product.costPrice || 0 }])
+  1226→  1226→  }
+  1227→  1227→
+  1228→  1228→  const removeProduct = (productId: string) => {
+  1229→  1229→    setReceiveItems(receiveItems.filter(i => i.productId !== productId))
+  1230→  1230→  }
+  1231→  1231→
+  1232→  1232→  const updateQty = (productId: string, qty: number) => {
+  1233→  1233→    setReceiveItems(receiveItems.map(i => i.productId === productId ? { ...i, qty: Math.max(0, qty) } : i))
+  1234→  1234→  }
+  1235→  1235→
+  1236→  1236→  const updateCost = (productId: string, costPrice: number) => {
+  1237→  1237→    setReceiveItems(receiveItems.map(i => i.productId === productId ? { ...i, costPrice: Math.max(0, costPrice) } : i))
+  1238→  1238→  }
+  1239→  1239→
+  1240→  1240→  const handleReceive = async () => {
+  1241→  1241→    if (receiveItems.length === 0) return
+  1242→  1242→    setSaving(true)
+  1243→  1243→    setError('')
+  1244→  1244→    try {
+  1245→  1245→      await api.receiveStock({ storeId, items: receiveItems })
+  1246→  1246→      onReceived()
+  1247→  1247→    } catch (err: any) {
+  1248→  1248→      setError(err.message || 'Failed to receive stock')
+  1249→  1249→    } finally {
+  1250→  1250→      setSaving(false)
+  1251→  1251→    }
+  1252→  1252→  }
+  1253→  1253→
+  1254→  1254→  if (!open) return null
+  1255→  1255→
+  1256→  1256→  const availableProducts = products.filter(p =>
+  1257→  1257→    !receiveItems.find(i => i.productId === p.id) &&
+  1258→  1258→    (p.name + p.sku + p.barcode).toLowerCase().includes(search.toLowerCase())
+  1259→  1259→  )
+  1260→  1260→
+  1261→  1261→  return (
+  1262→  1262→    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+  1263→  1263→      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+  1264→  1264→      <div className="relative bg-white rounded-[14px] shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col" style={{ boxShadow: '0 20px 60px rgba(31,17,41,.18)' }}>
+  1265→  1265→        <div className="sticky top-0 bg-white border-b border-[#E8E0F0] px-6 py-4 flex items-center justify-between rounded-t-[14px] z-10">
+  1266→  1266→          <div>
+  1267→  1267→            <h3 className="text-base font-bold" style={{ color: '#1F1129' }}>Receive Stock</h3>
+  1268→  1268→            <p className="text-xs mt-0.5" style={{ color: '#8B7FA0' }}>Add stock received from suppliers</p>
+  1269→  1269→          </div>
+  1270→  1270→          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#F5F0EB] transition cursor-pointer" aria-label="Close">
+  1271→  1271→            <svg className="w-5 h-5" viewBox="0 0 20 20" fill="#8B7FA0"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+  1272→  1272→          </button>
+  1273→  1273→        </div>
+  1274→  1274→
+  1275→  1275→        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+  1276→  1276→          {error && (
+  1277→  1277→            <div className="px-4 py-2.5 rounded-xl text-sm font-medium" style={{ backgroundColor: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' }}>{error}</div>
+  1278→  1278→          )}
+  1279→  1279→
+  1280→  1280→          {/* Search products */}
+  1281→  1281→          <div className="relative">
+  1282→  1282→            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]">
+  1283→  1283→              <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" /></svg>
+  1284→  1284→            </div>
+  1285→  1285→            <input
+  1286→  1286→              type="text"
+  1287→  1287→              placeholder="Search products to add..."
+  1288→  1288→              value={search}
+  1289→  1289→              onChange={(e) => setSearch(e.target.value)}
+  1290→  1290→              className="w-full h-9 pl-9 pr-3 text-sm rounded-[8px] border border-[#E8E0F0] bg-[#FAF7F2] text-[#1F1129] placeholder:text-[#9CA3AF] outline-none focus:border-[#DC2626]/40 focus:ring-2 focus:ring-[#DC2626]/10"
+  1291→  1291→            />
+  1292→  1292→          </div>
+  1293→  1293→
+  1294→  1294→          {search && (
+  1295→  1295→            <div className="max-h-40 overflow-y-auto border border-[#E8E0F0] rounded-lg divide-y divide-[#F5F0EB]">
+  1296→  1296→              {availableProducts.slice(0, 10).map(p => (
+  1297→  1297→                <button
+  1298→  1298→                  key={p.id}
+  1299→  1299→                  onClick={() => { addProduct(p); setSearch('') }}
+  1300→  1300→                  className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#FAF7F2] transition cursor-pointer"
+  1301→  1301→                >
+  1302→  1302→                  <div>
+  1303→  1303→                    <div className="text-sm font-medium text-[#1F1129]">{p.name}</div>
+  1304→  1304→                    <div className="text-xs text-[#8B7FA0]">{p.category} · {p.size} · Current: {p.currentStock}</div>
+  1305→  1305→                  </div>
+  1306→  1306→                  <svg className="w-4 h-4 text-[#8B7FA0]" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>
+  1307→  1307→                </button>
+  1308→  1308→              ))}
+  1309→  1309→              {availableProducts.length === 0 && (
+  1310→  1310→                <div className="px-3 py-3 text-sm text-[#8B7FA0] text-center">No products found</div>
+  1311→  1311→              )}
+  1312→  1312→            </div>
+  1313→  1313→          )}
+  1314→  1314→
+  1315→  1315→          {/* Items to receive */}
+  1316→  1316→          {receiveItems.length > 0 && (
+  1317→  1317→            <div className="border border-[#E8E0F0] rounded-xl overflow-hidden">
+  1318→  1318→              <table className="w-full text-sm">
+  1319→  1319→                <thead>
+  1320→  1320→                  <tr className="bg-[#FAF7F2]">
+  1321→  1321→                    <th className="text-left py-2 px-3 text-xs font-semibold text-[#8B7FA0]">Product</th>
+  1322→  1322→                    <th className="text-right py-2 px-3 text-xs font-semibold text-[#8B7FA0] w-24">Qty</th>
+  1323→  1323→                    <th className="text-right py-2 px-3 text-xs font-semibold text-[#8B7FA0] w-28">Unit Cost</th>
+  1324→  1324→                    <th className="w-10"></th>
+  1325→  1325→                  </tr>
+  1326→  1326→                </thead>
+  1327→  1327→                <tbody>
+  1328→  1328→                  {receiveItems.map(item => {
+  1329→  1329→                    const product = products.find(p => p.id === item.productId)
+  1330→  1330→                    return (
+  1331→  1331→                      <tr key={item.productId} className="border-t border-[#F5F0EB]">
+  1332→  1332→                        <td className="py-2 px-3">
+  1333→  1333→                          <div className="text-sm font-medium text-[#1F1129]">{product?.name || 'Unknown'}</div>
+  1334→  1334→                          <div className="text-xs text-[#8B7FA0]">Current: {product?.currentStock || 0}</div>
+  1335→  1335→                        </td>
+  1336→  1336→                        <td className="py-2 px-3">
+  1337→  1337→                          <input
+  1338→  1338→                            type="number"
+  1339→  1339→                            min="1"
+  1340→  1340→                            value={item.qty}
+  1341→  1341→                            onChange={(e) => updateQty(item.productId, parseInt(e.target.value) || 0)}
+  1342→  1342→                            className="w-full text-right px-2 py-1 rounded-lg border border-[#E8E0F0] text-sm outline-none focus:border-[#DC2626]/40"
+  1343→  1343→                          />
+  1344→  1344→                        </td>
+  1345→  1345→                        <td className="py-2 px-3">
+  1346→  1346→                          <input
+  1347→  1347→                            type="number"
+  1348→  1348→                            min="0"
+  1349→  1349→                            value={item.costPrice || ''}
+  1350→  1350→                            onChange={(e) => updateCost(item.productId, parseFloat(e.target.value) || 0)}
+  1351→  1351→                            className="w-full text-right px-2 py-1 rounded-lg border border-[#E8E0F0] text-sm outline-none focus:border-[#DC2626]/40"
+  1352→  1352→                            placeholder="0"
+  1353→  1353→                          />
+  1354→  1354→                        </td>
+  1355→  1355→                        <td className="py-2 px-1">
+  1356→  1356→                          <button onClick={() => removeProduct(item.productId)} className="p-1 rounded hover:bg-[#FEF2F2] transition cursor-pointer">
+  1357→  1357→                            <svg className="w-4 h-4 text-[#DC2626]" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+  1358→  1358→                          </button>
+  1359→  1359→                        </td>
+  1360→  1360→                      </tr>
+  1361→  1361→                    )
+  1362→  1362→                  })}
+  1363→  1363→                </tbody>
+  1364→  1364→              </table>
+  1365→  1365→              <div className="px-3 py-2 bg-[#FAF7F2] text-xs text-[#8B7FA0]">
+  1366→  1366→                {receiveItems.reduce((s, i) => s + i.qty, 0)} total units to add
+  1367→  1367→              </div>
+  1368→  1368→            </div>
+  1369→  1369→          )}
+  1370→  1370→
+  1371→  1371→          {receiveItems.length === 0 && (
+  1372→  1372→            <div className="text-center py-10">
+  1373→  1373→              <svg className="w-12 h-12 mx-auto mb-3 text-[#D1D5DB]" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1 0-2 .9-2 2v3.01c0 .72.43 1.34 1 1.69V20c0 1.1 1.1 2 2 2h14c.9 0 2-.9 2-2V8.7c.57-.35 1-.97 1-1.69V5c0-1.1-1-3-2-3zm-5 12H9v-2h6v2zm5-7H4V5h16v2z"/></svg>
+  1374→  1374→              <p className="text-sm text-[#8B7FA0]">Search and add products to receive stock</p>
+  1375→  1375→            </div>
+  1376→  1376→          )}
+  1377→  1377→        </div>
+  1378→  1378→
+  1379→  1379→        <div className="px-6 py-4 border-t border-[#E8E0F0] flex justify-end gap-3">
+  1380→  1380→          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-semibold border border-[#E8E0F0] text-[#6B5E7A] hover:bg-[#FAF7F2] transition cursor-pointer">Cancel</button>
+  1381→  1381→          <button
+  1382→  1382→            onClick={handleReceive}
+  1383→  1383→            disabled={saving || receiveItems.length === 0}
+  1384→  1384→            className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60 cursor-pointer"
+  1385→  1385→            style={{ backgroundColor: '#059669' }}
+  1386→  1386→          >
+  1387→  1387→            {saving ? 'Receiving...' : `Receive ${receiveItems.length} Items`}
+  1388→  1388→          </button>
+  1389→  1389→        </div>
+  1390→  1390→      </div>
+  1391→  1391→    </div>
+  1392→  1392→  )
+  1393→  1393→}

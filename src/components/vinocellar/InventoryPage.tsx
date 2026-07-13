@@ -1,1393 +1,720 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
-import { useAppStore } from '@/lib/store'
-import { api } from '@/lib/api'
-import { Skeleton } from '@/components/ui/skeleton'
+
+import { useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/contexts/auth-context'
+import type { Product, Category, Supplier } from '@/lib/types'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
 import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogCancel,
-  AlertDialogAction,
-} from '@/components/ui/alert-dialog'
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  Plus,
+  Search,
+  Edit,
+  Trash2,
+  Package,
+  Filter,
+} from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useIsMobile } from '@/hooks/use-mobile'
 
-/* ─── Constants ─────────────────────────────────────────────────────── */
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
 
-const CATEGORY_COLOURS: Record<string, string> = {
-  Wine: '#DC2626',
-  Whisky: '#92400E',
-  Vodka: '#3B82F6',
-  Gin: '#10B981',
-  Rum: '#F97316',
-  Champagne: '#F59E0B',
-  Beer: '#FBBF24',
-  Cognac: '#78350F',
-  Tequila: '#059669',
-  Liqueur: '#8B5CF6',
-  Other: '#6B7280',
+const ACCENT = '#7C3AED'
+
+const SIZE_OPTIONS = ['750ml', '375ml', '1L', '500ml', '1.5L', '200ml'] as const
+
+const formatKES = (amount: number): string =>
+  new Intl.NumberFormat('en-KE', {
+    style: 'currency',
+    currency: 'KES',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount)
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+function stockStatus(stock: number, reorderLevel: number) {
+  if (stock <= 0) return { label: 'Out of Stock', className: 'bg-red-100 text-red-700 border-red-200' }
+  if (stock <= reorderLevel) return { label: 'Low Stock', className: 'bg-amber-100 text-amber-700 border-amber-200' }
+  return { label: 'In Stock', className: 'bg-emerald-100 text-emerald-700 border-emerald-200' }
 }
 
-const SIZE_OPTIONS = [
-  '750ml',
-  '1L',
-  '700ml',
-  '375ml',
-  '1.75L',
-  '330ml',
-  '500ml',
-  '50ml',
-]
+/* ------------------------------------------------------------------ */
+/*  Empty form                                                         */
+/* ------------------------------------------------------------------ */
 
-/* ─── Types ─────────────────────────────────────────────────────────── */
-
-interface Product {
-  id: string
+interface ProductForm {
   name: string
   sku: string
   barcode: string
-  category: string
   size: string
-  openingStock: number
-  currentStock: number
-  reorderLevel: number
-  costPrice: number
-  sellPrice: number
-  supplierId?: string
-  storeId?: string
+  category_id: string
+  supplier_id: string
+  cost_price: string
+  sell_price: string
+  reorder_level: string
+  opening_stock: string
 }
 
-interface Category {
-  id: string
-  name: string
-}
-
-interface Supplier {
-  id: string
-  name: string
-}
-
-/* ─── Helpers ───────────────────────────────────────────────────────── */
-
-function generateSKU() {
-  const prefix = 'VC'
-  const ts = Date.now().toString(36).toUpperCase().slice(-6)
-  const rand = Math.random().toString(36).toUpperCase().slice(2, 5)
-  return `${prefix}-${ts}${rand}`
-}
-
-function generateBarcode() {
-  let barcode = '60'
-  for (let i = 0; i < 11; i++) {
-    barcode += Math.floor(Math.random() * 10)
-  }
-  return barcode
-}
-
-function formatKSh(n: number) {
-  return `KSh ${Number(n || 0).toLocaleString('en-KE')}`
-}
-
-function getMargin(cost: number, sell: number) {
-  if (!sell || sell <= 0) return '0.0%'
-  return ((sell - cost) / sell * 100).toFixed(1) + '%'
-}
-
-function getCategoryColor(cat: string) {
-  return CATEGORY_COLOURS[cat] || CATEGORY_COLOURS.Other
-}
-
-/* ─── Icon components (inline SVG, no emoji) ────────────────────────── */
-
-function SearchIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="11" cy="11" r="8" />
-      <line x1="21" y1="21" x2="16.65" y2="16.65" />
-    </svg>
-  )
-}
-
-function PlusIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="5" x2="12" y2="19" />
-      <line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  )
-}
-
-function EditIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-    </svg>
-  )
-}
-
-function TrashIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="3,6 5,6 21,6" />
-      <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-    </svg>
-  )
-}
-
-function RefreshIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="23,4 23,10 17,10" />
-      <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
-    </svg>
-  )
-}
-
-function PackageIcon({ size = 40 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="16.5" y1="9.4" x2="7.5" y2="4.21" />
-      <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
-      <polyline points="3.27,6.96 12,12.01 20.73,6.96" />
-      <line x1="12" y1="22.08" x2="12" y2="12" />
-    </svg>
-  )
-}
-
-function ChevronDownIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="6,9 12,15 18,9" />
-    </svg>
-  )
-}
-
-function CloseIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  )
-}
-
-/* ─── Skeleton Loader ───────────────────────────────────────────────── */
-
-function TableSkeleton() {
-  return (
-    <div className="space-y-3">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div
-          key={i}
-          className="bg-white rounded-[14px] p-4 flex items-center gap-4"
-          style={{ boxShadow: '0 4px 12px rgba(31,17,41,.06)' }}
-        >
-          <Skeleton className="h-4 w-32 flex-shrink-0" />
-          <Skeleton className="h-4 w-20 flex-shrink-0" />
-          <Skeleton className="h-5 w-16 rounded-full flex-shrink-0" />
-          <Skeleton className="h-4 w-14 flex-shrink-0 hidden md:block" />
-          <Skeleton className="h-4 w-10 flex-shrink-0" />
-          <Skeleton className="h-4 w-16 flex-shrink-0 hidden lg:block" />
-          <Skeleton className="h-4 w-16 flex-shrink-0 hidden lg:block" />
-          <Skeleton className="h-4 w-12 flex-shrink-0 hidden lg:block" />
-          <div className="ml-auto flex gap-2 flex-shrink-0">
-            <Skeleton className="h-8 w-8 rounded-md" />
-            <Skeleton className="h-8 w-8 rounded-md" />
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-/* ─── Empty State ───────────────────────────────────────────────────── */
-
-function EmptyState({ isManager, onAdd }: { isManager: boolean; onAdd: () => void }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 px-4">
-      <div
-        className="w-20 h-20 rounded-full flex items-center justify-center mb-6"
-        style={{ background: 'rgba(220,38,38,0.06)' }}
-      >
-        <PackageIcon size={36} />
-      </div>
-      <h3 className="text-lg font-semibold text-[#1F1129] mb-2">
-        No products yet
-      </h3>
-      <p className="text-sm text-[#6B7280] text-center max-w-sm mb-6">
-        Start building your inventory by adding your first product. You can organize
-        products by category, track stock levels, and manage pricing.
-      </p>
-      {isManager && (
-        <button
-          onClick={onAdd}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[10px] text-sm font-semibold text-white transition-colors cursor-pointer hover:opacity-90"
-          style={{ background: '#DC2626' }}
-        >
-          <PlusIcon />
-          Add Your First Product
-        </button>
-      )}
-    </div>
-  )
-}
-
-/* ─── Product Form Modal ────────────────────────────────────────────── */
-
-const EMPTY_FORM = {
+const emptyForm: ProductForm = {
   name: '',
   sku: '',
   barcode: '',
-  category: '',
   size: '750ml',
-  openingStock: 0,
-  reorderLevel: 5,
-  costPrice: 0,
-  sellPrice: 0,
-  supplierId: '',
+  category_id: '',
+  supplier_id: '',
+  cost_price: '',
+  sell_price: '',
+  reorder_level: '5',
+  opening_stock: '0',
 }
 
-function ProductModal({
-  open,
-  onClose,
-  editing,
-  categories,
-  suppliers,
-  onSave,
-  onDelete,
-}: {
-  open: boolean
-  onClose: () => void
-  editing: Product | null
-  categories: Category[]
-  suppliers: Supplier[]
-  onSave: (data: any) => Promise<void>
-  onDelete: (id: string) => Promise<void>
-}) {
-  const [form, setForm] = useState({ ...EMPTY_FORM })
-  const [saving, setSaving] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const isNew = !editing
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
 
-  useEffect(() => {
-    if (open) {
-      if (editing) {
-        setForm({
-          name: editing.name || '',
-          sku: editing.sku || '',
-          barcode: editing.barcode || '',
-          category: editing.category || '',
-          size: editing.size || '750ml',
-          openingStock: editing.openingStock || 0,
-          reorderLevel: editing.reorderLevel ?? 5,
-          costPrice: editing.costPrice || 0,
-          sellPrice: editing.sellPrice || 0,
-          supplierId: editing.supplierId || '',
-        })
-      } else {
-        setForm({ ...EMPTY_FORM, sku: generateSKU(), barcode: generateBarcode() })
-      }
-      setShowDeleteConfirm(false)
-    }
-  }, [open, editing])
+export default function InventoryPage() {
+  const isMobile = useIsMobile()
+  const { store, appUser } = useAuth()
+  const queryClient = useQueryClient()
 
-  const updateField = (key: string, value: string | number) => {
-    setForm((prev) => ({ ...prev, [key]: value }))
-  }
-
-  const handleSave = async () => {
-    if (!form.name.trim()) return
-    setSaving(true)
-    try {
-      await onSave({
-        ...(editing ? { id: editing.id } : {}),
-        ...form,
-        currentStock: isNew ? form.openingStock : undefined,
-      })
-      onClose()
-    } catch {
-      /* handled silently - API layer throws */
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleDelete = async () => {
-    if (!editing) return
-    setDeleting(true)
-    try {
-      await onDelete(editing.id)
-      setShowDeleteConfirm(false)
-      onClose()
-    } catch {
-      /* handled silently */
-    } finally {
-      setDeleting(false)
-    }
-  }
-
-  const fieldClass =
-    'w-full h-9 px-3 text-sm rounded-[8px] border border-[#E5E7EB] bg-white text-[#1F1129] outline-none transition-colors focus:border-[#DC2626]/40 focus:ring-2 focus:ring-[#DC2626]/10'
-  const labelClass = 'block text-xs font-medium text-[#374151] mb-1.5'
-  const selectClass =
-    'w-full h-9 px-3 text-sm rounded-[8px] border border-[#E5E7EB] bg-white text-[#1F1129] outline-none transition-colors focus:border-[#DC2626]/40 focus:ring-2 focus:ring-[#DC2626]/10 appearance-none cursor-pointer'
-
-  return (
-    <>
-      <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-        <DialogContent
-          className="bg-white sm:max-w-[560px] p-0 overflow-hidden max-h-[90vh] flex flex-col rounded-[14px]"
-          style={{ boxShadow: '0 20px 60px rgba(31,17,41,.15)' }}
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-[#F3F0EB]">
-            <DialogHeader className="p-0">
-              <DialogTitle className="text-base font-semibold text-[#1F1129]">
-                {isNew ? 'Add New Product' : 'Edit Product'}
-              </DialogTitle>
-              <DialogDescription className="text-xs text-[#6B7280] mt-0.5">
-                {isNew
-                  ? 'Fill in the product details below to add it to your inventory.'
-                  : 'Update product information. Changes are saved immediately.'}
-              </DialogDescription>
-            </DialogHeader>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-[#9CA3AF] hover:text-[#1F1129] hover:bg-[#F3F0EB] transition-colors cursor-pointer"
-            >
-              <CloseIcon />
-            </button>
-          </div>
-
-          {/* Body */}
-          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-            {/* Name */}
-            <div>
-              <label className={labelClass}>Product Name *</label>
-              <input
-                className={fieldClass}
-                placeholder="e.g. Jameson Irish Whisky"
-                value={form.name}
-                onChange={(e) => updateField('name', e.target.value)}
-              />
-            </div>
-
-            {/* SKU & Barcode */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelClass}>SKU</label>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    className={`${fieldClass} bg-[#FAF7F2] text-[#6B7280]`}
-                    value={form.sku}
-                    readOnly
-                  />
-                  {!editing && (
-                    <button
-                      type="button"
-                      onClick={() => updateField('sku', generateSKU())}
-                      className="p-2 rounded-[8px] text-[#6B7280] hover:text-[#1F1129] hover:bg-[#F3F0EB] transition-colors cursor-pointer flex-shrink-0"
-                      title="Regenerate SKU"
-                    >
-                      <RefreshIcon />
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div>
-                <label className={labelClass}>Barcode</label>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    className={`${fieldClass} bg-[#FAF7F2] text-[#6B7280]`}
-                    value={form.barcode}
-                    readOnly
-                  />
-                  {!editing && (
-                    <button
-                      type="button"
-                      onClick={() => updateField('barcode', generateBarcode())}
-                      className="p-2 rounded-[8px] text-[#6B7280] hover:text-[#1F1129] hover:bg-[#F3F0EB] transition-colors cursor-pointer flex-shrink-0"
-                      title="Regenerate Barcode"
-                    >
-                      <RefreshIcon />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Category & Size */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelClass}>Category *</label>
-                <div className="relative">
-                  <select
-                    className={selectClass}
-                    value={form.category}
-                    onChange={(e) => updateField('category', e.target.value)}
-                  >
-                    <option value="">Select category</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.name}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#9CA3AF]">
-                    <ChevronDownIcon />
-                  </div>
-                </div>
-              </div>
-              <div>
-                <label className={labelClass}>Size</label>
-                <div className="relative">
-                  <select
-                    className={selectClass}
-                    value={form.size}
-                    onChange={(e) => updateField('size', e.target.value)}
-                  >
-                    {SIZE_OPTIONS.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#9CA3AF]">
-                    <ChevronDownIcon />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Stock fields */}
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className={labelClass}>{isNew ? 'Opening Stock' : 'Opening Stock'}</label>
-                <input
-                  type="number"
-                  min="0"
-                  className={fieldClass}
-                  value={form.openingStock}
-                  onChange={(e) => updateField('openingStock', Number(e.target.value) || 0)}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Reorder Level</label>
-                <input
-                  type="number"
-                  min="0"
-                  className={fieldClass}
-                  value={form.reorderLevel}
-                  onChange={(e) => updateField('reorderLevel', Number(e.target.value) || 0)}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Supplier</label>
-                <div className="relative">
-                  <select
-                    className={selectClass}
-                    value={form.supplierId}
-                    onChange={(e) => updateField('supplierId', e.target.value)}
-                  >
-                    <option value="">None</option>
-                    {suppliers.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#9CA3AF]">
-                    <ChevronDownIcon />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Price fields */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelClass}>Cost Price (KSh)</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  className={fieldClass}
-                  placeholder="0.00"
-                  value={form.costPrice || ''}
-                  onChange={(e) => updateField('costPrice', Number(e.target.value) || 0)}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Sell Price (KSh)</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  className={fieldClass}
-                  placeholder="0.00"
-                  value={form.sellPrice || ''}
-                  onChange={(e) => updateField('sellPrice', Number(e.target.value) || 0)}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-between px-6 py-4 border-t border-[#F3F0EB]">
-            {editing ? (
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[8px] text-xs font-medium text-[#DC2626] hover:bg-[#DC2626]/5 transition-colors cursor-pointer"
-              >
-                <TrashIcon />
-                Delete
-              </button>
-            ) : (
-              <div />
-            )}
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 rounded-[8px] text-sm font-medium text-[#374151] hover:bg-[#F3F0EB] transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saving || !form.name.trim()}
-                className="px-5 py-2 rounded-[8px] text-sm font-semibold text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ background: '#DC2626' }}
-              >
-                {saving ? 'Saving...' : isNew ? 'Add Product' : 'Save Changes'}
-              </button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete confirmation */}
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <AlertDialogContent className="bg-white rounded-[14px]" style={{ boxShadow: '0 20px 60px rgba(31,17,41,.15)' }}>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-[#1F1129]">Delete Product</AlertDialogTitle>
-            <AlertDialogDescription className="text-[#6B7280]">
-              Are you sure you want to delete &quot;{editing?.name}&quot;? This action cannot be undone and will
-              permanently remove the product from your inventory.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel
-              className="border-[#E5E7EB] text-[#374151] hover:bg-[#F3F0EB] rounded-[8px] cursor-pointer"
-            >
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              disabled={deleting}
-              className="bg-[#DC2626] text-white hover:bg-[#B91C1C] rounded-[8px] cursor-pointer"
-            >
-              {deleting ? 'Deleting...' : 'Delete'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
-  )
-}
-
-/* ─── Quick Reorder Modal ───────────────────────────────────────────── */
-
-function ReorderModal({
-  open,
-  onClose,
-  product,
-  onConfirm,
-}: {
-  open: boolean
-  onClose: () => void
-  product: Product | null
-  onConfirm: (data: any) => Promise<void>
-}) {
-  const [saving, setSaving] = useState(false)
-
-  if (!product) return null
-
-  const suggestedQty = (product.reorderLevel || 5) * 2
-  const estimatedCost = suggestedQty * (product.costPrice || 0)
-
-  const handleConfirm = async () => {
-    setSaving(true)
-    try {
-      await onConfirm({
-        id: product.id,
-        currentStock: (product.currentStock || 0) + suggestedQty,
-        openingStock: suggestedQty,
-      })
-      onClose()
-    } catch {
-      /* handled silently */
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-      <DialogContent
-        className="bg-white sm:max-w-[400px] p-0 overflow-hidden rounded-[14px]"
-        style={{ boxShadow: '0 20px 60px rgba(31,17,41,.15)' }}
-      >
-        <div className="px-6 pt-5 pb-4 border-b border-[#F3F0EB]">
-          <DialogHeader className="p-0">
-            <DialogTitle className="text-base font-semibold text-[#1F1129]">
-              Quick Reorder
-            </DialogTitle>
-            <DialogDescription className="text-xs text-[#6B7280] mt-0.5">
-              Confirm the reorder quantity for this product.
-            </DialogDescription>
-          </DialogHeader>
-        </div>
-
-        <div className="px-6 py-5 space-y-4">
-          <div className="rounded-[10px] p-4 space-y-3" style={{ background: '#FAF7F2' }}>
-            <div>
-              <div className="text-xs text-[#6B7280]">Product</div>
-              <div className="text-sm font-semibold text-[#1F1129]">{product.name}</div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <div className="text-xs text-[#6B7280]">Current Stock</div>
-                <div className="text-sm font-medium text-[#DC2626]">{product.currentStock || 0}</div>
-              </div>
-              <div>
-                <div className="text-xs text-[#6B7280]">Reorder Level</div>
-                <div className="text-sm font-medium text-[#F59E0B]">{product.reorderLevel || 0}</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-[10px] border border-[#E5E7EB] p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-[#374151]">Suggested Quantity</span>
-              <span className="text-sm font-bold text-[#1F1129]">{suggestedQty} units</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-[#374151]">Estimated Cost</span>
-              <span className="text-sm font-bold" style={{ color: '#DC2626' }}>
-                {formatKSh(estimatedCost)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-[#F3F0EB]">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-[8px] text-sm font-medium text-[#374151] hover:bg-[#F3F0EB] transition-colors cursor-pointer"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleConfirm}
-            disabled={saving}
-            className="px-5 py-2 rounded-[8px] text-sm font-semibold text-white transition-colors cursor-pointer disabled:opacity-50"
-            style={{ background: '#10B981' }}
-          >
-            {saving ? 'Processing...' : 'Confirm Reorder'}
-          </button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-/* ─── Main Inventory Page ───────────────────────────────────────────── */
-
-export function InventoryPage() {
-  const { isManager, storeId, suppliers: storeSuppliers } = useAppStore()
-
-  // Local state
-  const [products, setProducts] = useState<Product[]>([])
-  const [categories, setCategories] = useState<Category[]>([])
-  const [suppliers, setSuppliers] = useState<Supplier[]>([])
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('')
-
-  // Modal state
-  const [modalOpen, setModalOpen] = useState(false)
-  const [receiveModalOpen, setReceiveModalOpen] = useState(false)
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
+  const [dialogOpen, setDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-  const [reorderProduct, setReorderProduct] = useState<Product | null>(null)
+  const [form, setForm] = useState<ProductForm>(emptyForm)
 
-  // Fetch data
-  const fetchProducts = useCallback(async () => {
-    try {
-      const data = await api.getProducts(storeId ? `storeId=${storeId}` : '')
-      setProducts(Array.isArray(data) ? data : data?.products || [])
-    } catch {
-      setProducts([])
-    }
-  }, [storeId])
+  /* ── Data fetching ─────────────────────────────────────────────── */
 
-  const fetchCategories = useCallback(async () => {
-    try {
-      const data = await api.getCategories()
-      setCategories(Array.isArray(data) ? data : data?.categories || [])
-    } catch {
-      setCategories([])
-    }
-  }, [])
+  const { data: products = [], isLoading } = useQuery({
+    queryKey: ['products', store?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('products')
+        .select('*, category:categories(*), supplier:suppliers(*)')
+        .eq('store_id', store!.id)
+        .order('name')
+      return (data as Product[]) || []
+    },
+    enabled: !!store?.id,
+  })
 
-  const fetchSuppliers = useCallback(async () => {
-    try {
-      const data = await api.getSuppliers()
-      const list = Array.isArray(data) ? data : data?.suppliers || []
-      setSuppliers(list)
-    } catch {
-      setSuppliers([])
-    }
-  }, [])
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories', store?.organisation_id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('organisation_id', store!.organisation_id)
+        .order('name')
+      return (data as Category[]) || []
+    },
+    enabled: !!store?.organisation_id,
+  })
 
-  useEffect(() => {
-    let mounted = true
-    const load = async () => {
-      try {
-        const [prodData, catData, supData] = await Promise.all([
-          api.getProducts(storeId ? `storeId=${storeId}` : ''),
-          api.getCategories(),
-          api.getSuppliers(),
-        ])
-        if (!mounted) return
-        setProducts(Array.isArray(prodData) ? prodData : prodData?.products || [])
-        setCategories(Array.isArray(catData) ? catData : catData?.categories || [])
-        const supList = Array.isArray(supData) ? supData : supData?.suppliers || []
-        setSuppliers(supList)
-      } catch {
-        if (mounted) {
-          setProducts([])
-          setCategories([])
-          setSuppliers([])
-        }
-      } finally {
-        if (mounted) setLoading(false)
-      }
-    }
-    load()
-    return () => { mounted = false }
-  }, [storeId])
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ['suppliers', store?.organisation_id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('suppliers')
+        .select('*')
+        .eq('organisation_id', store!.organisation_id)
+        .order('name')
+      return (data as Supplier[]) || []
+    },
+    enabled: !!store?.organisation_id,
+  })
 
-  // Use store suppliers if local fetch is empty (fallback)
-  const effectiveSuppliers = suppliers.length > 0 ? suppliers : (storeSuppliers || [])
+  /* ── Filtered list ─────────────────────────────────────────────── */
 
-  // Filter products
   const filtered = products.filter((p) => {
-    const q = search.toLowerCase()
-    const matchesSearch =
-      !q ||
-      p.name?.toLowerCase().includes(q) ||
-      p.sku?.toLowerCase().includes(q) ||
-      p.barcode?.toLowerCase().includes(q)
-    const matchesCategory = !categoryFilter || p.category === categoryFilter
+    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase())
+    const matchesCategory = categoryFilter === 'all' || p.category_id === categoryFilter
     return matchesSearch && matchesCategory
   })
 
-  // CRUD handlers
-  const handleSave = async (data: any) => {
-    if (data.id) {
-      await api.updateProduct(data)
-    } else {
-      await api.createProduct({ ...data, storeId })
-    }
-    await fetchProducts()
-  }
+  /* ── Mutations ─────────────────────────────────────────────────── */
 
-  const handleDelete = async (id: string) => {
-    await api.deleteProduct(id)
-    await fetchProducts()
-  }
+  const saveMutation = useMutation({
+    mutationFn: async (values: ProductForm) => {
+      const row = {
+        name: values.name,
+        sku: values.sku,
+        barcode: values.barcode,
+        size: values.size,
+        category_id: values.category_id || null,
+        supplier_id: values.supplier_id || null,
+        cost_price: parseFloat(values.cost_price) || 0,
+        sell_price: parseFloat(values.sell_price) || 0,
+        reorder_level: parseInt(values.reorder_level) || 0,
+        organisation_id: store!.organisation_id,
+        store_id: store!.id,
+        updated_at: new Date().toISOString(),
+      }
 
-  const handleReorder = async (data: any) => {
-    await api.updateProduct(data)
-    await fetchProducts()
-  }
+      if (editingProduct) {
+        const { error } = await supabase
+          .from('products')
+          .update(row)
+          .eq('id', editingProduct.id)
+        if (error) throw error
+      } else {
+        const openingStock = parseInt(values.opening_stock) || 0
+        const { data, error } = await supabase
+          .from('products')
+          .insert({ ...row, opening_stock: openingStock, current_stock: openingStock })
+          .select()
+          .single()
+        if (error) throw error
 
-  const openAddModal = () => {
+        if (openingStock > 0) {
+          await supabase.from('stock_movements').insert({
+            product_id: data.id,
+            store_id: store!.id,
+            organisation_id: store!.organisation_id,
+            movement_type: 'opening',
+            quantity: openingStock,
+            reference_id: null,
+            notes: 'Opening stock',
+            created_by: appUser!.id,
+          })
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      handleCloseDialog()
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('products').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+
+  /* ── Dialog helpers ────────────────────────────────────────────── */
+
+  const handleOpenCreate = () => {
     setEditingProduct(null)
-    setModalOpen(true)
+    setForm(emptyForm)
+    setDialogOpen(true)
   }
 
-  const openEditModal = (product: Product) => {
+  const handleOpenEdit = (product: Product) => {
     setEditingProduct(product)
-    setModalOpen(true)
+    setForm({
+      name: product.name,
+      sku: product.sku,
+      barcode: product.barcode,
+      size: product.size,
+      category_id: product.category_id || '',
+      supplier_id: product.supplier_id || '',
+      cost_price: String(product.cost_price),
+      sell_price: String(product.sell_price),
+      reorder_level: String(product.reorder_level),
+      opening_stock: '0',
+    })
+    setDialogOpen(true)
   }
 
-  // Stock status helpers
-  const getStockColor = (current: number, reorder: number) => {
-    if (current <= 0) return '#DC2626'
-    if (current <= (reorder || 0)) return '#F59E0B'
-    return '#10B981'
+  const handleCloseDialog = () => {
+    setDialogOpen(false)
+    setEditingProduct(null)
+    setForm(emptyForm)
   }
 
-  const getStockLabel = (current: number, reorder: number) => {
-    if (current <= 0) return 'Out of stock'
-    if (current <= (reorder || 0)) return 'Low stock'
-    return 'In stock'
+  const handleDelete = (product: Product) => {
+    if (window.confirm(`Delete "${product.name}"? This action cannot be undone.`)) {
+      deleteMutation.mutate(product.id)
+    }
   }
 
-  /* ─── Render ─────────────────────────────────────────────────────── */
+  const handleSave = () => {
+    if (!form.name.trim()) return
+    saveMutation.mutate(form)
+  }
 
-  return (
-    <div className="h-full overflow-y-auto" style={{ background: '#FAF7F2' }}>
-      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-[#1F1129]">Inventory</h1>
-            <span
-              className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-semibold text-white"
-              style={{ background: '#DC2626' }}
-            >
-              {filtered.length}
-            </span>
-          </div>
-          {isManager && (
-            <div className="flex gap-2 self-start sm:self-auto">
-              <button
-                onClick={() => setReceiveModalOpen(true)}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-sm font-semibold text-[#065F46] border border-[#D1FAE5] bg-[#ECFDF5] transition-colors cursor-pointer hover:bg-[#D1FAE5] self-start sm:self-auto"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path d="M3 3a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V3zm0 6a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V9zm0 6a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2z"/></svg>
-                Receive Stock
-              </button>
-              <button
-                onClick={openAddModal}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-sm font-semibold text-white transition-colors cursor-pointer hover:opacity-90 self-start sm:self-auto"
-                style={{ background: '#DC2626' }}
-              >
-                <PlusIcon />
-                Add Product
-              </button>
-            </div>
-          )}
+  /* ── Loading skeleton ──────────────────────────────────────────── */
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4 p-4 md:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-10 w-40" />
         </div>
-
-        {/* Search & Filter Bar */}
-        <div
-          className="bg-white rounded-[14px] p-4 mb-5 flex flex-col sm:flex-row gap-3"
-          style={{ boxShadow: '0 4px 12px rgba(31,17,41,.06)' }}
-        >
-          <div className="relative flex-1">
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]">
-              <SearchIcon />
-            </div>
-            <input
-              type="text"
-              placeholder="Search by name, SKU, or barcode..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full h-9 pl-9 pr-3 text-sm rounded-[8px] border border-[#E5E7EB] bg-[#FAF7F2] text-[#1F1129] placeholder:text-[#9CA3AF] outline-none transition-colors focus:border-[#DC2626]/40 focus:ring-2 focus:ring-[#DC2626]/10"
-            />
-          </div>
-          <div className="relative sm:w-48">
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="w-full h-9 px-3 text-sm rounded-[8px] border border-[#E5E7EB] bg-[#FAF7F2] text-[#1F1129] outline-none transition-colors appearance-none cursor-pointer focus:border-[#DC2626]/40 focus:ring-2 focus:ring-[#DC2626]/10"
-            >
-              <option value="">All Categories</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.name}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#9CA3AF]">
-              <ChevronDownIcon />
-            </div>
-          </div>
+        <div className="flex gap-3">
+          <Skeleton className="h-10 flex-1" />
+          <Skeleton className="h-10 w-44" />
         </div>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-16 w-full" />
+        ))}
+      </div>
+    )
+  }
 
-        {/* Content */}
-        {loading ? (
-          <TableSkeleton />
-        ) : filtered.length === 0 ? (
-          <div
-            className="bg-white rounded-[14px]"
-            style={{ boxShadow: '0 4px 12px rgba(31,17,41,.06)' }}
-          >
-            <EmptyState isManager={isManager} onAdd={openAddModal} />
-          </div>
-        ) : (
-          <>
-            {/* Desktop Table View */}
-            <div
-              className="hidden lg:block bg-white rounded-[14px] overflow-hidden"
-              style={{ boxShadow: '0 4px 12px rgba(31,17,41,.06)' }}
-            >
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-[#F3F0EB]">
-                      <th className="text-left px-5 py-3.5 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
-                        Name
-                      </th>
-                      <th className="text-left px-4 py-3.5 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
-                        SKU
-                      </th>
-                      <th className="text-left px-4 py-3.5 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
-                        Category
-                      </th>
-                      <th className="text-left px-4 py-3.5 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
-                        Size
-                      </th>
-                      <th className="text-left px-4 py-3.5 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
-                        Stock
-                      </th>
-                      <th className="text-right px-4 py-3.5 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
-                        Cost
-                      </th>
-                      <th className="text-right px-4 py-3.5 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
-                        Sell
-                      </th>
-                      <th className="text-right px-4 py-3.5 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
-                        Margin
-                      </th>
-                      <th className="text-right px-5 py-3.5 text-xs font-semibold text-[#6B7280] uppercase tracking-wider">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#F3F0EB]">
-                    {filtered.map((product) => {
-                      const stockColor = getStockColor(
-                        product.currentStock || 0,
-                        product.reorderLevel || 0,
-                      )
-                      const catColor = getCategoryColor(product.category || '')
-                      const margin = getMargin(
-                        product.costPrice || 0,
-                        product.sellPrice || 0,
-                      )
-                      const isLowStock =
-                        product.currentStock > 0 &&
-                        product.currentStock <= (product.reorderLevel || 0)
+  /* ── Render: Mobile cards ──────────────────────────────────────── */
 
-                      return (
-                        <tr
-                          key={product.id}
-                          className="hover:bg-[#FAF7F2]/60 transition-colors"
-                        >
-                          <td className="px-5 py-3.5">
-                            <div className="font-medium text-[#1F1129]">{product.name}</div>
-                          </td>
-                          <td className="px-4 py-3.5 text-[#6B7280] font-mono text-xs">
-                            {product.sku}
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <span
-                              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold text-white"
-                              style={{ background: catColor }}
-                            >
-                              {product.category || 'Other'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3.5 text-[#374151]">{product.size}</td>
-                          <td className="px-4 py-3.5">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-[#1F1129]">
-                                {product.currentStock || 0}
-                              </span>
-                              <span
-                                className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold"
-                                style={{
-                                  color: stockColor,
-                                  background: `${stockColor}12`,
-                                }}
-                              >
-                                {getStockLabel(product.currentStock || 0, product.reorderLevel || 0)}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3.5 text-right text-[#374151]">
-                            {formatKSh(product.costPrice || 0)}
-                          </td>
-                          <td className="px-4 py-3.5 text-right text-[#374151]">
-                            {formatKSh(product.sellPrice || 0)}
-                          </td>
-                          <td className="px-4 py-3.5 text-right font-semibold text-[#1F1129]">
-                            {margin}
-                          </td>
-                          <td className="px-5 py-3.5">
-                            <div className="flex items-center justify-end gap-1">
-                              {isManager && isLowStock && (
-                                <button
-                                  onClick={() => setReorderProduct(product)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[6px] text-[11px] font-semibold text-[#059669] hover:bg-[#10B981]/8 transition-colors cursor-pointer"
-                                  title="Quick reorder"
-                                >
-                                  <RefreshIcon />
-                                  Reorder
-                                </button>
-                              )}
-                              {isManager && (
-                                <button
-                                  onClick={() => openEditModal(product)}
-                                  className="p-1.5 rounded-[6px] text-[#6B7280] hover:text-[#1F1129] hover:bg-[#F3F0EB] transition-colors cursor-pointer"
-                                  title="Edit product"
-                                >
-                                  <EditIcon />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Mobile Card View */}
-            <div className="lg:hidden space-y-3">
-              {filtered.map((product) => {
-                const stockColor = getStockColor(
-                  product.currentStock || 0,
-                  product.reorderLevel || 0,
-                )
-                const catColor = getCategoryColor(product.category || '')
-                const margin = getMargin(
-                  product.costPrice || 0,
-                  product.sellPrice || 0,
-                )
-                const isLowStock =
-                  product.currentStock > 0 &&
-                  product.currentStock <= (product.reorderLevel || 0)
-
-                return (
-                  <div
-                    key={product.id}
-                    className="bg-white rounded-[14px] p-4"
-                    style={{ boxShadow: '0 4px 12px rgba(31,17,41,.06)' }}
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="font-semibold text-[#1F1129] text-sm truncate">
-                          {product.name}
-                        </div>
-                        <div className="text-xs text-[#9CA3AF] font-mono mt-0.5">
-                          {product.sku}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
-                        {isManager && (
-                          <button
-                            onClick={() => openEditModal(product)}
-                            className="p-1.5 rounded-[6px] text-[#6B7280] hover:text-[#1F1129] hover:bg-[#F3F0EB] transition-colors cursor-pointer"
-                          >
-                            <EditIcon />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 mb-3 flex-wrap">
-                      <span
-                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold text-white"
-                        style={{ background: catColor }}
-                      >
-                        {product.category || 'Other'}
-                      </span>
-                      <span className="text-xs text-[#6B7280]">{product.size}</span>
-                      <span
-                        className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ml-auto"
+  const renderMobileCards = () => (
+    <div className="grid gap-3">
+      {filtered.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+          <Package className="mb-3 h-12 w-12 opacity-40" />
+          <p className="text-sm font-medium">No products found</p>
+          <p className="text-xs">Try adjusting your search or filter</p>
+        </div>
+      )}
+      {filtered.map((product) => {
+        const status = stockStatus(product.current_stock, product.reorder_level)
+        return (
+          <Card key={product.id} className="overflow-hidden border border-border/60 shadow-sm transition-shadow hover:shadow-md">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-foreground">{product.name}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    {product.category && (
+                      <Badge
+                        variant="outline"
+                        className="text-xs"
                         style={{
-                          color: stockColor,
-                          background: `${stockColor}12`,
+                          borderColor: product.category.colour || ACCENT,
+                          color: product.category.colour || ACCENT,
+                          backgroundColor: `${product.category.colour || ACCENT}14`,
                         }}
                       >
-                        {product.currentStock || 0} in stock
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2 text-center py-2.5 border-t border-[#F3F0EB]">
-                      <div>
-                        <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide mb-0.5">
-                          Cost
-                        </div>
-                        <div className="text-xs font-medium text-[#374151]">
-                          {formatKSh(product.costPrice || 0)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide mb-0.5">
-                          Sell
-                        </div>
-                        <div className="text-xs font-medium text-[#374151]">
-                          {formatKSh(product.sellPrice || 0)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide mb-0.5">
-                          Margin
-                        </div>
-                        <div className="text-xs font-bold text-[#1F1129]">{margin}</div>
-                      </div>
-                    </div>
-
-                    {isManager && isLowStock && (
-                      <div className="mt-3 pt-3 border-t border-[#F3F0EB]">
-                        <button
-                          onClick={() => setReorderProduct(product)}
-                          className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-[8px] text-xs font-semibold text-[#059669] border border-[#10B981]/20 hover:bg-[#10B981]/5 transition-colors cursor-pointer"
-                        >
-                          <RefreshIcon />
-                          Reorder Stock
-                        </button>
-                      </div>
+                        {product.category.name}
+                      </Badge>
                     )}
+                    <span className="text-xs text-muted-foreground">{product.size}</span>
                   </div>
-                )
-              })}
-            </div>
-          </>
-        )}
-      </div>
+                </div>
+                <Badge variant="outline" className={`shrink-0 text-[10px] font-medium ${status.className}`}>
+                  {status.label}
+                </Badge>
+              </div>
 
-      {/* Product Add/Edit Modal */}
-      {isManager && (
-        <ProductModal
-          open={modalOpen}
-          onClose={() => setModalOpen(false)}
-          editing={editingProduct}
-          categories={categories}
-          suppliers={effectiveSuppliers}
-          onSave={handleSave}
-          onDelete={handleDelete}
-        />
-      )}
+              <div className="mt-3 grid grid-cols-3 gap-3 border-t border-border/50 pt-3">
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Cost</p>
+                  <p className="text-xs font-semibold">{formatKES(product.cost_price)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Sell</p>
+                  <p className="text-xs font-semibold">{formatKES(product.sell_price)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Stock</p>
+                  <p className="text-xs font-bold">{product.current_stock} units</p>
+                </div>
+              </div>
 
-      {/* Quick Reorder Modal */}
-      {isManager && (
-        <ReorderModal
-          open={!!reorderProduct}
-          onClose={() => setReorderProduct(null)}
-          product={reorderProduct}
-          onConfirm={handleReorder}
-        />
-      )}
-
-      {/* Receive Stock Modal */}
-      <ReceiveStockModal
-        open={receiveModalOpen}
-        onClose={() => setReceiveModalOpen(false)}
-        products={products}
-        onReceived={() => { fetchProducts(); setReceiveModalOpen(false) }}
-      />
+              <div className="mt-3 flex items-center justify-end gap-2 border-t border-border/50 pt-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-3 text-xs"
+                  onClick={() => handleOpenEdit(product)}
+                >
+                  <Edit className="mr-1.5 h-3.5 w-3.5" />
+                  Edit
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-3 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+                  onClick={() => handleDelete(product)}
+                >
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  Delete
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )
+      })}
     </div>
   )
-}
 
-/* ─── Receive Stock Modal ─── */
-function ReceiveStockModal({ open, onClose, products, onReceived }: {
-  open: boolean
-  onClose: () => void
-  products: Product[]
-  onReceived: () => void
-}) {
-  const [receiveItems, setReceiveItems] = useState<{ productId: string; qty: number; costPrice: number }[]>([])
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const [search, setSearch] = useState('')
-  const storeId = useAppStore(s => s.storeId)
+  /* ── Render: Desktop table ─────────────────────────────────────── */
 
-  const addProduct = (product: Product) => {
-    if (receiveItems.find(i => i.productId === product.id)) return
-    setReceiveItems([...receiveItems, { productId: product.id, qty: 1, costPrice: product.costPrice || 0 }])
-  }
-
-  const removeProduct = (productId: string) => {
-    setReceiveItems(receiveItems.filter(i => i.productId !== productId))
-  }
-
-  const updateQty = (productId: string, qty: number) => {
-    setReceiveItems(receiveItems.map(i => i.productId === productId ? { ...i, qty: Math.max(0, qty) } : i))
-  }
-
-  const updateCost = (productId: string, costPrice: number) => {
-    setReceiveItems(receiveItems.map(i => i.productId === productId ? { ...i, costPrice: Math.max(0, costPrice) } : i))
-  }
-
-  const handleReceive = async () => {
-    if (receiveItems.length === 0) return
-    setSaving(true)
-    setError('')
-    try {
-      await api.receiveStock({ storeId, items: receiveItems })
-      onReceived()
-    } catch (err: any) {
-      setError(err.message || 'Failed to receive stock')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  if (!open) return null
-
-  const availableProducts = products.filter(p =>
-    !receiveItems.find(i => i.productId === p.id) &&
-    (p.name + p.sku + p.barcode).toLowerCase().includes(search.toLowerCase())
+  const renderDesktopTable = () => (
+    <Card className="border-border/60 shadow-sm">
+      <CardContent className="p-0">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-border/60 hover:bg-transparent">
+                <TableHead className="pl-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Name</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Category</TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Size</TableHead>
+                <TableHead className="text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cost Price</TableHead>
+                <TableHead className="text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sell Price</TableHead>
+                <TableHead className="text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Current Stock</TableHead>
+                <TableHead className="text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</TableHead>
+                <TableHead className="pr-4 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-48 text-center">
+                    <div className="flex flex-col items-center text-muted-foreground">
+                      <Package className="mb-3 h-12 w-12 opacity-40" />
+                      <p className="text-sm font-medium">No products found</p>
+                      <p className="text-xs">Try adjusting your search or filter</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )}
+              {filtered.map((product) => {
+                const status = stockStatus(product.current_stock, product.reorder_level)
+                return (
+                  <TableRow key={product.id} className="border-border/40 transition-colors hover:bg-muted/30">
+                    <TableCell className="pl-4">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">{product.name}</span>
+                        <span className="text-[11px] text-muted-foreground">{product.sku || '—'}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {product.category ? (
+                        <Badge
+                          variant="outline"
+                          className="text-xs font-medium"
+                          style={{
+                            borderColor: product.category.colour || ACCENT,
+                            color: product.category.colour || ACCENT,
+                            backgroundColor: `${product.category.colour || ACCENT}14`,
+                          }}
+                        >
+                          {product.category.name}
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{product.size}</TableCell>
+                    <TableCell className="text-right text-sm tabular-nums">{formatKES(product.cost_price)}</TableCell>
+                    <TableCell className="text-right text-sm font-medium tabular-nums">{formatKES(product.sell_price)}</TableCell>
+                    <TableCell className="text-center text-sm font-semibold tabular-nums">{product.current_stock}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="outline" className={`text-[11px] font-medium ${status.className}`}>
+                        {status.label}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="pr-4 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                          onClick={() => handleOpenEdit(product)}
+                        >
+                          <Edit className="h-4 w-4" />
+                          <span className="sr-only">Edit {product.name}</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-red-600"
+                          onClick={() => handleDelete(product)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          <span className="sr-only">Delete {product.name}</span>
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
   )
 
+  /* ── Main render ───────────────────────────────────────────────── */
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-[14px] shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col" style={{ boxShadow: '0 20px 60px rgba(31,17,41,.18)' }}>
-        <div className="sticky top-0 bg-white border-b border-[#E8E0F0] px-6 py-4 flex items-center justify-between rounded-t-[14px] z-10">
-          <div>
-            <h3 className="text-base font-bold" style={{ color: '#1F1129' }}>Receive Stock</h3>
-            <p className="text-xs mt-0.5" style={{ color: '#8B7FA0' }}>Add stock received from suppliers</p>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#F5F0EB] transition cursor-pointer" aria-label="Close">
-            <svg className="w-5 h-5" viewBox="0 0 20 20" fill="#8B7FA0"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-          </button>
+    <div className="space-y-5 p-4 md:p-6">
+      {/* Page header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Inventory</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {products.length} product{products.length !== 1 ? 's' : ''} &middot;{' '}
+            {filtered.length} shown
+          </p>
         </div>
+        <Button
+          onClick={handleOpenCreate}
+          className="shrink-0 shadow-md transition-all hover:shadow-lg"
+          style={{ backgroundColor: ACCENT, borderColor: ACCENT }}
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Add Product
+        </Button>
+      </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {error && (
-            <div className="px-4 py-2.5 rounded-xl text-sm font-medium" style={{ backgroundColor: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' }}>{error}</div>
-          )}
-
-          {/* Search products */}
-          <div className="relative">
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]">
-              <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" /></svg>
-            </div>
-            <input
-              type="text"
-              placeholder="Search products to add..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full h-9 pl-9 pr-3 text-sm rounded-[8px] border border-[#E8E0F0] bg-[#FAF7F2] text-[#1F1129] placeholder:text-[#9CA3AF] outline-none focus:border-[#DC2626]/40 focus:ring-2 focus:ring-[#DC2626]/10"
-            />
-          </div>
-
-          {search && (
-            <div className="max-h-40 overflow-y-auto border border-[#E8E0F0] rounded-lg divide-y divide-[#F5F0EB]">
-              {availableProducts.slice(0, 10).map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => { addProduct(p); setSearch('') }}
-                  className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#FAF7F2] transition cursor-pointer"
-                >
-                  <div>
-                    <div className="text-sm font-medium text-[#1F1129]">{p.name}</div>
-                    <div className="text-xs text-[#8B7FA0]">{p.category} · {p.size} · Current: {p.currentStock}</div>
-                  </div>
-                  <svg className="w-4 h-4 text-[#8B7FA0]" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" /></svg>
-                </button>
+      {/* Search & filter bar */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search products by name…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-10 pl-10"
+          />
+        </div>
+        <div className="relative w-full sm:w-52">
+          <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="h-10 pl-10">
+              <SelectValue placeholder="All Categories" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map((cat) => (
+                <SelectItem key={cat.id} value={cat.id}>
+                  {cat.name}
+                </SelectItem>
               ))}
-              {availableProducts.length === 0 && (
-                <div className="px-3 py-3 text-sm text-[#8B7FA0] text-center">No products found</div>
-              )}
-            </div>
-          )}
-
-          {/* Items to receive */}
-          {receiveItems.length > 0 && (
-            <div className="border border-[#E8E0F0] rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-[#FAF7F2]">
-                    <th className="text-left py-2 px-3 text-xs font-semibold text-[#8B7FA0]">Product</th>
-                    <th className="text-right py-2 px-3 text-xs font-semibold text-[#8B7FA0] w-24">Qty</th>
-                    <th className="text-right py-2 px-3 text-xs font-semibold text-[#8B7FA0] w-28">Unit Cost</th>
-                    <th className="w-10"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {receiveItems.map(item => {
-                    const product = products.find(p => p.id === item.productId)
-                    return (
-                      <tr key={item.productId} className="border-t border-[#F5F0EB]">
-                        <td className="py-2 px-3">
-                          <div className="text-sm font-medium text-[#1F1129]">{product?.name || 'Unknown'}</div>
-                          <div className="text-xs text-[#8B7FA0]">Current: {product?.currentStock || 0}</div>
-                        </td>
-                        <td className="py-2 px-3">
-                          <input
-                            type="number"
-                            min="1"
-                            value={item.qty}
-                            onChange={(e) => updateQty(item.productId, parseInt(e.target.value) || 0)}
-                            className="w-full text-right px-2 py-1 rounded-lg border border-[#E8E0F0] text-sm outline-none focus:border-[#DC2626]/40"
-                          />
-                        </td>
-                        <td className="py-2 px-3">
-                          <input
-                            type="number"
-                            min="0"
-                            value={item.costPrice || ''}
-                            onChange={(e) => updateCost(item.productId, parseFloat(e.target.value) || 0)}
-                            className="w-full text-right px-2 py-1 rounded-lg border border-[#E8E0F0] text-sm outline-none focus:border-[#DC2626]/40"
-                            placeholder="0"
-                          />
-                        </td>
-                        <td className="py-2 px-1">
-                          <button onClick={() => removeProduct(item.productId)} className="p-1 rounded hover:bg-[#FEF2F2] transition cursor-pointer">
-                            <svg className="w-4 h-4 text-[#DC2626]" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-              <div className="px-3 py-2 bg-[#FAF7F2] text-xs text-[#8B7FA0]">
-                {receiveItems.reduce((s, i) => s + i.qty, 0)} total units to add
-              </div>
-            </div>
-          )}
-
-          {receiveItems.length === 0 && (
-            <div className="text-center py-10">
-              <svg className="w-12 h-12 mx-auto mb-3 text-[#D1D5DB]" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1 0-2 .9-2 2v3.01c0 .72.43 1.34 1 1.69V20c0 1.1 1.1 2 2 2h14c.9 0 2-.9 2-2V8.7c.57-.35 1-.97 1-1.69V5c0-1.1-1-3-2-3zm-5 12H9v-2h6v2zm5-7H4V5h16v2z"/></svg>
-              <p className="text-sm text-[#8B7FA0]">Search and add products to receive stock</p>
-            </div>
-          )}
-        </div>
-
-        <div className="px-6 py-4 border-t border-[#E8E0F0] flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-semibold border border-[#E8E0F0] text-[#6B5E7A] hover:bg-[#FAF7F2] transition cursor-pointer">Cancel</button>
-          <button
-            onClick={handleReceive}
-            disabled={saving || receiveItems.length === 0}
-            className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60 cursor-pointer"
-            style={{ backgroundColor: '#059669' }}
-          >
-            {saving ? 'Receiving...' : `Receive ${receiveItems.length} Items`}
-          </button>
+            </SelectContent>
+          </Select>
         </div>
       </div>
+
+      {/* Products list */}
+      {isMobile ? renderMobileCards() : renderDesktopTable()}
+
+      {/* ── Add / Edit dialog ─────────────────────────────────────── */}
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) handleCloseDialog() }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              {editingProduct ? 'Edit Product' : 'Add New Product'}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            {/* Name */}
+            <div className="grid gap-2">
+              <Label htmlFor="product-name" className="text-xs font-medium text-muted-foreground">
+                Product Name <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="product-name"
+                placeholder="e.g. Hennessy VS Cognac"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              />
+            </div>
+
+            {/* SKU & Barcode row */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="product-sku" className="text-xs font-medium text-muted-foreground">
+                  SKU
+                </Label>
+                <Input
+                  id="product-sku"
+                  placeholder="SKU-001"
+                  value={form.sku}
+                  onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="product-barcode" className="text-xs font-medium text-muted-foreground">
+                  Barcode
+                </Label>
+                <Input
+                  id="product-barcode"
+                  placeholder="6001234567890"
+                  value={form.barcode}
+                  onChange={(e) => setForm((f) => ({ ...f, barcode: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            {/* Size & Category row */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label className="text-xs font-medium text-muted-foreground">Size</Label>
+                <Select value={form.size} onValueChange={(v) => setForm((f) => ({ ...f, size: v }))}>
+                  <SelectTrigger className="h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SIZE_OPTIONS.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label className="text-xs font-medium text-muted-foreground">Category</Label>
+                <Select value={form.category_id} onValueChange={(v) => setForm((f) => ({ ...f, category_id: v }))}>
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Supplier */}
+            <div className="grid gap-2">
+              <Label className="text-xs font-medium text-muted-foreground">Supplier</Label>
+              <Select value={form.supplier_id} onValueChange={(v) => setForm((f) => ({ ...f, supplier_id: v }))}>
+                <SelectTrigger className="h-10">
+                  <SelectValue placeholder="Select supplier" />
+                </SelectTrigger>
+                <SelectContent>
+                  {suppliers.map((sup) => (
+                    <SelectItem key={sup.id} value={sup.id}>
+                      {sup.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Cost & Sell price row */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="cost-price" className="text-xs font-medium text-muted-foreground">
+                  Cost Price (KES)
+                </Label>
+                <Input
+                  id="cost-price"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="0"
+                  value={form.cost_price}
+                  onChange={(e) => setForm((f) => ({ ...f, cost_price: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="sell-price" className="text-xs font-medium text-muted-foreground">
+                  Sell Price (KES)
+                </Label>
+                <Input
+                  id="sell-price"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="0"
+                  value={form.sell_price}
+                  onChange={(e) => setForm((f) => ({ ...f, sell_price: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            {/* Reorder Level & Opening Stock */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="reorder-level" className="text-xs font-medium text-muted-foreground">
+                  Reorder Level
+                </Label>
+                <Input
+                  id="reorder-level"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="5"
+                  value={form.reorder_level}
+                  onChange={(e) => setForm((f) => ({ ...f, reorder_level: e.target.value }))}
+                />
+              </div>
+              {!editingProduct && (
+                <div className="grid gap-2">
+                  <Label htmlFor="opening-stock" className="text-xs font-medium text-muted-foreground">
+                    Opening Stock
+                  </Label>
+                  <Input
+                    id="opening-stock"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="0"
+                    value={form.opening_stock}
+                    onChange={(e) => setForm((f) => ({ ...f, opening_stock: e.target.value }))}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="flex-row gap-3 pt-2 sm:justify-end">
+            <Button
+              variant="outline"
+              className="flex-1 sm:flex-none"
+              onClick={handleCloseDialog}
+              disabled={saveMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="flex-1 sm:flex-none"
+              style={{ backgroundColor: ACCENT, borderColor: ACCENT }}
+              onClick={handleSave}
+              disabled={saveMutation.isPending || !form.name.trim()}
+            >
+              {saveMutation.isPending ? 'Saving…' : editingProduct ? 'Update Product' : 'Add Product'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
