@@ -1,42 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
 import { withAuth } from '@/lib/middleware'
+import { supabaseServer } from '@/lib/supabase-server'
 
 export async function GET(request: NextRequest) {
-  try {
-    const auth = await withAuth(request)
-    if (auth.error) return auth.error
+  const auth = await withAuth(request)
+  if (auth.error) return auth.error
 
-    // Only super_admin can access
-    if (auth.role !== 'super_admin') {
-      return NextResponse.json({ error: 'Super admin only' }, { status: 403 })
-    }
-
-    const totalOrgs = await db.organisation.count()
-    const activeOrgs = await db.organisation.count({ where: { isActive: true } })
-    const trialOrgs = await db.organisation.count({ where: { plan: 'trial' } })
-    const totalUsers = await db.user.count()
-    const totalProducts = await db.product.count()
-    const totalSales = await db.sale.count()
-
-    // Recent orgs
-    const recentOrgs = await db.organisation.findMany({
-      select: { id: true, name: true, plan: true, isActive: true, createdAt: true, _count: { select: { users: true, products: true } } },
-      orderBy: { createdAt: 'desc' }, take: 20
-    })
-
-    return NextResponse.json({
-      summary: {
-        totalOrganisations: totalOrgs,
-        activeSubscriptions: activeOrgs,
-        trialAccounts: trialOrgs,
-        totalUsers,
-        totalProducts,
-        totalSales,
-      },
-      organisations: recentOrgs,
-    })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Server error' }, { status: 500 })
+  if (auth.role !== 'super_admin') {
+    return NextResponse.json({ error: 'Super admin only' }, { status: 403 })
   }
+
+  const { count: totalOrgs } = await supabaseServer
+    .from('organisations')
+    .select('*', { count: 'exact', head: true })
+
+  const { count: activeOrgs } = await supabaseServer
+    .from('organisations')
+    .select('*', { count: 'exact', head: true })
+    .eq('is_active', true)
+
+  const { count: trialOrgs } = await supabaseServer
+    .from('organisations')
+    .select('*', { count: 'exact', head: true })
+    .eq('plan', 'trial')
+
+  const { count: totalUsers } = await supabaseServer
+    .from('users')
+    .select('*', { count: 'exact', head: true })
+
+  const { count: totalProducts } = await supabaseServer
+    .from('products')
+    .select('*', { count: 'exact', head: true })
+
+  const { count: totalSales } = await supabaseServer
+    .from('sales')
+    .select('*', { count: 'exact', head: true })
+
+  // Recent orgs
+  const { data: recentOrgs } = await supabaseServer
+    .from('organisations')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(20)
+
+  return NextResponse.json({
+    summary: {
+      totalOrganisations: totalOrgs || 0,
+      activeSubscriptions: activeOrgs || 0,
+      trialAccounts: trialOrgs || 0,
+      totalUsers: totalUsers || 0,
+      totalProducts: totalProducts || 0,
+      totalSales: totalSales || 0,
+    },
+    organisations: recentOrgs || [],
+  })
 }

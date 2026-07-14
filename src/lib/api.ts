@@ -1,14 +1,38 @@
+import { supabase } from '@/lib/supabase'
+
 const BASE = ''
 
+/**
+ * Central API request helper.
+ * Automatically attaches the Supabase access token to every request
+ * so the backend can verify the user's identity and organisation.
+ */
 async function request(url: string, options: RequestInit = {}) {
+  // Get the current Supabase session to extract the access token
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string> || {}),
+  }
+
+  // Attach the token if the user is logged in
+  // Skip for public endpoints like register
+  if (token && !url.startsWith('/api/auth/register')) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
   const res = await fetch(`${BASE}${url}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options
+    ...options,
+    headers,
   })
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Request failed' }))
     throw new Error(err.error || `HTTP ${res.status}`)
   }
+
   return res.json()
 }
 

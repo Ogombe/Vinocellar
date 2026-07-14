@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { withAuth, logAndRespond } from '@/lib/middleware'
+import { withAuth } from '@/lib/middleware'
+import { supabaseServer } from '@/lib/supabase-server'
 import { auditLog } from '@/lib/helpers'
 
 export async function GET(request: NextRequest) {
@@ -15,19 +15,47 @@ export async function GET(request: NextRequest) {
 
   if (!storeId) return NextResponse.json({ error: 'No store' }, { status: 400 })
 
-  const where: any = { organisationId: auth.orgId, storeId }
-  if (from || to) {
-    where.createdAt = {}
-    if (from) where.createdAt.gte = new Date(from)
-    if (to) where.createdAt.lte = new Date(to + 'T23:59:59')
+  let query = supabaseServer
+    .from('sales')
+    .select('*, sale_items(*), staff:users!staff_id(name)')
+    .eq('organisation_id', auth.orgId)
+    .eq('store_id', storeId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (from) {
+    query = query.gte('created_at', from + 'T00:00:00')
+  }
+  if (to) {
+    query = query.lte('created_at', to + 'T23:59:59')
   }
 
-  const sales = await db.sale.findMany({
-    where, include: { items: true, staff: { select: { name: true } } },
-    orderBy: { createdAt: 'desc' }, take: limit
-  })
+  const { data: sales, error } = await query
 
-  return NextResponse.json(sales)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Map to camelCase for front-end
+  const mapped = (sales || []).map((s: any) => ({
+    id: s.id,
+    total: s.total,
+    paymentMethod: s.payment_method,
+    organisationId: s.organisation_id,
+    storeId: s.store_id,
+    staffId: s.staff_id,
+    createdAt: s.created_at,
+    staff: s.staff ? { name: s.staff.name } : null,
+    items: (s.sale_items || []).map((si: any) => ({
+      id: si.id,
+      name: si.name,
+      qty: si.qty,
+      price: si.price,
+      cost: si.cost,
+      saleId: si.sale_id,
+      productId: si.product_id,
+    })),
+  }))
+
+  return NextResponse.json(mapped)
 }
 
 export async function POST(request: NextRequest) {
@@ -37,40 +65,60 @@ export async function POST(request: NextRequest) {
   const body = await request.json()
   const { items, paymentMethod, storeId } = body
   const sid = storeId || auth.storeId
+
   if (!sid) return NextResponse.json({ error: 'No store' }, { status: 400 })
   if (!items || items.length === 0) return NextResponse.json({ error: 'No items' }, { status: 400 })
 
-  const total = items.reduce((s: number, i: any) => s + (i.price * i.qty), 0)
-
-  // Deduct stock
-  for (const item of items) {
-    const product = await db.product.findFirst({ where: { id: item.productId, organisationId: auth.orgId, storeId: sid } })
-    if (!product) return NextResponse.json({ error: `Product ${item.name} not found` }, { status: 400 })
-    if (product.currentStock < item.qty) return NextResponse.json({ error: `Insufficient stock for ${item.name}` }, { status: 400 })
-  }
-
-  // Use transaction for atomic stock deduction
-  const sale = await db.$transaction(async (tx) => {
-    const newSale = await tx.sale.create({
-      data: {
-        total, paymentMethod: paymentMethod || 'cash',
-        organisationId: auth.orgId, storeId: sid, staffId: auth.userId,
-        items: { create: items.map((i: any) => ({ name: i.name, qty: i.qty, price: i.price, cost: i.cost, productId: i.productId })) }
-      },
-      include: { items: true, staff: { select: { name: true } } }
-    })
-
-    for (const item of items) {
-      await tx.product.update({
-        where: { id: item.productId },
-        data: { currentStock: { decrement: item.qty } }
-      })
-    }
-
-    return newSale
+  // Call the complete_sale() RPC function in Supabase
+  // This atomically: creates the sale, creates sale items, deducts stock, logs stock movements
+  const { data: saleId, error } = await supabaseServer.rpc('complete_sale', {
+    p_store_id: sid,
+    p_staff_id: auth.userId,
+    p_payment_method: paymentMethod || 'cash',
+    p_items: items.map((i: any) => ({
+      productId: i.productId,
+      name: i.name,
+      qty: i.qty,
+      price: i.price,
+      cost: i.cost || 0,
+    })),
   })
 
-  await auditLog({ action: 'sale.created', entity: 'Sale', entityId: sale.id, afterValue: { total, items: sale.items.length, paymentMethod }, userId: auth.userId, organisationId: auth.orgId })
+  if (error) {
+    // Check if it's a stock issue
+    if (error.message?.includes('stock') || error.message?.includes('insufficient')) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+    return NextResponse.json({ error: error.message || 'Sale failed' }, { status: 500 })
+  }
 
-  return NextResponse.json(sale, { status: 201 })
+  // Fetch the completed sale with items for the response
+  const { data: sale } = await supabaseServer
+    .from('sales')
+    .select('*, sale_items(*)')
+    .eq('id', saleId)
+    .single()
+
+  const total = items.reduce((s: number, i: any) => s + (i.price * i.qty), 0)
+
+  await auditLog({
+    action: 'sale.created', entity: 'Sale', entityId: saleId,
+    afterValue: { total, items: items.length, paymentMethod },
+    userId: auth.userId, organisationId: auth.orgId
+  })
+
+  return NextResponse.json({
+    id: saleId,
+    total,
+    paymentMethod,
+    items: (sale?.sale_items || items).map((si: any) => ({
+      id: si.id,
+      name: si.name || si.name,
+      qty: si.qty,
+      price: si.price,
+      cost: si.cost || 0,
+      productId: si.product_id || si.productId,
+    })),
+    createdAt: sale?.created_at || new Date().toISOString(),
+  }, { status: 201 })
 }

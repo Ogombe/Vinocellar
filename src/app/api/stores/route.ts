@@ -1,28 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
 import { withAuth } from '@/lib/middleware'
+import { supabaseServer } from '@/lib/supabase-server'
+import { auditLog } from '@/lib/helpers'
 
 export async function GET(request: NextRequest) {
   const auth = await withAuth(request, true)
   if (auth.error) return auth.error
 
-  const stores = await db.store.findMany({
-    where: { organisationId: auth.orgId },
-    include: {
-      _count: { select: { products: true, sales: true } },
-      products: { select: { currentStock: true, costPrice: true } }
-    },
-    orderBy: { createdAt: 'asc' }
-  })
+  const { data: stores } = await supabaseServer
+    .from('stores')
+    .select('*')
+    .eq('organisation_id', auth.orgId)
+    .order('created_at', { ascending: true })
 
-  const enriched = stores.map(s => ({
-    ...s,
-    totalProducts: s._count.products,
-    totalSales: s._count.sales,
-    stockValue: s.products.reduce((sum: number, p: any) => sum + (p.currentStock * p.costPrice), 0),
-  }))
-
-  return NextResponse.json(enriched)
+  return NextResponse.json(stores || [])
 }
 
 export async function POST(request: NextRequest) {
@@ -32,11 +23,14 @@ export async function POST(request: NextRequest) {
   const { name, location } = await request.json()
   if (!name) return NextResponse.json({ error: 'Name required' }, { status: 400 })
 
-  const store = await db.store.create({
-    data: { name, location: location || '', organisationId: auth.orgId }
-  })
+  const { data: store, error } = await supabaseServer
+    .from('stores')
+    .insert({ name, location: location || '', organisation_id: auth.orgId })
+    .select()
+    .single()
 
-  const { auditLog } = await import('@/lib/helpers')
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
   await auditLog({ action: 'store.created', entity: 'Store', entityId: store.id, afterValue: { name }, userId: auth.userId, organisationId: auth.orgId })
 
   return NextResponse.json(store, { status: 201 })
@@ -49,9 +43,15 @@ export async function PUT(request: NextRequest) {
   const { id, ...data } = await request.json()
   if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
 
-  const store = await db.store.update({ where: { id }, data })
-  const { auditLog } = await import('@/lib/helpers')
+  const { error } = await supabaseServer
+    .from('stores')
+    .update(data)
+    .eq('id', id)
+    .eq('organisation_id', auth.orgId)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
   await auditLog({ action: 'store.updated', entity: 'Store', entityId: id, userId: auth.userId, organisationId: auth.orgId })
 
-  return NextResponse.json(store)
+  return NextResponse.json({ success: true })
 }

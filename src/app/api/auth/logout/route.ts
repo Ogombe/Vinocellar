@@ -1,15 +1,11 @@
 import { NextResponse } from 'next/server'
-import { createLogoutCookie, getTokenFromRequest, getSessionUser } from '@/lib/helpers'
 
+// Logout is handled client-side via supabase.auth.signOut()
+// This endpoint is kept for compatibility but doesn't need to do anything
 export async function POST() {
-  return NextResponse.json({ success: true }, { headers: { 'Set-Cookie': createLogoutCookie() } })
+  return NextResponse.json({ success: true })
 }
 
-export async function GET(request: Request) {
-  const token = getTokenFromRequest(request)
-  if (!token) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-  const session = await getSessionUser(token)
-  if (!session) return NextResponse.json({ error: 'Session invalid' }, { status: 401 })
-  const stores = await (await import('@/lib/db')).db.store.findMany({ where: { organisationId: session.org.id }, select: { id: true, name: true, location: true } })
-  return NextResponse.json({ user: session.user, org: session.org, storeId: session.storeId, stores })
+export async function GET() {
+  return NextResponse.json({ success: true })
 }

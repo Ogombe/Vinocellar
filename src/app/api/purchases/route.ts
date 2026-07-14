@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
 import { withAuth } from '@/lib/middleware'
+import { supabaseServer } from '@/lib/supabase-server'
 import { auditLog } from '@/lib/helpers'
 
-// GET: List recent stock receives
+// GET: List recent stock receives (use the receive_stock RPC or query purchases)
 export async function GET(request: NextRequest) {
   const auth = await withAuth(request)
   if (auth.error) return auth.error
@@ -12,59 +12,86 @@ export async function GET(request: NextRequest) {
   const storeId = searchParams.get('storeId') || auth.storeId
   if (!storeId) return NextResponse.json({ error: 'No store' }, { status: 400 })
 
-  // Get recent audit logs for stock receives
-  const logs = await db.auditLog.findMany({
-    where: { organisationId: auth.orgId, action: 'product.stock_received' },
-    include: { user: { select: { name: true } } },
-    orderBy: { createdAt: 'desc' },
-    take: 50
-  })
+  // Query purchases table for stock receive history
+  const { data: purchases, error } = await supabaseServer
+    .from('purchases')
+    .select('*, supplier:suppliers(name), purchase_items(*)')
+    .eq('organisation_id', auth.orgId)
+    .eq('store_id', storeId)
+    .order('created_at', { ascending: false })
+    .limit(50)
 
-  return NextResponse.json(logs)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Also get recent stock movements for this store
+  const { data: movements } = await supabaseServer
+    .from('stock_movements')
+    .select('*, product:products(name)')
+    .eq('organisation_id', auth.orgId)
+    .eq('store_id', storeId)
+    .eq('movement_type', 'purchase')
+    .order('created_at', { ascending: false })
+    .limit(50)
+
+  return NextResponse.json({
+    purchases: purchases || [],
+    movements: movements || [],
+  })
 }
 
-// POST: Receive stock (add to current stock)
+// POST: Receive stock — call the receive_stock RPC function
 export async function POST(request: NextRequest) {
   const auth = await withAuth(request)
   if (auth.error) return auth.error
 
   const body = await request.json()
-  const { items, storeId } = body
+  const { items, storeId, supplierId, notes } = body
   const sid = storeId || auth.storeId
   if (!sid) return NextResponse.json({ error: 'No store' }, { status: 400 })
   if (!items || items.length === 0) return NextResponse.json({ error: 'No items' }, { status: 400 })
 
-  const results = []
+  // Call the receive_stock() RPC — this atomically creates the purchase,
+  // adds stock to products, and logs stock movements
+  const rpcItems = items.map((i: any) => ({
+    productId: i.productId,
+    qty: i.qty,
+    costPrice: i.costPrice || 0,
+  }))
 
-  for (const item of items) {
-    const { productId, qty, costPrice } = item
-    if (!productId || !qty || qty <= 0) continue
+  const { data: purchaseId, error } = await supabaseServer.rpc('receive_stock', {
+    p_store_id: sid,
+    p_supplier_id: supplierId || null,
+    p_items: rpcItems,
+    p_received_by: auth.userId,
+    p_notes: notes || '',
+  })
 
-    const product = await db.product.findFirst({
-      where: { id: productId, organisationId: auth.orgId, storeId: sid }
-    })
-    if (!product) continue
-
-    const updateData: any = { currentStock: { increment: qty } }
-    if (costPrice && costPrice > 0) updateData.costPrice = costPrice
-
-    const updated = await db.product.update({
-      where: { id: productId },
-      data: updateData
-    })
-
-    await auditLog({
-      action: 'product.stock_received',
-      entity: 'Product',
-      entityId: productId,
-      beforeValue: { currentStock: product.currentStock, costPrice: product.costPrice },
-      afterValue: { currentStock: updated.currentStock, costPrice: costPrice || product.costPrice, qtyAdded: qty },
-      userId: auth.userId,
-      organisationId: auth.orgId
-    })
-
-    results.push({ productId, name: product.name, previousStock: product.currentStock, newStock: updated.currentStock, qtyAdded: qty })
+  if (error) {
+    return NextResponse.json({ error: error.message || 'Stock receive failed' }, { status: 500 })
   }
 
-  return NextResponse.json({ received: results.length, items: results }, { status: 201 })
+  // Fetch updated product stock for the response
+  const results = []
+  for (const item of items) {
+    const { data: product } = await supabaseServer
+      .from('products')
+      .select('name, current_stock')
+      .eq('id', item.productId)
+      .single()
+
+    results.push({
+      productId: item.productId,
+      name: product?.name || 'Unknown',
+      qtyAdded: item.qty,
+      newStock: product?.current_stock || 0,
+    })
+  }
+
+  await auditLog({
+    action: 'stock.received', entity: 'Purchase', entityId: purchaseId,
+    afterValue: { items: items.length, supplierId },
+    userId: auth.userId, organisationId: auth.orgId
+  })
+
+  return NextResponse.json({ received: results.length, items: results, purchaseId }, { status: 201 })
 }

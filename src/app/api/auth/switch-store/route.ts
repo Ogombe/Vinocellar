@@ -1,19 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSessionUser, getTokenFromRequest } from '@/lib/helpers'
-import { db } from '@/lib/db'
+import { withAuth } from '@/lib/middleware'
+import { supabaseServer } from '@/lib/supabase-server'
 
-export async function POST(request: Request) {
-  const token = getTokenFromRequest(request)
-  if (!token) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-  const session = await getSessionUser(token)
-  if (!session) return NextResponse.json({ error: 'Session invalid' }, { status: 401 })
+export async function POST(request: NextRequest) {
+  const auth = await withAuth(request)
+  if (auth.error) return auth.error
 
   const { storeId } = await request.json()
   if (!storeId) return NextResponse.json({ error: 'Store ID required' }, { status: 400 })
 
-  const store = await db.store.findFirst({ where: { id: storeId, organisationId: session.org.id } })
+  // Verify the store belongs to this org
+  const { data: store } = await supabaseServer
+    .from('stores')
+    .select('id')
+    .eq('id', storeId)
+    .eq('organisation_id', auth.orgId)
+    .single()
+
   if (!store) return NextResponse.json({ error: 'Store not found' }, { status: 404 })
 
-  await db.user.update({ where: { id: session.user.id }, data: { storeId } })
+  // Update the user's store_id in the users table
+  const { error } = await supabaseServer
+    .from('users')
+    .update({ store_id: storeId })
+    .eq('id', auth.userId)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+  // Also update the user's app_metadata in Supabase Auth
+  // This requires the admin API, but for now the users table update is sufficient
+  // The client will need to refresh the profile to pick up the new store
+
   return NextResponse.json({ success: true, storeId })
 }

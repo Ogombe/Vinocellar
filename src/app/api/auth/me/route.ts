@@ -1,12 +1,35 @@
 import { NextResponse } from 'next/server'
-import { getSessionUser, getTokenFromRequest } from '@/lib/helpers'
-import { db } from '@/lib/db'
+import { withAuth } from '@/lib/middleware'
+import { supabaseServer } from '@/lib/supabase-server'
 
 export async function GET(request: Request) {
-  const token = getTokenFromRequest(request)
-  if (!token) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-  const session = await getSessionUser(token)
-  if (!session) return NextResponse.json({ error: 'Session invalid' }, { status: 401 })
-  const stores = await db.store.findMany({ where: { organisationId: session.org.id }, select: { id: true, name: true, location: true } })
-  return NextResponse.json({ user: session.user, org: session.org, storeId: session.storeId, stores })
+  const auth = await withAuth(request)
+  if (auth.error) return auth.error
+
+  // Fetch user profile from public.users table
+  const { data: profile } = await supabaseServer
+    .from('users')
+    .select('id, email, name, role, pin, store_id, is_active, last_login_at')
+    .eq('id', auth.userId)
+    .single()
+
+  // Fetch organisation
+  const { data: org } = await supabaseServer
+    .from('organisations')
+    .select('id, name, slug, plan, is_active, max_stores, max_staff, max_products')
+    .eq('id', auth.orgId)
+    .single()
+
+  // Fetch all stores for this organisation
+  const { data: stores } = await supabaseServer
+    .from('stores')
+    .select('id, name, location')
+    .eq('organisation_id', auth.orgId)
+
+  return NextResponse.json({
+    user: profile || { id: auth.userId, email: auth.email, role: auth.role },
+    org: org || { id: auth.orgId },
+    storeId: auth.storeId,
+    stores: stores || []
+  })
 }

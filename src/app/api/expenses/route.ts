@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
 import { withAuth } from '@/lib/middleware'
+import { supabaseServer } from '@/lib/supabase-server'
 import { auditLog } from '@/lib/helpers'
+import { v4 as uuidv4 } from 'uuid'
 
 export async function GET(request: NextRequest) {
   const auth = await withAuth(request, true)
@@ -12,20 +13,35 @@ export async function GET(request: NextRequest) {
   const from = searchParams.get('from')
   const to = searchParams.get('to')
 
-  const where: any = { organisationId: auth.orgId }
-  if (storeId) where.storeId = storeId
-  if (from || to) {
-    where.date = {}
-    if (from) where.date.gte = from
-    if (to) where.date.lte = to
-  }
+  let query = supabaseServer
+    .from('expenses')
+    .select('*, recorder:users!recorded_by(name)')
+    .eq('organisation_id', auth.orgId)
 
-  const expenses = await db.expense.findMany({
-    where, include: { recorder: { select: { name: true } } },
-    orderBy: { createdAt: 'desc' }
-  })
+  if (storeId) query = query.eq('store_id', storeId)
+  if (from) query = query.gte('date', from)
+  if (to) query = query.lte('date', to)
 
-  return NextResponse.json(expenses)
+  query = query.order('created_at', { ascending: false })
+
+  const { data: expenses, error } = await query
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  const mapped = (expenses || []).map((e: any) => ({
+    id: e.id,
+    date: e.date,
+    category: e.category,
+    description: e.description,
+    amount: e.amount,
+    organisationId: e.organisation_id,
+    storeId: e.store_id,
+    recordedBy: e.recorded_by,
+    createdAt: e.created_at,
+    recorder: e.recorder ? { name: e.recorder.name } : null,
+  }))
+
+  return NextResponse.json(mapped)
 }
 
 export async function POST(request: NextRequest) {
@@ -36,16 +52,40 @@ export async function POST(request: NextRequest) {
   const { date, category, description, amount, storeId } = body
   const sid = storeId || auth.storeId
 
-  if (!date || !category || !amount) return NextResponse.json({ error: 'Date, category, amount required' }, { status: 400 })
+  if (!date || !category || !amount) {
+    return NextResponse.json({ error: 'Date, category, amount required' }, { status: 400 })
+  }
 
-  const expense = await db.expense.create({
-    data: { date, category, description: description || '', amount, organisationId: auth.orgId, storeId: sid, recordedBy: auth.userId },
-    include: { recorder: { select: { name: true } } }
+  const { data: expense, error } = await supabaseServer
+    .from('expenses')
+    .insert({
+      id: uuidv4(),
+      date,
+      category,
+      description: description || '',
+      amount,
+      organisation_id: auth.orgId,
+      store_id: sid,
+      recorded_by: auth.userId,
+    })
+    .select('*, recorder:users!recorded_by(name)')
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+  await auditLog({
+    action: 'expense.created', entity: 'Expense', entityId: expense.id,
+    afterValue: { amount, category }, userId: auth.userId, organisationId: auth.orgId
   })
 
-  await auditLog({ action: 'expense.created', entity: 'Expense', entityId: expense.id, afterValue: { amount, category }, userId: auth.userId, organisationId: auth.orgId })
-
-  return NextResponse.json(expense, { status: 201 })
+  return NextResponse.json({
+    id: expense.id,
+    date: expense.date,
+    category: expense.category,
+    description: expense.description,
+    amount: expense.amount,
+    recorder: expense.recorder ? { name: expense.recorder.name } : null,
+  }, { status: 201 })
 }
 
 export async function PUT(request: NextRequest) {
@@ -55,10 +95,26 @@ export async function PUT(request: NextRequest) {
   const { id, ...data } = await request.json()
   if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
 
-  const expense = await db.expense.update({ where: { id }, data })
-  await auditLog({ action: 'expense.updated', entity: 'Expense', entityId: id, userId: auth.userId, organisationId: auth.orgId })
+  const updateData: any = {}
+  if (data.date) updateData.date = data.date
+  if (data.category) updateData.category = data.category
+  if (data.description !== undefined) updateData.description = data.description
+  if (data.amount) updateData.amount = data.amount
 
-  return NextResponse.json(expense)
+  const { error } = await supabaseServer
+    .from('expenses')
+    .update(updateData)
+    .eq('id', id)
+    .eq('organisation_id', auth.orgId)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+  await auditLog({
+    action: 'expense.updated', entity: 'Expense', entityId: id,
+    userId: auth.userId, organisationId: auth.orgId
+  })
+
+  return NextResponse.json({ success: true })
 }
 
 export async function DELETE(request: NextRequest) {
@@ -69,8 +125,18 @@ export async function DELETE(request: NextRequest) {
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
 
-  await db.expense.delete({ where: { id } })
-  await auditLog({ action: 'expense.deleted', entity: 'Expense', entityId: id, userId: auth.userId, organisationId: auth.orgId })
+  const { error } = await supabaseServer
+    .from('expenses')
+    .delete()
+    .eq('id', id)
+    .eq('organisation_id', auth.orgId)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+  await auditLog({
+    action: 'expense.deleted', entity: 'Expense', entityId: id,
+    userId: auth.userId, organisationId: auth.orgId
+  })
 
   return NextResponse.json({ success: true })
 }

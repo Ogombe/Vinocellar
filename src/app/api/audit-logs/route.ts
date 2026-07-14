@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
 import { withAuth } from '@/lib/middleware'
+import { supabaseServer } from '@/lib/supabase-server'
 
 export async function GET(request: NextRequest) {
   const auth = await withAuth(request, true)
@@ -10,13 +10,31 @@ export async function GET(request: NextRequest) {
   const limit = parseInt(searchParams.get('limit') || '100')
   const entity = searchParams.get('entity')
 
-  const where: any = { organisationId: auth.orgId }
-  if (entity) where.entity = entity
+  let query = supabaseServer
+    .from('audit_logs')
+    .select('*, user:users!user_id(name, email)')
+    .eq('organisation_id', auth.orgId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
 
-  const logs = await db.auditLog.findMany({
-    where, include: { user: { select: { name: true, email: true } } },
-    orderBy: { createdAt: 'desc' }, take: limit
-  })
+  if (entity) {
+    query = query.eq('entity', entity)
+  }
 
-  return NextResponse.json(logs)
+  const { data: logs, error } = await query
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  const mapped = (logs || []).map((l: any) => ({
+    id: l.id,
+    action: l.action,
+    entity: l.entity,
+    entityId: l.entity_id,
+    beforeValue: l.before_value,
+    afterValue: l.after_value,
+    createdAt: l.created_at,
+    user: l.user ? { name: l.user.name, email: l.user.email } : null,
+  }))
+
+  return NextResponse.json(mapped)
 }
