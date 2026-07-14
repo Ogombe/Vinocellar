@@ -51,23 +51,27 @@ export async function POST(request: NextRequest) {
   const body = await request.json()
   const { name, email, password, pin, role, storeId } = body
 
-  if (!name || !email || !password || !pin) {
-    return NextResponse.json({ error: 'All fields required' }, { status: 400 })
+  if (!name || !password || !pin) {
+    return NextResponse.json({ error: 'Name, password and PIN are required' }, { status: 400 })
   }
+  // Auto-generate email if not provided
+  const finalEmail = email || `${name.trim().toLowerCase().replace(/\s+/g, '.')}@staff.vinocellar.app`
   if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
     return NextResponse.json({ error: 'PIN must be 4 digits' }, { status: 400 })
   }
 
-  // Check if email already exists in this organisation
-  const { data: existing } = await auth.db
-    .from('users')
-    .select('id')
-    .eq('email', email.toLowerCase())
-    .eq('organisation_id', auth.orgId)
-    .single()
+  // Check if email already exists in this organisation (only if email was provided)
+  if (email) {
+    const { data: existing } = await auth.db
+      .from('users')
+      .select('id')
+      .eq('email', email.toLowerCase())
+      .eq('organisation_id', auth.orgId)
+      .single()
 
-  if (existing) {
-    return NextResponse.json({ error: 'Email already exists in organisation' }, { status: 409 })
+    if (existing) {
+      return NextResponse.json({ error: 'Email already exists in organisation' }, { status: 409 })
+    }
   }
 
   // Call the addstaff edge function to create Supabase Auth user + profile
@@ -78,7 +82,7 @@ export async function POST(request: NextRequest) {
       Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
     },
     body: JSON.stringify({
-      email: email.toLowerCase(),
+      email: finalEmail.toLowerCase(),
       password,
       name,
       pin,
@@ -102,7 +106,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     id: data.user_id,
     name,
-    email: email.toLowerCase(),
+    email: finalEmail.toLowerCase(),
     role: role || 'staff',
     pin,
   }, { status: 201 })
