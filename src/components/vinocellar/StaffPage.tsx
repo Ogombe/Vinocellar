@@ -39,9 +39,7 @@ import { useIsMobile } from '@/hooks/use-mobile'
 
 const ACCENT = '#7C3AED'
 
-function formatKES(n: number) {
-  return 'KES ' + Number(n).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-}
+import { formatKSh as formatKES } from '@/lib/currency'
 
 function formatDate(iso: string | null) {
   if (!iso) return 'Never'

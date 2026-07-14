@@ -82,13 +82,7 @@ const CATEGORY_STYLES: Record<string, string> = {
   Other: 'border-slate-200 bg-slate-50 text-slate-600',
 }
 
-const formatKES = (amount: number): string =>
-  new Intl.NumberFormat('en-KE', {
-    style: 'currency',
-    currency: 'KES',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount)
+import { formatKSh as formatKES } from '@/lib/currency'
 
 function formatDate(iso: string) {
   const d = new Date(iso)
@@ -350,7 +344,7 @@ export default function ExpensesPage() {
                 <TableHead className="pl-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Date</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Category</TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Description</TableHead>
-                <TableHead className="text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Amount (KES)</TableHead>
+                <TableHead className="text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Amount (KSh)</TableHead>
                 <TableHead className="pr-4 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -551,7 +545,7 @@ export default function ExpensesPage() {
             {/* Amount */}
             <div className="grid gap-2">
               <Label htmlFor="expense-amount" className="text-xs font-medium text-muted-foreground">
-                Amount (KES) <span className="text-red-500">*</span>
+                Amount (KSh) <span className="text-red-500">*</span>
               </Label>
               <Input
                 id="expense-amount"

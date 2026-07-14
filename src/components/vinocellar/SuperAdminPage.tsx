@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/contexts/auth-context'
 import { useAppStore } from '@/lib/store'
 import {
-  Building2, Users, Package, ShoppingCart, DollarSign, TrendingUp,
+  Building2, Users, Package, ShoppingCart, Coins, TrendingUp,
   Activity, Eye, Ban, CheckCircle2, Trash2, ArrowLeft, Search,
   BarChart3, Store, AlertTriangle, Shield, Clock, UserCheck, X
 } from 'lucide-react'
@@ -25,6 +25,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
+import { formatKSh } from '@/lib/currency'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -141,9 +142,7 @@ function formatDate(d: string | null) {
   return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function formatCurrency(n: number) {
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(n)
-}
+
 
 function timeAgo(d: string | null): string {
   if (!d) return 'Never'
@@ -401,7 +400,7 @@ export default function SuperAdminPage() {
                 <StatCard icon={Store} label="Stores" value={selectedOrg.stores.length} color="bg-indigo-500" />
                 <StatCard icon={Package} label="Products" value={selectedOrg.productCount} color="bg-amber-500" />
                 <StatCard icon={ShoppingCart} label="Sales" value={selectedOrg.saleCount} color="bg-emerald-500" />
-                <StatCard icon={DollarSign} label="Revenue" value={formatCurrency(selectedOrg.totalRevenue)} color="bg-green-600" />
+                <StatCard icon={Coins} label="Revenue" value={formatKSh(selectedOrg.totalRevenue)} color="bg-green-600" />
                 <StatCard icon={Receipt} label="Expenses" value={selectedOrg.expenseCount} color="bg-rose-500" />
               </div>
 
@@ -459,7 +458,7 @@ export default function SuperAdminPage() {
                       {selectedOrg.recentSales.map(s => (
                         <div key={s.id} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-slate-50 transition-colors">
                           <div>
-                            <p className="text-sm font-medium text-slate-900">{formatCurrency(s.total)}</p>
+                            <p className="text-sm font-medium text-slate-900">{formatKSh(s.total)}</p>
                             <p className="text-xs text-slate-500">{s.staff?.name || 'Unknown'} — {timeAgo(s.created_at)}</p>
                           </div>
                           <Badge variant="outline" className="text-[10px]">{s.payment_method}</Badge>
@@ -491,7 +490,7 @@ export default function SuperAdminPage() {
               <StatCard icon={Package} label="Products" value={summary!.totalProducts} color="bg-amber-500" />
               <StatCard icon={ShoppingCart} label="Total Sales" value={summary!.totalSales} color="bg-indigo-600" />
               <StatCard icon={Store} label="Stores" value={summary!.totalStores || 0} color="bg-teal-600" />
-              <StatCard icon={DollarSign} label="Monthly Revenue" value={formatCurrency(summary!.monthlyRevenue)} color="bg-green-600" />
+              <StatCard icon={Coins} label="Monthly Revenue" value={formatKSh(summary!.monthlyRevenue)} color="bg-green-600" />
               <StatCard icon={BarChart3} label="Avg per Org" value={summary!.totalOrganisations > 0 ? Math.round(summary!.totalSales / summary!.totalOrganisations) : 0} sub="sales per org" color="bg-rose-500" />
             </div>
           )}

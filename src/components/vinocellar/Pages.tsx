@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { api } from '@/lib/api'
+import { formatKSh } from '@/lib/currency'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, Legend
@@ -12,7 +13,7 @@ import {
    SHARED HELPERS & CONSTANTS
    ═══════════════════════════════════════════════════════════════════════ */
 
-const fmt = (n: number) => 'KSh ' + n.toLocaleString('en-KE')
+const fmt = formatKSh
 
 const cardStyle: React.CSSProperties = {
   backgroundColor: '#fff',
@@ -1256,7 +1257,7 @@ export function ReportsPage() {
     const summaryHtml = Object.entries(summary).map(([key, val]: [string, any]) =>
       `<div style="flex:1;min-width:120px;padding:8px 12px;background:#FAF7F2;border-radius:8px;">
         <div style="font-size:11px;color:#8B7FA0;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">${key.replace(/([A-Z])/g, ' $1').trim()}</div>
-        <div style="font-size:18px;font-weight:700;color:#1F1129;margin-top:4px;">${typeof val === 'number' ? 'KSh ' + val.toLocaleString('en-KE') : val}</div>
+        <div style="font-size:18px;font-weight:700;color:#1F1129;margin-top:4px;">${typeof val === 'number' ? formatKSh(val) : val}</div>
       </div>`
     ).join('')
 

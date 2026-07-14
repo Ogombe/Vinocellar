@@ -74,12 +74,6 @@ export function generateId(prefix?: string): string {
   return prefix ? `${prefix}_${id}` : id
 }
 
-// ==================== CURRENCY FORMATTING ====================
-
-export function formatKSh(amount: number): string {
-  return 'KSh ' + amount.toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-}
-
 // ==================== BARCODE GENERATION ====================
 
 export function generateBarcode(): string {

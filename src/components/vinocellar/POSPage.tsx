@@ -45,13 +45,7 @@ import { useToast } from '@/hooks/use-toast'
 
 const ACCENT = '#7C3AED'
 
-const formatKES = (amount: number): string =>
-  new Intl.NumberFormat('en-KE', {
-    style: 'currency',
-    currency: 'KES',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount)
+import { formatKSh as formatKES } from '@/lib/currency'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */

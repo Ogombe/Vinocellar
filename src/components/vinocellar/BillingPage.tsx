@@ -44,13 +44,7 @@ const PLAN_CONFIG: Record<string, { icon: React.ElementType; color: string; grad
   },
 }
 
-function formatKES(amount: number) {
-  return new Intl.NumberFormat('en-KE', {
-    style: 'currency',
-    currency: 'KES',
-    minimumFractionDigits: 0,
-  }).format(amount)
-}
+import { formatKSh as formatKES } from '@/lib/currency'
 
 export default function BillingPage() {
   const { session, appUser, organisation } = useAuth()

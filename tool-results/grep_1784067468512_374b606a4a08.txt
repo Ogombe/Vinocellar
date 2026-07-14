@@ -1,0 +1,252 @@
+/home/z/my-project/tool-results/read_1783962938121_725f478b03c9.txt:1:  1500→  1500→  charts.prof=new Chart($('#profChart'),{type:'bar',data:{labels:days,datasets:[{label:'Profit',data:profits,backgroundColor:'#10B981',borderRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783962938121_725f478b03c9.txt:4:  1503→  1503→  charts.profTop=new Chart($('#profTopChart'),{type:'bar',data:{labels:top.map(t=>t.name.split(' ').slice(0,2).join(' ')),datasets:[{data:top.map(t=>t.profit),backgroundColor:['#10B981','#14B8A6','#3B82F6','#8B5CF6','#DC2626','#F59E0B','#EC4899','#F97316','#6366F1','#A855F7'],borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783962938121_725f478b03c9.txt:47:  1546→  1546→      <div class="form-group"><label>Amount (KSh)</label><input type="number" id="expAmount" class="form-control" value="${e?e.amount:''}" min="0" step="100"></div>
+/home/z/my-project/tool-results/read_1783962938121_725f478b03c9.txt:178:  1677→  1677→    ...['Rent','Utilities','Salaries','Inventory','Marketing','Maintenance','Other'].map(c=>[c,fmt(exps.filter(e=>e.category===c).reduce((a,b)=>a+b.amount,0))]).filter(r=>r[1]!=='KSh 0'),
+/home/z/my-project/tool-results/read_1783962938121_725f478b03c9.txt:220:  1719→  1719→  const takes=state.stockTakes.filter(t=>t.storeId===state.currentStoreId).sort((a,b)=>b.startedAt-a.startedAt);
+/home/z/my-project/tool-results/read_1783962938121_725f478b03c9.txt:223:  1722→  1722→  pdfHeader(doc,'Stock Count Audit Report',store.name+' · '+takes.length+' count sessions');
+/home/z/my-project/tool-results/read_1783962938121_725f478b03c9.txt:224:  1723→  1723→  if(!takes.length){doc.setFontSize(11);doc.setTextColor(107,114,128);doc.text('No stock counts have been performed yet.',14,60);downloadPdf(doc,'stocktake-audit-'+todayKey()+'.pdf');return}
+/home/z/my-project/tool-results/read_1783962938121_725f478b03c9.txt:226:  1725→  1725→  takes.forEach((t,i)=>{
+/home/z/my-project/tool-results/read_1783968553701_52b0062f39a7.txt:83:  1082→  1082→      <div class="form-group"><label>Cost Price (KSh)</label><input type="number" id="pCost" class="form-control" value="${p?p.cost:0}"></div>
+/home/z/my-project/tool-results/read_1783968553701_52b0062f39a7.txt:84:  1083→  1083→      <div class="form-group"><label>Sell Price (KSh)</label><input type="number" id="pSell" class="form-control" value="${p?p.sell:0}"></div>
+/home/z/my-project/tool-results/read_1783968553701_52b0062f39a7.txt:104:  1103→  1103→  const myTakes=state.stockTakes.filter(t=>t.storeId===state.currentStoreId).sort((a,b)=>b.startedAt-a.startedAt);
+/home/z/my-project/tool-results/read_1783968553701_52b0062f39a7.txt:121:  1120→  1120→    ${myTakes.length?`<div class="table-wrap"><table><thead><tr><th>Date</th><th>Started By</th><th>Items</th><th>Variance</th><th>Status</th><th>Action</th></tr></thead><tbody>
+/home/z/my-project/tool-results/read_1783968553701_52b0062f39a7.txt:122:  1121→  1121→      ${myTakes.map(t=>{const v=t.items.reduce((a,b)=>a+(b.counted-b.expected),0);return `<tr><td>${new Date(t.startedAt).toLocaleString()}</td><td>${staffName(t.startedBy)}</td><td>${t.items.length}</td><td><b class="${v===0?'text-emerald':v>0?'text-amber':'text-crimson'}">${v>0?'+':''}${v}</b></td><td><span class="badge ${t.status==='approved'?'badge-green':t.status==='pending'?'badge-gold':'badge-gray'}">${t.status}</span></td><td>${t.status==='pending'&&currentUser.role==='manager'?'<button class="btn btn-amber btn-sm" onclick="approveStockTake(\''+t.id+'\')"><i class="fa-solid fa-check"></i> Approve</button>':'<button class="btn btn-ghost btn-sm" onclick="viewStockTake(\''+t.id+'\')">View</button>'}</td></tr>`}).join('')}
+/home/z/my-project/tool-results/read_1783968553701_52b0062f39a7.txt:167:  1166→  1166→  state.stockTakes.push(pendingStockTake);
+/home/z/my-project/tool-results/read_1783968553701_52b0062f39a7.txt:174:  1173→  1173→  const t=state.stockTakes.find(x=>x.id===id);if(!t)return;
+/home/z/my-project/tool-results/read_1783968553701_52b0062f39a7.txt:183:  1182→  1182→  const t=state.stockTakes.find(x=>x.id===id);
+/home/z/my-project/tool-results/read_1783968553701_52b0062f39a7.txt:189:  1188→  1188→  const t=state.stockTakes.find(x=>x.id===id);
+/home/z/my-project/tool-results/read_1783968553701_52b0062f39a7.txt:310:  1309→  1309→        <div class="cart-total"><span>Total</span><span id="cartTotal">KSh 0</span></div>
+/home/z/my-project/tool-results/read_1783968553701_52b0062f39a7.txt:454:  1453→  1453→  charts.trend=new Chart($('#trendChart'),{type:'line',data:{labels:days,datasets:[{label:'Revenue',data:revs,borderColor:'#DC2626',backgroundColor:'rgba(220,38,38,.1)',fill:true,tension:.3}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783968553701_52b0062f39a7.txt:461:  1460→  1460→  charts.top10=new Chart($('#top10Chart'),{type:'bar',data:{labels:top10.map(t=>t[0].split(' ').slice(0,2).join(' ')),datasets:[{data:top10.map(t=>t[1]),backgroundColor:'#F59E0B',borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783968650578_be1720a116f5.txt:15:    15→const fmt = (n: number) => 'KSh ' + n.toLocaleString('en-KE')
+/home/z/my-project/tool-results/read_1783968650578_be1720a116f5.txt:138:   138→  const [stockTakes, setStockTakes] = useState<any[]>([])
+/home/z/my-project/tool-results/read_1783968650578_be1720a116f5.txt:145:   145→  const fetchStockTakes = async () => {
+/home/z/my-project/tool-results/read_1783968650578_be1720a116f5.txt:150:   150→      const data = await api.getStockTakes('storeId=' + storeId)
+/home/z/my-project/tool-results/read_1783968650578_be1720a116f5.txt:151:   151→      const list = Array.isArray(data) ? data : data.stockTakes || data.items || []
+/home/z/my-project/tool-results/read_1783968650578_be1720a116f5.txt:152:   152→      setStockTakes(list)
+/home/z/my-project/tool-results/read_1783968650578_be1720a116f5.txt:163:   163→      setError(err.message || 'Failed to load stock takes')
+/home/z/my-project/tool-results/read_1783968650578_be1720a116f5.txt:169:   169→  useEffect(() => { fetchStockTakes() }, [storeId])
+/home/z/my-project/tool-results/read_1783968650578_be1720a116f5.txt:180:   180→      setStockTakes([newSt, ...stockTakes])
+/home/z/my-project/tool-results/read_1783968650578_be1720a116f5.txt:199:   199→      await fetchStockTakes()
+/home/z/my-project/tool-results/read_1783968650578_be1720a116f5.txt:214:   214→      await fetchStockTakes()
+/home/z/my-project/tool-results/read_1783968650578_be1720a116f5.txt:315:   315→      {!activeCount && stockTakes.some((st: any) => st.status === 'pending') && !isManager && (
+/home/z/my-project/tool-results/read_1783968650578_be1720a116f5.txt:329:   329→          {stockTakes.map((st: any) => (
+/home/z/my-project/tool-results/read_1783968650578_be1720a116f5.txt:384:   384→          {stockTakes.length === 0 && !activeCount && (
+/home/z/my-project/tool-results/read_1783968650578_be1720a116f5.txt:903:   903→            <label className="block text-sm font-medium mb-1.5" style={{ color: '#3D2E50' }}>Amount (KSh)</label>
+/home/z/my-project/tool-results/read_1783968650578_be1720a116f5.txt:1259:  1259→        <div style="font-size:18px;font-weight:700;color:#1F1129;margin-top:4px;">${typeof val === 'number' ? 'KSh ' + val.toLocaleString('en-KE') : val}</div>
+/home/z/my-project/bun.lock:902:    "citty": ["citty@0.1.6", "https://registry.npmjs.com/citty/-/citty-0.1.6.tgz", { "dependencies": { "consola": "^3.2.3" } }, "sha512-tskPPKEs8D2KPafUypv2gxwJP8h/OaJmC82QQGGDQcHvXX43xF2VDACcJVmZ0EuSxkpO9Kc4MlrA3q0+FG58AQ=="],
+/home/z/my-project/bun.lock:1138:    "fdir": ["fdir@6.5.0", "https://registry.npmjs.com/fdir/-/fdir-6.5.0.tgz", { "peerDependencies": { "picomatch": "^3 || ^4" }, "optionalPeers": ["picomatch"] }, "sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg=="],
+/home/z/my-project/bun.lock:1886:    "typescript-eslint": ["typescript-eslint@8.53.0", "https://registry.npmjs.com/typescript-eslint/-/typescript-eslint-8.53.0.tgz", { "dependencies": { "@typescript-eslint/eslint-plugin": "8.53.0", "@typescript-eslint/parser": "8.53.0", "@typescript-eslint/typescript-estree": "8.53.0", "@typescript-eslint/utils": "8.53.0" }, "peerDependencies": { "eslint": "^8.57.0 || ^9.0.0", "typescript": ">=4.8.4 <6.0.0" } }, "sha512-xHURCQNxZ1dsWn0sdOaOfCSQG0HKeqSj9OexIxrz6ypU6wHYOdX2I3D2b8s8wFSsSOYJb+6q283cLiLlkEsBYw=="],
+/home/z/my-project/bun.lock:1920:    "use-sync-external-store": ["use-sync-external-store@1.6.0", "https://registry.npmjs.com/use-sync-external-store/-/use-sync-external-store-1.6.0.tgz", { "peerDependencies": { "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-Pp6GSwGP/NrPIrxVFAIkOQeyw8lFenOHijQWkUTrDvrF4ALqylP2C/KCkeS9dpUM3KvYRQhna5vt7IL95+ZQ9w=="],
+/home/z/my-project/tool-results/read_1783963080692_bec18106c400.txt:38:    38→const fmt = (n: number) => 'KSh ' + n.toLocaleString('en-KE')
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:278:   278→-- ── 6c. Stock Takes (Physical Counts) ──────────────────
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:279:   279→create table public.stock_takes (
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:292:   292→create index idx_stock_takes_organisation on public.stock_takes (organisation_id);
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:293:   293→create index idx_stock_takes_store on public.stock_takes (store_id);
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:294:   294→create index idx_stock_takes_status on public.stock_takes (status);
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:302:   302→  stock_take_id     uuid not null references public.stock_takes(id) on delete cascade,
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:652:   652→-- 13k. Stock Takes ───────────────────────────────────
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:653:   653→alter table public.stock_takes enable row level security;
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:655:   655→create policy "stock_takes_select_own_org" on public.stock_takes
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:658:   658→create policy "stock_takes_insert_own_org" on public.stock_takes
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:661:   661→create policy "stock_takes_update_own_org" on public.stock_takes
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:674:   674→      select 1 from public.stock_takes
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:675:   675→      where stock_takes.id = stock_take_items.stock_take_id
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:676:   676→      and stock_takes.organisation_id = auth.organisation_id()
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:683:   683→      select 1 from public.stock_takes
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:684:   684→      where stock_takes.id = stock_take_items.stock_take_id
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:685:   685→      and stock_takes.organisation_id = auth.organisation_id()
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:692:   692→      select 1 from public.stock_takes
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:693:   693→      where stock_takes.id = stock_take_items.stock_take_id
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:694:   694→      and stock_takes.organisation_id = auth.organisation_id()
+/home/z/my-project/tool-results/read_1783971302510_c80c6680f5fc.txt:1112:  1112→alter publication supabase_realtime add table public.stock_takes;
+/home/z/my-project/download/vinocellar-supabase-schema.sql:294:-- ── 6c. Stock Takes (Physical Counts) ──────────────────
+/home/z/my-project/download/vinocellar-supabase-schema.sql:295:create table public.stock_takes (
+/home/z/my-project/download/vinocellar-supabase-schema.sql:308:create index idx_stock_takes_organisation on public.stock_takes (organisation_id);
+/home/z/my-project/download/vinocellar-supabase-schema.sql:309:create index idx_stock_takes_store on public.stock_takes (store_id);
+/home/z/my-project/download/vinocellar-supabase-schema.sql:310:create index idx_stock_takes_status on public.stock_takes (status);
+/home/z/my-project/download/vinocellar-supabase-schema.sql:318:  stock_take_id     uuid not null references public.stock_takes(id) on delete cascade,
+/home/z/my-project/download/vinocellar-supabase-schema.sql:666:-- 13k. Stock Takes ───────────────────────────────────
+/home/z/my-project/download/vinocellar-supabase-schema.sql:667:alter table public.stock_takes enable row level security;
+/home/z/my-project/download/vinocellar-supabase-schema.sql:669:create policy "stock_takes_select_own_org" on public.stock_takes
+/home/z/my-project/download/vinocellar-supabase-schema.sql:672:create policy "stock_takes_insert_own_org" on public.stock_takes
+/home/z/my-project/download/vinocellar-supabase-schema.sql:675:create policy "stock_takes_update_own_org" on public.stock_takes
+/home/z/my-project/download/vinocellar-supabase-schema.sql:688:      select 1 from public.stock_takes
+/home/z/my-project/download/vinocellar-supabase-schema.sql:689:      where stock_takes.id = stock_take_items.stock_take_id
+/home/z/my-project/download/vinocellar-supabase-schema.sql:690:      and stock_takes.organisation_id = public.get_organisation_id()
+/home/z/my-project/download/vinocellar-supabase-schema.sql:697:      select 1 from public.stock_takes
+/home/z/my-project/download/vinocellar-supabase-schema.sql:698:      where stock_takes.id = stock_take_items.stock_take_id
+/home/z/my-project/download/vinocellar-supabase-schema.sql:699:      and stock_takes.organisation_id = public.get_organisation_id()
+/home/z/my-project/download/vinocellar-supabase-schema.sql:706:      select 1 from public.stock_takes
+/home/z/my-project/download/vinocellar-supabase-schema.sql:707:      where stock_takes.id = stock_take_items.stock_take_id
+/home/z/my-project/download/vinocellar-supabase-schema.sql:708:      and stock_takes.organisation_id = public.get_organisation_id()
+/home/z/my-project/download/vinocellar-supabase-schema.sql:1138:  alter publication supabase_realtime add table public.stock_takes;
+/home/z/my-project/tool-results/read_1784010790043_a180a98bdbe4.txt:54:    54→    54→const formatKES = (amount: number): string =>
+/home/z/my-project/tool-results/read_1784010790043_a180a98bdbe4.txt:57:    57→    57→    currency: 'KES',
+/home/z/my-project/tool-results/read_1784010790043_a180a98bdbe4.txt:338:   338→   338→                  <p className="text-xs font-semibold">{formatKES(product.cost_price)}</p>
+/home/z/my-project/tool-results/read_1784010790043_a180a98bdbe4.txt:342:   342→   342→                  <p className="text-xs font-semibold">{formatKES(product.sell_price)}</p>
+/home/z/my-project/tool-results/read_1784010790043_a180a98bdbe4.txt:436:   436→   436→                    <TableCell className="text-right text-sm tabular-nums">{formatKES(product.cost_price)}</TableCell>
+/home/z/my-project/tool-results/read_1784010790043_a180a98bdbe4.txt:437:   437→   437→                    <TableCell className="text-right text-sm font-medium tabular-nums">{formatKES(product.sell_price)}</TableCell>
+/home/z/my-project/tool-results/read_1784010790043_a180a98bdbe4.txt:635:   635→   635→                  Cost Price (KES)
+/home/z/my-project/tool-results/read_1784010790043_a180a98bdbe4.txt:649:   649→   649→                  Sell Price (KES)
+/home/z/my-project/tool-results/read_1783959514165_b79a89aae636.txt:54:    54→  1453→  1453→  charts.trend=new Chart($('#trendChart'),{type:'line',data:{labels:days,datasets:[{label:'Revenue',data:revs,borderColor:'#DC2626',backgroundColor:'rgba(220,38,38,.1)',fill:true,tension:.3}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783959514165_b79a89aae636.txt:61:    61→  1460→  1460→  charts.top10=new Chart($('#top10Chart'),{type:'bar',data:{labels:top10.map(t=>t[0].split(' ').slice(0,2).join(' ')),datasets:[{data:top10.map(t=>t[1]),backgroundColor:'#F59E0B',borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783959514165_b79a89aae636.txt:101:   101→  1500→  1500→  charts.prof=new Chart($('#profChart'),{type:'bar',data:{labels:days,datasets:[{label:'Profit',data:profits,backgroundColor:'#10B981',borderRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783959514165_b79a89aae636.txt:104:   104→  1503→  1503→  charts.profTop=new Chart($('#profTopChart'),{type:'bar',data:{labels:top.map(t=>t.name.split(' ').slice(0,2).join(' ')),datasets:[{data:top.map(t=>t.profit),backgroundColor:['#10B981','#14B8A6','#3B82F6','#8B5CF6','#DC2626','#F59E0B','#EC4899','#F97316','#6366F1','#A855F7'],borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783959514165_b79a89aae636.txt:147:   147→  1546→  1546→      <div class="form-group"><label>Amount (KSh)</label><input type="number" id="expAmount" class="form-control" value="${e?e.amount:''}" min="0" step="100"></div>
+/home/z/my-project/tool-results/read_1783959514165_b79a89aae636.txt:278:   278→  1677→  1677→    ...['Rent','Utilities','Salaries','Inventory','Marketing','Maintenance','Other'].map(c=>[c,fmt(exps.filter(e=>e.category===c).reduce((a,b)=>a+b.amount,0))]).filter(r=>r[1]!=='KSh 0'),
+/home/z/my-project/tool-results/read_1783962987997_6b1b68387204.txt:15:   614→   614→      const arrFields = {inventory:seed.inventory,sales:[],stockTakes:[],reconciliation:[],expenses:[]};
+/home/z/my-project/tool-results/read_1783962987997_6b1b68387204.txt:84:   683→   683→  return {stores,currentStoreId:'s1',inventory:inv,suppliers,staff,sales,stockTakes:[],reconciliation:[],expenses,lastBackup:null};
+/home/z/my-project/tool-results/read_1783962987997_6b1b68387204.txt:90:   689→   689→const fmt = n => 'KSh '+Number(n||0).toLocaleString('en-KE',{maximumFractionDigits:0});
+/home/z/my-project/tool-results/read_1783962987997_6b1b68387204.txt:346:   945→   945→  charts.week=new Chart($('#weekChart'),{type:'line',data:{labels:days,datasets:[{label:'Revenue',data:revs,borderColor:'#DC2626',backgroundColor:'rgba(220,38,38,.12)',fill:true,tension:.35,pointBackgroundColor:'#F59E0B',pointRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783962987997_6b1b68387204.txt:352:   951→   951→  charts.top=new Chart($('#topChart'),{type:'bar',data:{labels:top.map(t=>t[0].split(' ').slice(0,2).join(' ')),datasets:[{data:top.map(t=>t[1]),backgroundColor:['#DC2626','#F59E0B','#10B981','#3B82F6','#8B5CF6'],borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783962987997_6b1b68387204.txt:397:   996→   996→    insights.push({type:'info',icon:'fa-lightbulb',text:`<b>${top.p.name}</b> has your highest margin at ${top.margPct.toFixed(0)}% (KSh ${top.margin} per unit). Consider featuring it prominently to boost profitability.`});
+/home/z/my-project/tool-results/read_1783962987997_6b1b68387204.txt:483:  1082→  1082→      <div class="form-group"><label>Cost Price (KSh)</label><input type="number" id="pCost" class="form-control" value="${p?p.cost:0}"></div>
+/home/z/my-project/tool-results/read_1783962987997_6b1b68387204.txt:484:  1083→  1083→      <div class="form-group"><label>Sell Price (KSh)</label><input type="number" id="pSell" class="form-control" value="${p?p.sell:0}"></div>
+/home/z/my-project/tool-results/read_1783978602941_a180a98bdbe4.txt:54:    54→    54→const formatKES = (amount: number): string =>
+/home/z/my-project/tool-results/read_1783978602941_a180a98bdbe4.txt:57:    57→    57→    currency: 'KES',
+/home/z/my-project/tool-results/read_1783978602941_a180a98bdbe4.txt:338:   338→   338→                  <p className="text-xs font-semibold">{formatKES(product.cost_price)}</p>
+/home/z/my-project/tool-results/read_1783978602941_a180a98bdbe4.txt:342:   342→   342→                  <p className="text-xs font-semibold">{formatKES(product.sell_price)}</p>
+/home/z/my-project/tool-results/read_1783978602941_a180a98bdbe4.txt:436:   436→   436→                    <TableCell className="text-right text-sm tabular-nums">{formatKES(product.cost_price)}</TableCell>
+/home/z/my-project/tool-results/read_1783978602941_a180a98bdbe4.txt:437:   437→   437→                    <TableCell className="text-right text-sm font-medium tabular-nums">{formatKES(product.sell_price)}</TableCell>
+/home/z/my-project/tool-results/read_1783978602941_a180a98bdbe4.txt:635:   635→   635→                  Cost Price (KES)
+/home/z/my-project/tool-results/read_1783978602941_a180a98bdbe4.txt:649:   649→   649→                  Sell Price (KES)
+/home/z/my-project/tool-results/read_1784012227827_36a2bb58774e.txt:48:    48→const formatKES = (amount: number): string =>
+/home/z/my-project/tool-results/read_1784012227827_36a2bb58774e.txt:51:    51→    currency: 'KES',
+/home/z/my-project/tool-results/read_1784012227827_36a2bb58774e.txt:382:   382→                            {formatKES(product.sell_price)}
+/home/z/my-project/tool-results/read_1784012227827_36a2bb58774e.txt:469:   469→                            {formatKES(item.price)} each
+/home/z/my-project/tool-results/read_1784012227827_36a2bb58774e.txt:494:   494→                          {formatKES(item.price * item.qty)}
+/home/z/my-project/tool-results/read_1784012227827_36a2bb58774e.txt:592:   592→                      {formatKES(cartTotal)}
+/home/z/my-project/tool-results/read_1784012227827_36a2bb58774e.txt:612:   612→                          {formatKES(cartTotal)}
+/home/z/my-project/tool-results/read_1783955217092_47e437fa56c2.txt:155:   614→   614→      const arrFields = {inventory:seed.inventory,sales:[],stockTakes:[],reconciliation:[],expenses:[]};
+/home/z/my-project/tool-results/read_1783955217092_47e437fa56c2.txt:224:   683→   683→  return {stores,currentStoreId:'s1',inventory:inv,suppliers,staff,sales,stockTakes:[],reconciliation:[],expenses,lastBackup:null};
+/home/z/my-project/tool-results/read_1783955217092_47e437fa56c2.txt:230:   689→   689→const fmt = n => 'KSh '+Number(n||0).toLocaleString('en-KE',{maximumFractionDigits:0});
+/home/z/my-project/tool-results/read_1783955217092_47e437fa56c2.txt:486:   945→   945→  charts.week=new Chart($('#weekChart'),{type:'line',data:{labels:days,datasets:[{label:'Revenue',data:revs,borderColor:'#DC2626',backgroundColor:'rgba(220,38,38,.12)',fill:true,tension:.35,pointBackgroundColor:'#F59E0B',pointRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783955217092_47e437fa56c2.txt:492:   951→   951→  charts.top=new Chart($('#topChart'),{type:'bar',data:{labels:top.map(t=>t[0].split(' ').slice(0,2).join(' ')),datasets:[{data:top.map(t=>t[1]),backgroundColor:['#DC2626','#F59E0B','#10B981','#3B82F6','#8B5CF6'],borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:294:   294→-- ── 6c. Stock Takes (Physical Counts) ──────────────────
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:295:   295→create table public.stock_takes (
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:308:   308→create index idx_stock_takes_organisation on public.stock_takes (organisation_id);
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:309:   309→create index idx_stock_takes_store on public.stock_takes (store_id);
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:310:   310→create index idx_stock_takes_status on public.stock_takes (status);
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:318:   318→  stock_take_id     uuid not null references public.stock_takes(id) on delete cascade,
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:666:   666→-- 13k. Stock Takes ───────────────────────────────────
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:667:   667→alter table public.stock_takes enable row level security;
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:669:   669→create policy "stock_takes_select_own_org" on public.stock_takes
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:672:   672→create policy "stock_takes_insert_own_org" on public.stock_takes
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:675:   675→create policy "stock_takes_update_own_org" on public.stock_takes
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:688:   688→      select 1 from public.stock_takes
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:689:   689→      where stock_takes.id = stock_take_items.stock_take_id
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:690:   690→      and stock_takes.organisation_id = public.get_organisation_id()
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:697:   697→      select 1 from public.stock_takes
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:698:   698→      where stock_takes.id = stock_take_items.stock_take_id
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:699:   699→      and stock_takes.organisation_id = public.get_organisation_id()
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:706:   706→      select 1 from public.stock_takes
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:707:   707→      where stock_takes.id = stock_take_items.stock_take_id
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:708:   708→      and stock_takes.organisation_id = public.get_organisation_id()
+/home/z/my-project/tool-results/read_1783977894810_120c930aba17.txt:1138:  1138→  alter publication supabase_realtime add table public.stock_takes;
+/home/z/my-project/tool-results/read_1783965383700_d611689f10cc.txt:98:    98→function formatKSh(n: number) {
+/home/z/my-project/tool-results/read_1783965383700_d611689f10cc.txt:99:    99→  return `KSh ${Number(n || 0).toLocaleString('en-KE')}`
+/home/z/my-project/tool-results/read_1783965383700_d611689f10cc.txt:522:   522→                <label className={labelClass}>Cost Price (KSh)</label>
+/home/z/my-project/tool-results/read_1783965383700_d611689f10cc.txt:534:   534→                <label className={labelClass}>Sell Price (KSh)</label>
+/home/z/my-project/tool-results/read_1783965383700_d611689f10cc.txt:693:   693→                {formatKSh(estimatedCost)}
+/home/z/my-project/tool-results/read_1783965383700_d611689f10cc.txt:1031:  1031→                            {formatKSh(product.costPrice || 0)}
+/home/z/my-project/tool-results/read_1783965383700_d611689f10cc.txt:1034:  1034→                            {formatKSh(product.sellPrice || 0)}
+/home/z/my-project/tool-results/read_1783965383700_d611689f10cc.txt:1138:  1138→                          {formatKSh(product.costPrice || 0)}
+/home/z/my-project/tool-results/read_1783965383700_d611689f10cc.txt:1146:  1146→                          {formatKSh(product.sellPrice || 0)}
+/home/z/my-project/tool-results/read_1783955446137_e2823ac20e51.txt:83:  1082→      <div class="form-group"><label>Cost Price (KSh)</label><input type="number" id="pCost" class="form-control" value="${p?p.cost:0}"></div>
+/home/z/my-project/tool-results/read_1783955446137_e2823ac20e51.txt:84:  1083→      <div class="form-group"><label>Sell Price (KSh)</label><input type="number" id="pSell" class="form-control" value="${p?p.sell:0}"></div>
+/home/z/my-project/tool-results/read_1783955446137_e2823ac20e51.txt:104:  1103→  const myTakes=state.stockTakes.filter(t=>t.storeId===state.currentStoreId).sort((a,b)=>b.startedAt-a.startedAt);
+/home/z/my-project/tool-results/read_1783955446137_e2823ac20e51.txt:121:  1120→    ${myTakes.length?`<div class="table-wrap"><table><thead><tr><th>Date</th><th>Started By</th><th>Items</th><th>Variance</th><th>Status</th><th>Action</th></tr></thead><tbody>
+/home/z/my-project/tool-results/read_1783955446137_e2823ac20e51.txt:122:  1121→      ${myTakes.map(t=>{const v=t.items.reduce((a,b)=>a+(b.counted-b.expected),0);return `<tr><td>${new Date(t.startedAt).toLocaleString()}</td><td>${staffName(t.startedBy)}</td><td>${t.items.length}</td><td><b class="${v===0?'text-emerald':v>0?'text-amber':'text-crimson'}">${v>0?'+':''}${v}</b></td><td><span class="badge ${t.status==='approved'?'badge-green':t.status==='pending'?'badge-gold':'badge-gray'}">${t.status}</span></td><td>${t.status==='pending'&&currentUser.role==='manager'?'<button class="btn btn-amber btn-sm" onclick="approveStockTake(\''+t.id+'\')"><i class="fa-solid fa-check"></i> Approve</button>':'<button class="btn btn-ghost btn-sm" onclick="viewStockTake(\''+t.id+'\')">View</button>'}</td></tr>`}).join('')}
+/home/z/my-project/tool-results/read_1783955446137_e2823ac20e51.txt:167:  1166→  state.stockTakes.push(pendingStockTake);
+/home/z/my-project/tool-results/read_1783955446137_e2823ac20e51.txt:174:  1173→  const t=state.stockTakes.find(x=>x.id===id);if(!t)return;
+/home/z/my-project/tool-results/read_1783955446137_e2823ac20e51.txt:183:  1182→  const t=state.stockTakes.find(x=>x.id===id);
+/home/z/my-project/tool-results/read_1783955446137_e2823ac20e51.txt:189:  1188→  const t=state.stockTakes.find(x=>x.id===id);
+/home/z/my-project/tool-results/read_1783955446137_e2823ac20e51.txt:310:  1309→        <div class="cart-total"><span>Total</span><span id="cartTotal">KSh 0</span></div>
+/home/z/my-project/tool-results/read_1783955446137_e2823ac20e51.txt:454:  1453→  charts.trend=new Chart($('#trendChart'),{type:'line',data:{labels:days,datasets:[{label:'Revenue',data:revs,borderColor:'#DC2626',backgroundColor:'rgba(220,38,38,.1)',fill:true,tension:.3}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783955446137_e2823ac20e51.txt:461:  1460→  charts.top10=new Chart($('#top10Chart'),{type:'bar',data:{labels:top10.map(t=>t[0].split(' ').slice(0,2).join(' ')),datasets:[{data:top10.map(t=>t[1]),backgroundColor:'#F59E0B',borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783978598332_d87be7d02004.txt:54:    54→const formatKES = (amount: number): string =>
+/home/z/my-project/tool-results/read_1783978598332_d87be7d02004.txt:57:    57→    currency: 'KES',
+/home/z/my-project/tool-results/read_1783978598332_d87be7d02004.txt:338:   338→                  <p className="text-xs font-semibold">{formatKES(product.cost_price)}</p>
+/home/z/my-project/tool-results/read_1783978598332_d87be7d02004.txt:342:   342→                  <p className="text-xs font-semibold">{formatKES(product.sell_price)}</p>
+/home/z/my-project/tool-results/read_1783978598332_d87be7d02004.txt:436:   436→                    <TableCell className="text-right text-sm tabular-nums">{formatKES(product.cost_price)}</TableCell>
+/home/z/my-project/tool-results/read_1783978598332_d87be7d02004.txt:437:   437→                    <TableCell className="text-right text-sm font-medium tabular-nums">{formatKES(product.sell_price)}</TableCell>
+/home/z/my-project/tool-results/read_1783978598332_d87be7d02004.txt:635:   635→                  Cost Price (KES)
+/home/z/my-project/tool-results/read_1783978598332_d87be7d02004.txt:649:   649→                  Sell Price (KES)
+/home/z/my-project/tool-results/read_1783962938580_52b0062f39a7.txt:83:  1082→  1082→      <div class="form-group"><label>Cost Price (KSh)</label><input type="number" id="pCost" class="form-control" value="${p?p.cost:0}"></div>
+/home/z/my-project/tool-results/read_1783962938580_52b0062f39a7.txt:84:  1083→  1083→      <div class="form-group"><label>Sell Price (KSh)</label><input type="number" id="pSell" class="form-control" value="${p?p.sell:0}"></div>
+/home/z/my-project/tool-results/read_1783962938580_52b0062f39a7.txt:104:  1103→  1103→  const myTakes=state.stockTakes.filter(t=>t.storeId===state.currentStoreId).sort((a,b)=>b.startedAt-a.startedAt);
+/home/z/my-project/tool-results/read_1783962938580_52b0062f39a7.txt:121:  1120→  1120→    ${myTakes.length?`<div class="table-wrap"><table><thead><tr><th>Date</th><th>Started By</th><th>Items</th><th>Variance</th><th>Status</th><th>Action</th></tr></thead><tbody>
+/home/z/my-project/tool-results/read_1783962938580_52b0062f39a7.txt:122:  1121→  1121→      ${myTakes.map(t=>{const v=t.items.reduce((a,b)=>a+(b.counted-b.expected),0);return `<tr><td>${new Date(t.startedAt).toLocaleString()}</td><td>${staffName(t.startedBy)}</td><td>${t.items.length}</td><td><b class="${v===0?'text-emerald':v>0?'text-amber':'text-crimson'}">${v>0?'+':''}${v}</b></td><td><span class="badge ${t.status==='approved'?'badge-green':t.status==='pending'?'badge-gold':'badge-gray'}">${t.status}</span></td><td>${t.status==='pending'&&currentUser.role==='manager'?'<button class="btn btn-amber btn-sm" onclick="approveStockTake(\''+t.id+'\')"><i class="fa-solid fa-check"></i> Approve</button>':'<button class="btn btn-ghost btn-sm" onclick="viewStockTake(\''+t.id+'\')">View</button>'}</td></tr>`}).join('')}
+/home/z/my-project/tool-results/read_1783962938580_52b0062f39a7.txt:167:  1166→  1166→  state.stockTakes.push(pendingStockTake);
+/home/z/my-project/tool-results/read_1783962938580_52b0062f39a7.txt:174:  1173→  1173→  const t=state.stockTakes.find(x=>x.id===id);if(!t)return;
+/home/z/my-project/tool-results/read_1783962938580_52b0062f39a7.txt:183:  1182→  1182→  const t=state.stockTakes.find(x=>x.id===id);
+/home/z/my-project/tool-results/read_1783962938580_52b0062f39a7.txt:189:  1188→  1188→  const t=state.stockTakes.find(x=>x.id===id);
+/home/z/my-project/tool-results/read_1783962938580_52b0062f39a7.txt:310:  1309→  1309→        <div class="cart-total"><span>Total</span><span id="cartTotal">KSh 0</span></div>
+/home/z/my-project/tool-results/read_1783962938580_52b0062f39a7.txt:454:  1453→  1453→  charts.trend=new Chart($('#trendChart'),{type:'line',data:{labels:days,datasets:[{label:'Revenue',data:revs,borderColor:'#DC2626',backgroundColor:'rgba(220,38,38,.1)',fill:true,tension:.3}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783962938580_52b0062f39a7.txt:461:  1460→  1460→  charts.top10=new Chart($('#top10Chart'),{type:'bar',data:{labels:top10.map(t=>t[0].split(' ').slice(0,2).join(' ')),datasets:[{data:top10.map(t=>t[1]),backgroundColor:'#F59E0B',borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783968572145_6b1b68387204.txt:15:   614→   614→      const arrFields = {inventory:seed.inventory,sales:[],stockTakes:[],reconciliation:[],expenses:[]};
+/home/z/my-project/tool-results/read_1783968572145_6b1b68387204.txt:84:   683→   683→  return {stores,currentStoreId:'s1',inventory:inv,suppliers,staff,sales,stockTakes:[],reconciliation:[],expenses,lastBackup:null};
+/home/z/my-project/tool-results/read_1783968572145_6b1b68387204.txt:90:   689→   689→const fmt = n => 'KSh '+Number(n||0).toLocaleString('en-KE',{maximumFractionDigits:0});
+/home/z/my-project/tool-results/read_1783968572145_6b1b68387204.txt:346:   945→   945→  charts.week=new Chart($('#weekChart'),{type:'line',data:{labels:days,datasets:[{label:'Revenue',data:revs,borderColor:'#DC2626',backgroundColor:'rgba(220,38,38,.12)',fill:true,tension:.35,pointBackgroundColor:'#F59E0B',pointRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783968572145_6b1b68387204.txt:352:   951→   951→  charts.top=new Chart($('#topChart'),{type:'bar',data:{labels:top.map(t=>t[0].split(' ').slice(0,2).join(' ')),datasets:[{data:top.map(t=>t[1]),backgroundColor:['#DC2626','#F59E0B','#10B981','#3B82F6','#8B5CF6'],borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783968572145_6b1b68387204.txt:397:   996→   996→    insights.push({type:'info',icon:'fa-lightbulb',text:`<b>${top.p.name}</b> has your highest margin at ${top.margPct.toFixed(0)}% (KSh ${top.margin} per unit). Consider featuring it prominently to boost profitability.`});
+/home/z/my-project/tool-results/read_1783968572145_6b1b68387204.txt:483:  1082→  1082→      <div class="form-group"><label>Cost Price (KSh)</label><input type="number" id="pCost" class="form-control" value="${p?p.cost:0}"></div>
+/home/z/my-project/tool-results/read_1783968572145_6b1b68387204.txt:484:  1083→  1083→      <div class="form-group"><label>Sell Price (KSh)</label><input type="number" id="pSell" class="form-control" value="${p?p.sell:0}"></div>
+/home/z/my-project/tool-results/read_1783977772131_2039eb290851.txt:38:    38→    38→const fmt = (n: number) => 'KSh ' + n.toLocaleString('en-KE')
+/home/z/my-project/tool-results/read_1783978183736_d611689f10cc.txt:98:    98→function formatKSh(n: number) {
+/home/z/my-project/tool-results/read_1783978183736_d611689f10cc.txt:99:    99→  return `KSh ${Number(n || 0).toLocaleString('en-KE')}`
+/home/z/my-project/tool-results/read_1783978183736_d611689f10cc.txt:522:   522→                <label className={labelClass}>Cost Price (KSh)</label>
+/home/z/my-project/tool-results/read_1783978183736_d611689f10cc.txt:534:   534→                <label className={labelClass}>Sell Price (KSh)</label>
+/home/z/my-project/tool-results/read_1783978183736_d611689f10cc.txt:693:   693→                {formatKSh(estimatedCost)}
+/home/z/my-project/tool-results/read_1783978183736_d611689f10cc.txt:1031:  1031→                            {formatKSh(product.costPrice || 0)}
+/home/z/my-project/tool-results/read_1783978183736_d611689f10cc.txt:1034:  1034→                            {formatKSh(product.sellPrice || 0)}
+/home/z/my-project/tool-results/read_1783978183736_d611689f10cc.txt:1138:  1138→                          {formatKSh(product.costPrice || 0)}
+/home/z/my-project/tool-results/read_1783978183736_d611689f10cc.txt:1146:  1146→                          {formatKSh(product.sellPrice || 0)}
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:614:   614→      const arrFields = {inventory:seed.inventory,sales:[],stockTakes:[],reconciliation:[],expenses:[]};
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:683:   683→  return {stores,currentStoreId:'s1',inventory:inv,suppliers,staff,sales,stockTakes:[],reconciliation:[],expenses,lastBackup:null};
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:689:   689→const fmt = n => 'KSh '+Number(n||0).toLocaleString('en-KE',{maximumFractionDigits:0});
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:945:   945→  charts.week=new Chart($('#weekChart'),{type:'line',data:{labels:days,datasets:[{label:'Revenue',data:revs,borderColor:'#DC2626',backgroundColor:'rgba(220,38,38,.12)',fill:true,tension:.35,pointBackgroundColor:'#F59E0B',pointRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:951:   951→  charts.top=new Chart($('#topChart'),{type:'bar',data:{labels:top.map(t=>t[0].split(' ').slice(0,2).join(' ')),datasets:[{data:top.map(t=>t[1]),backgroundColor:['#DC2626','#F59E0B','#10B981','#3B82F6','#8B5CF6'],borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:996:   996→    insights.push({type:'info',icon:'fa-lightbulb',text:`<b>${top.p.name}</b> has your highest margin at ${top.margPct.toFixed(0)}% (KSh ${top.margin} per unit). Consider featuring it prominently to boost profitability.`});
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1082:  1082→      <div class="form-group"><label>Cost Price (KSh)</label><input type="number" id="pCost" class="form-control" value="${p?p.cost:0}"></div>
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1083:  1083→      <div class="form-group"><label>Sell Price (KSh)</label><input type="number" id="pSell" class="form-control" value="${p?p.sell:0}"></div>
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1103:  1103→  const myTakes=state.stockTakes.filter(t=>t.storeId===state.currentStoreId).sort((a,b)=>b.startedAt-a.startedAt);
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1120:  1120→    ${myTakes.length?`<div class="table-wrap"><table><thead><tr><th>Date</th><th>Started By</th><th>Items</th><th>Variance</th><th>Status</th><th>Action</th></tr></thead><tbody>
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1121:  1121→      ${myTakes.map(t=>{const v=t.items.reduce((a,b)=>a+(b.counted-b.expected),0);return `<tr><td>${new Date(t.startedAt).toLocaleString()}</td><td>${staffName(t.startedBy)}</td><td>${t.items.length}</td><td><b class="${v===0?'text-emerald':v>0?'text-amber':'text-crimson'}">${v>0?'+':''}${v}</b></td><td><span class="badge ${t.status==='approved'?'badge-green':t.status==='pending'?'badge-gold':'badge-gray'}">${t.status}</span></td><td>${t.status==='pending'&&currentUser.role==='manager'?'<button class="btn btn-amber btn-sm" onclick="approveStockTake(\''+t.id+'\')"><i class="fa-solid fa-check"></i> Approve</button>':'<button class="btn btn-ghost btn-sm" onclick="viewStockTake(\''+t.id+'\')">View</button>'}</td></tr>`}).join('')}
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1166:  1166→  state.stockTakes.push(pendingStockTake);
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1173:  1173→  const t=state.stockTakes.find(x=>x.id===id);if(!t)return;
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1182:  1182→  const t=state.stockTakes.find(x=>x.id===id);
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1188:  1188→  const t=state.stockTakes.find(x=>x.id===id);
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1309:  1309→        <div class="cart-total"><span>Total</span><span id="cartTotal">KSh 0</span></div>
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1453:  1453→  charts.trend=new Chart($('#trendChart'),{type:'line',data:{labels:days,datasets:[{label:'Revenue',data:revs,borderColor:'#DC2626',backgroundColor:'rgba(220,38,38,.1)',fill:true,tension:.3}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1460:  1460→  charts.top10=new Chart($('#top10Chart'),{type:'bar',data:{labels:top10.map(t=>t[0].split(' ').slice(0,2).join(' ')),datasets:[{data:top10.map(t=>t[1]),backgroundColor:'#F59E0B',borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1500:  1500→  charts.prof=new Chart($('#profChart'),{type:'bar',data:{labels:days,datasets:[{label:'Profit',data:profits,backgroundColor:'#10B981',borderRadius:4}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1503:  1503→  charts.profTop=new Chart($('#profTopChart'),{type:'bar',data:{labels:top.map(t=>t.name.split(' ').slice(0,2).join(' ')),datasets:[{data:top.map(t=>t.profit),backgroundColor:['#10B981','#14B8A6','#3B82F6','#8B5CF6','#DC2626','#F59E0B','#EC4899','#F97316','#6366F1','#A855F7'],borderRadius:6}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:v=>'KSh '+(v/1000)+'k'}}}}});
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1546:  1546→      <div class="form-group"><label>Amount (KSh)</label><input type="number" id="expAmount" class="form-control" value="${e?e.amount:''}" min="0" step="100"></div>
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1677:  1677→    ...['Rent','Utilities','Salaries','Inventory','Marketing','Maintenance','Other'].map(c=>[c,fmt(exps.filter(e=>e.category===c).reduce((a,b)=>a+b.amount,0))]).filter(r=>r[1]!=='KSh 0'),
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1719:  1719→  const takes=state.stockTakes.filter(t=>t.storeId===state.currentStoreId).sort((a,b)=>b.startedAt-a.startedAt);
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1722:  1722→  pdfHeader(doc,'Stock Count Audit Report',store.name+' · '+takes.length+' count sessions');
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1723:  1723→  if(!takes.length){doc.setFontSize(11);doc.setTextColor(107,114,128);doc.text('No stock counts have been performed yet.',14,60);downloadPdf(doc,'stocktake-audit-'+todayKey()+'.pdf');return}
+/home/z/my-project/tool-results/read_1783968529468_db383e45e507.txt:1725:  1725→  takes.forEach((t,i)=>{
+/home/z/my-project/tool-results/read_1783971761400_c80c6680f5fc.txt:278:   278→-- ── 6c. Stock Takes (Physical Counts) ──────────────────
+/home/z/my-project/tool-results/read_1783971761400_c80c6680f5fc.txt:279:   279→create table public.stock_takes (
+/home/z/my-project/tool-results/read_1783971761400_c80c6680f5fc.txt:292:   292→create index idx_stock_takes_organisation on public.stock_takes (organisation_id);
+/home/z/my-project/tool-results/read_1783971761400_c80c6680f5fc.txt:293:   293→create index idx_stock_takes_store on public.stock_takes (store_id);
+/home/z/my-project/tool-results/read_1783971761400_c80c6680f5fc.txt:294:   294→create index idx_stock_takes_status on public.stock_takes (status);
+/home/z/my-project/tool-results/read_1783971761400_c80c6680f5fc.txt:302:   302→  stock_take_id     uuid not null references public.stock_takes(id) on delete cascade,
+/home/z/my-project/tool-results/read_1783971761400_c80c6680f5fc.txt:652:   652→-- 13k. Stock Takes ───────────────────────────────────
+/home/z/my-project/tool-results/read_1783971761400_c80c6680f5fc.txt:653:   653→alter table public.stock_takes enable row level security;
+/home/z/my-project/tool-results/read_1783971761400_c80c6680f5fc.txt:655:   655→create policy "stock_takes_select_own_org" on public.stock_takes
+/home/z/my-project/tool-results/read_1783971761400_c80c6680f5fc.txt:658:   658→create policy "stock_takes_insert_own_org" on public.stock_takes
+/home/z/my-project/tool-results/read_1783971761400_c80c6680f5fc.txt:661:   661→create policy "stock_takes_update_own_org" on public.stock_takes
+/home/z/my-project/tool-results/read_1783971761400_c80c6680f5fc.txt:674:   674→      select 1 from public.stock_takes
+/home/z/my-project/tool-results/read_1783971761400_c80c6680f5fc.txt:675:   675→      where stock_takes.id = stock_take_items.stock_take_id
+/home/z/my-project/tool-results/read_1783971761400_c80c6680f5fc.txt:676:   676→      and stock_takes.organisation_id = auth.organisation_id()
+/home/z/my-project/tool-results/read_1783971761400_c80c6680f5fc.txt:683:   683→      select 1 from public.stock_takes
+/home/z/my-project/tool-results/read_1783971761400_c80c6680f5fc.txt:684:   684→      where stock_takes.id = stock_take_items.stock_take_id
+/home/z/my-project/tool-results/read_1783971761400_c80c6680f5fc.txt:685:   685→      and stock_takes.organisation_id = auth.organisation_id()
+/home/z/my-project/tool-results/read_1783971761400_c80c6680f5fc.txt:692:   692→      select 1 from public.stock_takes
+/home/z/my-project/tool-results/read_1783971761400_c80c6680f5fc.txt:693:   693→      where stock_takes.id = stock_take_items.stock_take_id
+
+[Showing results with pagination = limit: 250]

@@ -26,7 +26,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { CalendarIcon } from 'lucide-react'
 import {
-  DollarSign,
+  Coins,
   TrendingUp,
   ShoppingCart,
   Receipt,
@@ -35,6 +35,7 @@ import {
   ArrowDownRight,
   ArrowUpRight,
 } from 'lucide-react'
+import { formatKSh as formatKES } from '@/lib/currency'
 import { useQuery } from '@tanstack/react-query'
 import { useIsMobile } from '@/hooks/use-mobile'
 
@@ -46,13 +47,7 @@ const ACCENT = '#7C3AED'
 
 type DateRange = '7d' | '30d' | 'month' | 'custom'
 
-const formatKES = (amount: number): string =>
-  new Intl.NumberFormat('en-KE', {
-    style: 'currency',
-    currency: 'KES',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount)
+
 
 function todayISO() {
   return new Date().toISOString().split('T')[0]
@@ -304,7 +299,7 @@ export default function ReportsPage() {
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
                 style={{ backgroundColor: `${ACCENT}14` }}
               >
-                <DollarSign className="h-5 w-5" style={{ color: ACCENT }} />
+                <Coins className="h-5 w-5" style={{ color: ACCENT }} />
               </div>
             </div>
           </CardContent>

@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import {
-  DollarSign,
+  Coins,
   ShoppingCart,
   Package,
   AlertTriangle,
@@ -30,6 +30,7 @@ import {
   BarChart3,
   Eye,
 } from 'lucide-react'
+import { formatKSh } from '@/lib/currency'
 import {
   BarChart,
   Bar,
@@ -50,13 +51,7 @@ const ACCENT = '#7C3AED'
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-const formatKES = (amount: number): string =>
-  new Intl.NumberFormat('en-KE', {
-    style: 'currency',
-    currency: 'KES',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount)
+const formatKES = formatKSh
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -409,7 +404,7 @@ export default function DashboardPage() {
         <StatCard
           title="Today's Sales"
           value={formatKES(data.todaySales)}
-          icon={<DollarSign className="h-5 w-5 text-white" />}
+          icon={<Coins className="h-5 w-5 text-white" />}
           iconBg="bg-[#7C3AED]"
           trend={yesterdayChange !== null ? { value: yesterdayChange, label: 'vs yesterday' } : undefined}
           sub={`${data.todaySalesCount} transaction(s)`}

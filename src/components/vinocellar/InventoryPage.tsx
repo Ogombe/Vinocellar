@@ -51,13 +51,7 @@ const ACCENT = '#7C3AED'
 
 const SIZE_OPTIONS = ['750ml', '375ml', '1L', '500ml', '1.5L', '200ml'] as const
 
-const formatKES = (amount: number): string =>
-  new Intl.NumberFormat('en-KE', {
-    style: 'currency',
-    currency: 'KES',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount)
+import { formatKSh as formatKES } from '@/lib/currency'
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -632,7 +626,7 @@ export default function InventoryPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="cost-price" className="text-xs font-medium text-muted-foreground">
-                  Cost Price (KES)
+                  Cost Price (KSh)
                 </Label>
                 <Input
                   id="cost-price"
@@ -646,7 +640,7 @@ export default function InventoryPage() {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="sell-price" className="text-xs font-medium text-muted-foreground">
-                  Sell Price (KES)
+                  Sell Price (KSh)
                 </Label>
                 <Input
                   id="sell-price"
