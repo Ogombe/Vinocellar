@@ -29,16 +29,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   const loadProfile = async (userId: string) => {
-    const { data: profile } = await supabase
-      .from('users')
-      .select('*, organisation:organisations(*), store:stores(*)')
-      .eq('id', userId)
-      .single()
+    try {
+      // Fetch user with organisation (FK exists for org)
+      const { data: profile, error } = await supabase
+        .from('users')
+        .select('*, organisation:organisations(*)')
+        .eq('id', userId)
+        .single()
 
-    if (profile) {
-      setAppUser(profile)
-      setOrganisation(profile.organisation)
-      setStore(profile.store)
+      if (error) {
+        console.error('Profile load error:', error.message)
+        return
+      }
+      if (profile) {
+        setAppUser(profile)
+        setOrganisation(profile.organisation)
+
+        // Fetch store separately (no FK relationship detected by PostgREST)
+        if (profile.store_id) {
+          const { data: storeData } = await supabase
+            .from('stores')
+            .select('*')
+            .eq('id', profile.store_id)
+            .single()
+          if (storeData) setStore(storeData)
+        }
+      }
+    } catch (err) {
+      console.error('Profile load exception:', err)
     }
   }
 
@@ -69,26 +87,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe()
   }, [])
 
+  // Sign up: proxy through local API (avoids Edge Function CORS), then sign in directly
   const signUp = async ({ email, password, name, businessName, pin }: {
     email: string; password: string; name: string; businessName: string; pin: string
   }) => {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/signup`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({ email, password, name, business_name: businessName, pin }),
-    })
-    const data = await res.json()
-    if (!res.ok) return { error: data.error || 'Registration failed' }
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    return { error: error?.message || null }
+    try {
+      // 1. Call edge function via local proxy
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, name, business_name: businessName, pin }),
+      })
+      const data = await res.json()
+      if (!res.ok) return { error: data.error || 'Registration failed' }
+
+      // 2. Sign in directly via Supabase Auth client (handles session storage)
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+      if (signInError) return { error: signInError.message }
+
+      return { error: null }
+    } catch (err) {
+      console.error('Signup error:', err)
+      return { error: 'Network error. Please try again.' }
+    }
   }
 
+  // Sign in directly via Supabase Auth client
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    return { error: error?.message || null }
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) return { error: error.message }
+      return { error: null }
+    } catch (err) {
+      console.error('Signin error:', err)
+      return { error: 'Network error. Please try again.' }
+    }
   }
 
   const signOut = async () => {

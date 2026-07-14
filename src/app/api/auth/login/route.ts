@@ -1,41 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
-import { verifyPassword, createToken } from '@/lib/auth'
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://rnllkgdsnbybjgvbgagp.supabase.co'
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJubGxrZ2RzbmJ5YmpndmJnYWdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NjQ2NDcsImV4cCI6MjA5OTU0MDY0N30.h9Uk6j3WLC6VCbGGpVY8kGoywh7xT0duULZeazczVjs'
+
+// Server-side Supabase client (no cookie-based session, uses password grant)
+const supabaseServer = createClient(supabaseUrl, supabaseAnonKey)
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { email, password, pin } = body
+    const { email, password } = await request.json()
 
-    if ((!email && !pin) || (!password && !pin)) {
-      return NextResponse.json({ error: 'Provide email+password or PIN' }, { status: 400 })
+    if (!email || !password) {
+      return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
     }
 
-    let user
-    if (pin) {
-      user = await db.user.findUnique({ where: { pin }, include: { organisation: true, store: true } })
-      if (!user || !user.isActive) return NextResponse.json({ error: 'Invalid PIN' }, { status: 401 })
-      if (user.role !== 'manager' && user.role !== 'super_admin') return NextResponse.json({ error: 'PIN login is for managers only' }, { status: 403 })
-    } else {
-      user = await db.user.findFirst({ where: { email: email.toLowerCase() }, include: { organisation: true, store: true } })
-      if (!user || !user.isActive) return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
-      const valid = await verifyPassword(password, user.passwordHash)
-      if (!valid) return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
+    const { data, error } = await supabaseServer.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 401 })
     }
 
-    if (!user.organisation.isActive && user.role !== 'super_admin') return NextResponse.json({ error: 'Organisation is inactive' }, { status: 403 })
-    await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
-
-    const token = createToken({ userId: user.id, organisationId: user.organisationId, role: user.role, name: user.name })
-    const store = user.store ? { id: user.store.id, name: user.store.name } : null
-    const stores = await db.store.findMany({ where: { organisationId: user.organisationId }, select: { id: true, name: true, location: true } })
-
+    // Return the session tokens so the client can set them
     return NextResponse.json({
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, pin: user.pin, storeId: user.storeId },
-      org: { id: user.organisation.id, name: user.organisation.name, slug: user.organisation.slug, plan: user.organisation.plan, isActive: user.organisation.isActive, trialEndsAt: user.organisation.trialEndsAt },
-      store, stores
-    }, { headers: { 'Set-Cookie': `vinocellar_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${604800}` } })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Login failed' }, { status: 500 })
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+      expires_in: data.session.expires_in,
+      user: {
+        id: data.user.id,
+        email: data.user.email,
+      },
+    })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Login failed'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

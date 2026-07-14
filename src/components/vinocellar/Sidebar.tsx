@@ -186,7 +186,7 @@ export function Sidebar(props: SidebarProps) {
           side="left"
           className="w-72 p-0 border-r border-white/10 bg-slate-900 [&>button.absolute]:hidden"
         >
-          <SheetContent
+          <SidebarContent
             currentPage={props.currentPage}
             onNavigate={handleMobileNav}
             onLogout={props.onLogout}

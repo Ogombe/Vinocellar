@@ -1,0 +1,720 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import { useState } from 'react'
+     4→     4→import { supabase } from '@/lib/supabase'
+     5→     5→import { useAuth } from '@/contexts/auth-context'
+     6→     6→import type { Product, Category, Supplier } from '@/lib/types'
+     7→     7→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     8→     8→import { Button } from '@/components/ui/button'
+     9→     9→import { Input } from '@/components/ui/input'
+    10→    10→import {
+    11→    11→  Dialog,
+    12→    12→  DialogContent,
+    13→    13→  DialogHeader,
+    14→    14→  DialogTitle,
+    15→    15→  DialogFooter,
+    16→    16→} from '@/components/ui/dialog'
+    17→    17→import { Label } from '@/components/ui/label'
+    18→    18→import {
+    19→    19→  Select,
+    20→    20→  SelectContent,
+    21→    21→  SelectItem,
+    22→    22→  SelectTrigger,
+    23→    23→  SelectValue,
+    24→    24→} from '@/components/ui/select'
+    25→    25→import { Badge } from '@/components/ui/badge'
+    26→    26→import { Skeleton } from '@/components/ui/skeleton'
+    27→    27→import {
+    28→    28→  Table,
+    29→    29→  TableBody,
+    30→    30→  TableCell,
+    31→    31→  TableHead,
+    32→    32→  TableHeader,
+    33→    33→  TableRow,
+    34→    34→} from '@/components/ui/table'
+    35→    35→import {
+    36→    36→  Plus,
+    37→    37→  Search,
+    38→    38→  Edit,
+    39→    39→  Trash2,
+    40→    40→  Package,
+    41→    41→  Filter,
+    42→    42→} from 'lucide-react'
+    43→    43→import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+    44→    44→import { useIsMobile } from '@/hooks/use-mobile'
+    45→    45→
+    46→    46→/* ------------------------------------------------------------------ */
+    47→    47→/*  Constants                                                          */
+    48→    48→/* ------------------------------------------------------------------ */
+    49→    49→
+    50→    50→const ACCENT = '#7C3AED'
+    51→    51→
+    52→    52→const SIZE_OPTIONS = ['750ml', '375ml', '1L', '500ml', '1.5L', '200ml'] as const
+    53→    53→
+    54→    54→const formatKES = (amount: number): string =>
+    55→    55→  new Intl.NumberFormat('en-KE', {
+    56→    56→    style: 'currency',
+    57→    57→    currency: 'KES',
+    58→    58→    minimumFractionDigits: 0,
+    59→    59→    maximumFractionDigits: 0,
+    60→    60→  }).format(amount)
+    61→    61→
+    62→    62→/* ------------------------------------------------------------------ */
+    63→    63→/*  Helpers                                                            */
+    64→    64→/* ------------------------------------------------------------------ */
+    65→    65→
+    66→    66→function stockStatus(stock: number, reorderLevel: number) {
+    67→    67→  if (stock <= 0) return { label: 'Out of Stock', className: 'bg-red-100 text-red-700 border-red-200' }
+    68→    68→  if (stock <= reorderLevel) return { label: 'Low Stock', className: 'bg-amber-100 text-amber-700 border-amber-200' }
+    69→    69→  return { label: 'In Stock', className: 'bg-emerald-100 text-emerald-700 border-emerald-200' }
+    70→    70→}
+    71→    71→
+    72→    72→/* ------------------------------------------------------------------ */
+    73→    73→/*  Empty form                                                         */
+    74→    74→/* ------------------------------------------------------------------ */
+    75→    75→
+    76→    76→interface ProductForm {
+    77→    77→  name: string
+    78→    78→  sku: string
+    79→    79→  barcode: string
+    80→    80→  size: string
+    81→    81→  category_id: string
+    82→    82→  supplier_id: string
+    83→    83→  cost_price: string
+    84→    84→  sell_price: string
+    85→    85→  reorder_level: string
+    86→    86→  opening_stock: string
+    87→    87→}
+    88→    88→
+    89→    89→const emptyForm: ProductForm = {
+    90→    90→  name: '',
+    91→    91→  sku: '',
+    92→    92→  barcode: '',
+    93→    93→  size: '750ml',
+    94→    94→  category_id: '',
+    95→    95→  supplier_id: '',
+    96→    96→  cost_price: '',
+    97→    97→  sell_price: '',
+    98→    98→  reorder_level: '5',
+    99→    99→  opening_stock: '0',
+   100→   100→}
+   101→   101→
+   102→   102→/* ------------------------------------------------------------------ */
+   103→   103→/*  Component                                                          */
+   104→   104→/* ------------------------------------------------------------------ */
+   105→   105→
+   106→   106→export default function InventoryPage() {
+   107→   107→  const isMobile = useIsMobile()
+   108→   108→  const { store, appUser } = useAuth()
+   109→   109→  const queryClient = useQueryClient()
+   110→   110→
+   111→   111→  const [search, setSearch] = useState('')
+   112→   112→  const [categoryFilter, setCategoryFilter] = useState<string>('all')
+   113→   113→  const [dialogOpen, setDialogOpen] = useState(false)
+   114→   114→  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+   115→   115→  const [form, setForm] = useState<ProductForm>(emptyForm)
+   116→   116→
+   117→   117→  /* ── Data fetching ─────────────────────────────────────────────── */
+   118→   118→
+   119→   119→  const { data: products = [], isLoading } = useQuery({
+   120→   120→    queryKey: ['products', store?.id],
+   121→   121→    queryFn: async () => {
+   122→   122→      const { data } = await supabase
+   123→   123→        .from('products')
+   124→   124→        .select('*, category:categories(*), supplier:suppliers(*)')
+   125→   125→        .eq('store_id', store!.id)
+   126→   126→        .order('name')
+   127→   127→      return (data as Product[]) || []
+   128→   128→    },
+   129→   129→    enabled: !!store?.id,
+   130→   130→  })
+   131→   131→
+   132→   132→  const { data: categories = [] } = useQuery({
+   133→   133→    queryKey: ['categories', store?.organisation_id],
+   134→   134→    queryFn: async () => {
+   135→   135→      const { data } = await supabase
+   136→   136→        .from('categories')
+   137→   137→        .select('*')
+   138→   138→        .eq('organisation_id', store!.organisation_id)
+   139→   139→        .order('name')
+   140→   140→      return (data as Category[]) || []
+   141→   141→    },
+   142→   142→    enabled: !!store?.organisation_id,
+   143→   143→  })
+   144→   144→
+   145→   145→  const { data: suppliers = [] } = useQuery({
+   146→   146→    queryKey: ['suppliers', store?.organisation_id],
+   147→   147→    queryFn: async () => {
+   148→   148→      const { data } = await supabase
+   149→   149→        .from('suppliers')
+   150→   150→        .select('*')
+   151→   151→        .eq('organisation_id', store!.organisation_id)
+   152→   152→        .order('name')
+   153→   153→      return (data as Supplier[]) || []
+   154→   154→    },
+   155→   155→    enabled: !!store?.organisation_id,
+   156→   156→  })
+   157→   157→
+   158→   158→  /* ── Filtered list ─────────────────────────────────────────────── */
+   159→   159→
+   160→   160→  const filtered = products.filter((p) => {
+   161→   161→    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase())
+   162→   162→    const matchesCategory = categoryFilter === 'all' || p.category_id === categoryFilter
+   163→   163→    return matchesSearch && matchesCategory
+   164→   164→  })
+   165→   165→
+   166→   166→  /* ── Mutations ─────────────────────────────────────────────────── */
+   167→   167→
+   168→   168→  const saveMutation = useMutation({
+   169→   169→    mutationFn: async (values: ProductForm) => {
+   170→   170→      const row = {
+   171→   171→        name: values.name,
+   172→   172→        sku: values.sku,
+   173→   173→        barcode: values.barcode,
+   174→   174→        size: values.size,
+   175→   175→        category_id: values.category_id || null,
+   176→   176→        supplier_id: values.supplier_id || null,
+   177→   177→        cost_price: parseFloat(values.cost_price) || 0,
+   178→   178→        sell_price: parseFloat(values.sell_price) || 0,
+   179→   179→        reorder_level: parseInt(values.reorder_level) || 0,
+   180→   180→        organisation_id: store!.organisation_id,
+   181→   181→        store_id: store!.id,
+   182→   182→        updated_at: new Date().toISOString(),
+   183→   183→      }
+   184→   184→
+   185→   185→      if (editingProduct) {
+   186→   186→        const { error } = await supabase
+   187→   187→          .from('products')
+   188→   188→          .update(row)
+   189→   189→          .eq('id', editingProduct.id)
+   190→   190→        if (error) throw error
+   191→   191→      } else {
+   192→   192→        const openingStock = parseInt(values.opening_stock) || 0
+   193→   193→        const { data, error } = await supabase
+   194→   194→          .from('products')
+   195→   195→          .insert({ ...row, opening_stock: openingStock, current_stock: openingStock })
+   196→   196→          .select()
+   197→   197→          .single()
+   198→   198→        if (error) throw error
+   199→   199→
+   200→   200→        if (openingStock > 0) {
+   201→   201→          await supabase.from('stock_movements').insert({
+   202→   202→            product_id: data.id,
+   203→   203→            store_id: store!.id,
+   204→   204→            organisation_id: store!.organisation_id,
+   205→   205→            movement_type: 'opening',
+   206→   206→            quantity: openingStock,
+   207→   207→            reference_id: null,
+   208→   208→            notes: 'Opening stock',
+   209→   209→            created_by: appUser!.id,
+   210→   210→          })
+   211→   211→        }
+   212→   212→      }
+   213→   213→    },
+   214→   214→    onSuccess: () => {
+   215→   215→      queryClient.invalidateQueries({ queryKey: ['products'] })
+   216→   216→      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+   217→   217→      handleCloseDialog()
+   218→   218→    },
+   219→   219→  })
+   220→   220→
+   221→   221→  const deleteMutation = useMutation({
+   222→   222→    mutationFn: async (id: string) => {
+   223→   223→      const { error } = await supabase.from('products').delete().eq('id', id)
+   224→   224→      if (error) throw error
+   225→   225→    },
+   226→   226→    onSuccess: () => {
+   227→   227→      queryClient.invalidateQueries({ queryKey: ['products'] })
+   228→   228→      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+   229→   229→    },
+   230→   230→  })
+   231→   231→
+   232→   232→  /* ── Dialog helpers ────────────────────────────────────────────── */
+   233→   233→
+   234→   234→  const handleOpenCreate = () => {
+   235→   235→    setEditingProduct(null)
+   236→   236→    setForm(emptyForm)
+   237→   237→    setDialogOpen(true)
+   238→   238→  }
+   239→   239→
+   240→   240→  const handleOpenEdit = (product: Product) => {
+   241→   241→    setEditingProduct(product)
+   242→   242→    setForm({
+   243→   243→      name: product.name,
+   244→   244→      sku: product.sku,
+   245→   245→      barcode: product.barcode,
+   246→   246→      size: product.size,
+   247→   247→      category_id: product.category_id || '',
+   248→   248→      supplier_id: product.supplier_id || '',
+   249→   249→      cost_price: String(product.cost_price),
+   250→   250→      sell_price: String(product.sell_price),
+   251→   251→      reorder_level: String(product.reorder_level),
+   252→   252→      opening_stock: '0',
+   253→   253→    })
+   254→   254→    setDialogOpen(true)
+   255→   255→  }
+   256→   256→
+   257→   257→  const handleCloseDialog = () => {
+   258→   258→    setDialogOpen(false)
+   259→   259→    setEditingProduct(null)
+   260→   260→    setForm(emptyForm)
+   261→   261→  }
+   262→   262→
+   263→   263→  const handleDelete = (product: Product) => {
+   264→   264→    if (window.confirm(`Delete "${product.name}"? This action cannot be undone.`)) {
+   265→   265→      deleteMutation.mutate(product.id)
+   266→   266→    }
+   267→   267→  }
+   268→   268→
+   269→   269→  const handleSave = () => {
+   270→   270→    if (!form.name.trim()) return
+   271→   271→    saveMutation.mutate(form)
+   272→   272→  }
+   273→   273→
+   274→   274→  /* ── Loading skeleton ──────────────────────────────────────────── */
+   275→   275→
+   276→   276→  if (isLoading) {
+   277→   277→    return (
+   278→   278→      <div className="space-y-4 p-4 md:p-6">
+   279→   279→        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+   280→   280→          <Skeleton className="h-8 w-48" />
+   281→   281→          <Skeleton className="h-10 w-40" />
+   282→   282→        </div>
+   283→   283→        <div className="flex gap-3">
+   284→   284→          <Skeleton className="h-10 flex-1" />
+   285→   285→          <Skeleton className="h-10 w-44" />
+   286→   286→        </div>
+   287→   287→        {Array.from({ length: 6 }).map((_, i) => (
+   288→   288→          <Skeleton key={i} className="h-16 w-full" />
+   289→   289→        ))}
+   290→   290→      </div>
+   291→   291→    )
+   292→   292→  }
+   293→   293→
+   294→   294→  /* ── Render: Mobile cards ──────────────────────────────────────── */
+   295→   295→
+   296→   296→  const renderMobileCards = () => (
+   297→   297→    <div className="grid gap-3">
+   298→   298→      {filtered.length === 0 && (
+   299→   299→        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+   300→   300→          <Package className="mb-3 h-12 w-12 opacity-40" />
+   301→   301→          <p className="text-sm font-medium">No products found</p>
+   302→   302→          <p className="text-xs">Try adjusting your search or filter</p>
+   303→   303→        </div>
+   304→   304→      )}
+   305→   305→      {filtered.map((product) => {
+   306→   306→        const status = stockStatus(product.current_stock, product.reorder_level)
+   307→   307→        return (
+   308→   308→          <Card key={product.id} className="overflow-hidden border border-border/60 shadow-sm transition-shadow hover:shadow-md">
+   309→   309→            <CardContent className="p-4">
+   310→   310→              <div className="flex items-start justify-between gap-3">
+   311→   311→                <div className="min-w-0 flex-1">
+   312→   312→                  <p className="truncate text-sm font-semibold text-foreground">{product.name}</p>
+   313→   313→                  <div className="mt-1 flex flex-wrap items-center gap-2">
+   314→   314→                    {product.category && (
+   315→   315→                      <Badge
+   316→   316→                        variant="outline"
+   317→   317→                        className="text-xs"
+   318→   318→                        style={{
+   319→   319→                          borderColor: product.category.colour || ACCENT,
+   320→   320→                          color: product.category.colour || ACCENT,
+   321→   321→                          backgroundColor: `${product.category.colour || ACCENT}14`,
+   322→   322→                        }}
+   323→   323→                      >
+   324→   324→                        {product.category.name}
+   325→   325→                      </Badge>
+   326→   326→                    )}
+   327→   327→                    <span className="text-xs text-muted-foreground">{product.size}</span>
+   328→   328→                  </div>
+   329→   329→                </div>
+   330→   330→                <Badge variant="outline" className={`shrink-0 text-[10px] font-medium ${status.className}`}>
+   331→   331→                  {status.label}
+   332→   332→                </Badge>
+   333→   333→              </div>
+   334→   334→
+   335→   335→              <div className="mt-3 grid grid-cols-3 gap-3 border-t border-border/50 pt-3">
+   336→   336→                <div>
+   337→   337→                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Cost</p>
+   338→   338→                  <p className="text-xs font-semibold">{formatKES(product.cost_price)}</p>
+   339→   339→                </div>
+   340→   340→                <div>
+   341→   341→                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Sell</p>
+   342→   342→                  <p className="text-xs font-semibold">{formatKES(product.sell_price)}</p>
+   343→   343→                </div>
+   344→   344→                <div>
+   345→   345→                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Stock</p>
+   346→   346→                  <p className="text-xs font-bold">{product.current_stock} units</p>
+   347→   347→                </div>
+   348→   348→              </div>
+   349→   349→
+   350→   350→              <div className="mt-3 flex items-center justify-end gap-2 border-t border-border/50 pt-3">
+   351→   351→                <Button
+   352→   352→                  variant="ghost"
+   353→   353→                  size="sm"
+   354→   354→                  className="h-8 px-3 text-xs"
+   355→   355→                  onClick={() => handleOpenEdit(product)}
+   356→   356→                >
+   357→   357→                  <Edit className="mr-1.5 h-3.5 w-3.5" />
+   358→   358→                  Edit
+   359→   359→                </Button>
+   360→   360→                <Button
+   361→   361→                  variant="ghost"
+   362→   362→                  size="sm"
+   363→   363→                  className="h-8 px-3 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+   364→   364→                  onClick={() => handleDelete(product)}
+   365→   365→                >
+   366→   366→                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+   367→   367→                  Delete
+   368→   368→                </Button>
+   369→   369→              </div>
+   370→   370→            </CardContent>
+   371→   371→          </Card>
+   372→   372→        )
+   373→   373→      })}
+   374→   374→    </div>
+   375→   375→  )
+   376→   376→
+   377→   377→  /* ── Render: Desktop table ─────────────────────────────────────── */
+   378→   378→
+   379→   379→  const renderDesktopTable = () => (
+   380→   380→    <Card className="border-border/60 shadow-sm">
+   381→   381→      <CardContent className="p-0">
+   382→   382→        <div className="overflow-x-auto">
+   383→   383→          <Table>
+   384→   384→            <TableHeader>
+   385→   385→              <TableRow className="border-border/60 hover:bg-transparent">
+   386→   386→                <TableHead className="pl-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Name</TableHead>
+   387→   387→                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Category</TableHead>
+   388→   388→                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Size</TableHead>
+   389→   389→                <TableHead className="text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cost Price</TableHead>
+   390→   390→                <TableHead className="text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sell Price</TableHead>
+   391→   391→                <TableHead className="text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Current Stock</TableHead>
+   392→   392→                <TableHead className="text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</TableHead>
+   393→   393→                <TableHead className="pr-4 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Actions</TableHead>
+   394→   394→              </TableRow>
+   395→   395→            </TableHeader>
+   396→   396→            <TableBody>
+   397→   397→              {filtered.length === 0 && (
+   398→   398→                <TableRow>
+   399→   399→                  <TableCell colSpan={8} className="h-48 text-center">
+   400→   400→                    <div className="flex flex-col items-center text-muted-foreground">
+   401→   401→                      <Package className="mb-3 h-12 w-12 opacity-40" />
+   402→   402→                      <p className="text-sm font-medium">No products found</p>
+   403→   403→                      <p className="text-xs">Try adjusting your search or filter</p>
+   404→   404→                    </div>
+   405→   405→                  </TableCell>
+   406→   406→                </TableRow>
+   407→   407→              )}
+   408→   408→              {filtered.map((product) => {
+   409→   409→                const status = stockStatus(product.current_stock, product.reorder_level)
+   410→   410→                return (
+   411→   411→                  <TableRow key={product.id} className="border-border/40 transition-colors hover:bg-muted/30">
+   412→   412→                    <TableCell className="pl-4">
+   413→   413→                      <div className="flex flex-col">
+   414→   414→                        <span className="text-sm font-medium">{product.name}</span>
+   415→   415→                        <span className="text-[11px] text-muted-foreground">{product.sku || '—'}</span>
+   416→   416→                      </div>
+   417→   417→                    </TableCell>
+   418→   418→                    <TableCell>
+   419→   419→                      {product.category ? (
+   420→   420→                        <Badge
+   421→   421→                          variant="outline"
+   422→   422→                          className="text-xs font-medium"
+   423→   423→                          style={{
+   424→   424→                            borderColor: product.category.colour || ACCENT,
+   425→   425→                            color: product.category.colour || ACCENT,
+   426→   426→                            backgroundColor: `${product.category.colour || ACCENT}14`,
+   427→   427→                          }}
+   428→   428→                        >
+   429→   429→                          {product.category.name}
+   430→   430→                        </Badge>
+   431→   431→                      ) : (
+   432→   432→                        <span className="text-xs text-muted-foreground">—</span>
+   433→   433→                      )}
+   434→   434→                    </TableCell>
+   435→   435→                    <TableCell className="text-sm text-muted-foreground">{product.size}</TableCell>
+   436→   436→                    <TableCell className="text-right text-sm tabular-nums">{formatKES(product.cost_price)}</TableCell>
+   437→   437→                    <TableCell className="text-right text-sm font-medium tabular-nums">{formatKES(product.sell_price)}</TableCell>
+   438→   438→                    <TableCell className="text-center text-sm font-semibold tabular-nums">{product.current_stock}</TableCell>
+   439→   439→                    <TableCell className="text-center">
+   440→   440→                      <Badge variant="outline" className={`text-[11px] font-medium ${status.className}`}>
+   441→   441→                        {status.label}
+   442→   442→                      </Badge>
+   443→   443→                    </TableCell>
+   444→   444→                    <TableCell className="pr-4 text-right">
+   445→   445→                      <div className="flex items-center justify-end gap-1">
+   446→   446→                        <Button
+   447→   447→                          variant="ghost"
+   448→   448→                          size="icon"
+   449→   449→                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+   450→   450→                          onClick={() => handleOpenEdit(product)}
+   451→   451→                        >
+   452→   452→                          <Edit className="h-4 w-4" />
+   453→   453→                          <span className="sr-only">Edit {product.name}</span>
+   454→   454→                        </Button>
+   455→   455→                        <Button
+   456→   456→                          variant="ghost"
+   457→   457→                          size="icon"
+   458→   458→                          className="h-8 w-8 text-muted-foreground hover:text-red-600"
+   459→   459→                          onClick={() => handleDelete(product)}
+   460→   460→                        >
+   461→   461→                          <Trash2 className="h-4 w-4" />
+   462→   462→                          <span className="sr-only">Delete {product.name}</span>
+   463→   463→                        </Button>
+   464→   464→                      </div>
+   465→   465→                    </TableCell>
+   466→   466→                  </TableRow>
+   467→   467→                )
+   468→   468→              })}
+   469→   469→            </TableBody>
+   470→   470→          </Table>
+   471→   471→        </div>
+   472→   472→      </CardContent>
+   473→   473→    </Card>
+   474→   474→  )
+   475→   475→
+   476→   476→  /* ── Main render ───────────────────────────────────────────────── */
+   477→   477→
+   478→   478→  return (
+   479→   479→    <div className="space-y-5 p-4 md:p-6">
+   480→   480→      {/* Page header */}
+   481→   481→      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+   482→   482→        <div>
+   483→   483→          <h1 className="text-2xl font-bold tracking-tight text-foreground">Inventory</h1>
+   484→   484→          <p className="mt-1 text-sm text-muted-foreground">
+   485→   485→            {products.length} product{products.length !== 1 ? 's' : ''} &middot;{' '}
+   486→   486→            {filtered.length} shown
+   487→   487→          </p>
+   488→   488→        </div>
+   489→   489→        <Button
+   490→   490→          onClick={handleOpenCreate}
+   491→   491→          className="shrink-0 shadow-md transition-all hover:shadow-lg"
+   492→   492→          style={{ backgroundColor: ACCENT, borderColor: ACCENT }}
+   493→   493→        >
+   494→   494→          <Plus className="mr-2 h-4 w-4" />
+   495→   495→          Add Product
+   496→   496→        </Button>
+   497→   497→      </div>
+   498→   498→
+   499→   499→      {/* Search & filter bar */}
+   500→   500→      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+   501→   501→        <div className="relative flex-1">
+   502→   502→          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+   503→   503→          <Input
+   504→   504→            placeholder="Search products by name…"
+   505→   505→            value={search}
+   506→   506→            onChange={(e) => setSearch(e.target.value)}
+   507→   507→            className="h-10 pl-10"
+   508→   508→          />
+   509→   509→        </div>
+   510→   510→        <div className="relative w-full sm:w-52">
+   511→   511→          <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+   512→   512→          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+   513→   513→            <SelectTrigger className="h-10 pl-10">
+   514→   514→              <SelectValue placeholder="All Categories" />
+   515→   515→            </SelectTrigger>
+   516→   516→            <SelectContent>
+   517→   517→              <SelectItem value="all">All Categories</SelectItem>
+   518→   518→              {categories.map((cat) => (
+   519→   519→                <SelectItem key={cat.id} value={cat.id}>
+   520→   520→                  {cat.name}
+   521→   521→                </SelectItem>
+   522→   522→              ))}
+   523→   523→            </SelectContent>
+   524→   524→          </Select>
+   525→   525→        </div>
+   526→   526→      </div>
+   527→   527→
+   528→   528→      {/* Products list */}
+   529→   529→      {isMobile ? renderMobileCards() : renderDesktopTable()}
+   530→   530→
+   531→   531→      {/* ── Add / Edit dialog ─────────────────────────────────────── */}
+   532→   532→      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) handleCloseDialog() }}>
+   533→   533→        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+   534→   534→          <DialogHeader>
+   535→   535→            <DialogTitle className="text-lg font-semibold">
+   536→   536→              {editingProduct ? 'Edit Product' : 'Add New Product'}
+   537→   537→            </DialogTitle>
+   538→   538→          </DialogHeader>
+   539→   539→
+   540→   540→          <div className="grid gap-4 py-4">
+   541→   541→            {/* Name */}
+   542→   542→            <div className="grid gap-2">
+   543→   543→              <Label htmlFor="product-name" className="text-xs font-medium text-muted-foreground">
+   544→   544→                Product Name <span className="text-red-500">*</span>
+   545→   545→              </Label>
+   546→   546→              <Input
+   547→   547→                id="product-name"
+   548→   548→                placeholder="e.g. Hennessy VS Cognac"
+   549→   549→                value={form.name}
+   550→   550→                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+   551→   551→              />
+   552→   552→            </div>
+   553→   553→
+   554→   554→            {/* SKU & Barcode row */}
+   555→   555→            <div className="grid grid-cols-2 gap-4">
+   556→   556→              <div className="grid gap-2">
+   557→   557→                <Label htmlFor="product-sku" className="text-xs font-medium text-muted-foreground">
+   558→   558→                  SKU
+   559→   559→                </Label>
+   560→   560→                <Input
+   561→   561→                  id="product-sku"
+   562→   562→                  placeholder="SKU-001"
+   563→   563→                  value={form.sku}
+   564→   564→                  onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))}
+   565→   565→                />
+   566→   566→              </div>
+   567→   567→              <div className="grid gap-2">
+   568→   568→                <Label htmlFor="product-barcode" className="text-xs font-medium text-muted-foreground">
+   569→   569→                  Barcode
+   570→   570→                </Label>
+   571→   571→                <Input
+   572→   572→                  id="product-barcode"
+   573→   573→                  placeholder="6001234567890"
+   574→   574→                  value={form.barcode}
+   575→   575→                  onChange={(e) => setForm((f) => ({ ...f, barcode: e.target.value }))}
+   576→   576→                />
+   577→   577→              </div>
+   578→   578→            </div>
+   579→   579→
+   580→   580→            {/* Size & Category row */}
+   581→   581→            <div className="grid grid-cols-2 gap-4">
+   582→   582→              <div className="grid gap-2">
+   583→   583→                <Label className="text-xs font-medium text-muted-foreground">Size</Label>
+   584→   584→                <Select value={form.size} onValueChange={(v) => setForm((f) => ({ ...f, size: v }))}>
+   585→   585→                  <SelectTrigger className="h-10">
+   586→   586→                    <SelectValue />
+   587→   587→                  </SelectTrigger>
+   588→   588→                  <SelectContent>
+   589→   589→                    {SIZE_OPTIONS.map((s) => (
+   590→   590→                      <SelectItem key={s} value={s}>
+   591→   591→                        {s}
+   592→   592→                      </SelectItem>
+   593→   593→                    ))}
+   594→   594→                  </SelectContent>
+   595→   595→                </Select>
+   596→   596→              </div>
+   597→   597→              <div className="grid gap-2">
+   598→   598→                <Label className="text-xs font-medium text-muted-foreground">Category</Label>
+   599→   599→                <Select value={form.category_id} onValueChange={(v) => setForm((f) => ({ ...f, category_id: v }))}>
+   600→   600→                  <SelectTrigger className="h-10">
+   601→   601→                    <SelectValue placeholder="Select category" />
+   602→   602→                  </SelectTrigger>
+   603→   603→                  <SelectContent>
+   604→   604→                    {categories.map((cat) => (
+   605→   605→                      <SelectItem key={cat.id} value={cat.id}>
+   606→   606→                        {cat.name}
+   607→   607→                      </SelectItem>
+   608→   608→                    ))}
+   609→   609→                  </SelectContent>
+   610→   610→                </Select>
+   611→   611→              </div>
+   612→   612→            </div>
+   613→   613→
+   614→   614→            {/* Supplier */}
+   615→   615→            <div className="grid gap-2">
+   616→   616→              <Label className="text-xs font-medium text-muted-foreground">Supplier</Label>
+   617→   617→              <Select value={form.supplier_id} onValueChange={(v) => setForm((f) => ({ ...f, supplier_id: v }))}>
+   618→   618→                <SelectTrigger className="h-10">
+   619→   619→                  <SelectValue placeholder="Select supplier" />
+   620→   620→                </SelectTrigger>
+   621→   621→                <SelectContent>
+   622→   622→                  {suppliers.map((sup) => (
+   623→   623→                    <SelectItem key={sup.id} value={sup.id}>
+   624→   624→                      {sup.name}
+   625→   625→                    </SelectItem>
+   626→   626→                  ))}
+   627→   627→                </SelectContent>
+   628→   628→              </Select>
+   629→   629→            </div>
+   630→   630→
+   631→   631→            {/* Cost & Sell price row */}
+   632→   632→            <div className="grid grid-cols-2 gap-4">
+   633→   633→              <div className="grid gap-2">
+   634→   634→                <Label htmlFor="cost-price" className="text-xs font-medium text-muted-foreground">
+   635→   635→                  Cost Price (KES)
+   636→   636→                </Label>
+   637→   637→                <Input
+   638→   638→                  id="cost-price"
+   639→   639→                  type="number"
+   640→   640→                  min="0"
+   641→   641→                  step="1"
+   642→   642→                  placeholder="0"
+   643→   643→                  value={form.cost_price}
+   644→   644→                  onChange={(e) => setForm((f) => ({ ...f, cost_price: e.target.value }))}
+   645→   645→                />
+   646→   646→              </div>
+   647→   647→              <div className="grid gap-2">
+   648→   648→                <Label htmlFor="sell-price" className="text-xs font-medium text-muted-foreground">
+   649→   649→                  Sell Price (KES)
+   650→   650→                </Label>
+   651→   651→                <Input
+   652→   652→                  id="sell-price"
+   653→   653→                  type="number"
+   654→   654→                  min="0"
+   655→   655→                  step="1"
+   656→   656→                  placeholder="0"
+   657→   657→                  value={form.sell_price}
+   658→   658→                  onChange={(e) => setForm((f) => ({ ...f, sell_price: e.target.value }))}
+   659→   659→                />
+   660→   660→              </div>
+   661→   661→            </div>
+   662→   662→
+   663→   663→            {/* Reorder Level & Opening Stock */}
+   664→   664→            <div className="grid grid-cols-2 gap-4">
+   665→   665→              <div className="grid gap-2">
+   666→   666→                <Label htmlFor="reorder-level" className="text-xs font-medium text-muted-foreground">
+   667→   667→                  Reorder Level
+   668→   668→                </Label>
+   669→   669→                <Input
+   670→   670→                  id="reorder-level"
+   671→   671→                  type="number"
+   672→   672→                  min="0"
+   673→   673→                  step="1"
+   674→   674→                  placeholder="5"
+   675→   675→                  value={form.reorder_level}
+   676→   676→                  onChange={(e) => setForm((f) => ({ ...f, reorder_level: e.target.value }))}
+   677→   677→                />
+   678→   678→              </div>
+   679→   679→              {!editingProduct && (
+   680→   680→                <div className="grid gap-2">
+   681→   681→                  <Label htmlFor="opening-stock" className="text-xs font-medium text-muted-foreground">
+   682→   682→                    Opening Stock
+   683→   683→                  </Label>
+   684→   684→                  <Input
+   685→   685→                    id="opening-stock"
+   686→   686→                    type="number"
+   687→   687→                    min="0"
+   688→   688→                    step="1"
+   689→   689→                    placeholder="0"
+   690→   690→                    value={form.opening_stock}
+   691→   691→                    onChange={(e) => setForm((f) => ({ ...f, opening_stock: e.target.value }))}
+   692→   692→                  />
+   693→   693→                </div>
+   694→   694→              )}
+   695→   695→            </div>
+   696→   696→          </div>
+   697→   697→
+   698→   698→          <DialogFooter className="flex-row gap-3 pt-2 sm:justify-end">
+   699→   699→            <Button
+   700→   700→              variant="outline"
+   701→   701→              className="flex-1 sm:flex-none"
+   702→   702→              onClick={handleCloseDialog}
+   703→   703→              disabled={saveMutation.isPending}
+   704→   704→            >
+   705→   705→              Cancel
+   706→   706→            </Button>
+   707→   707→            <Button
+   708→   708→              className="flex-1 sm:flex-none"
+   709→   709→              style={{ backgroundColor: ACCENT, borderColor: ACCENT }}
+   710→   710→              onClick={handleSave}
+   711→   711→              disabled={saveMutation.isPending || !form.name.trim()}
+   712→   712→            >
+   713→   713→              {saveMutation.isPending ? 'Saving…' : editingProduct ? 'Update Product' : 'Add Product'}
+   714→   714→            </Button>
+   715→   715→          </DialogFooter>
+   716→   716→        </DialogContent>
+   717→   717→      </Dialog>
+   718→   718→    </div>
+   719→   719→  )
+   720→   720→}
