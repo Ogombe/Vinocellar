@@ -58,10 +58,10 @@ function todayStr() {
 /*  Form Types                                                   */
 /* ═══════════════════════════════════════════════════════════════ */
 
-interface StaffAddForm { name: string; email: string; pin: string; password: string; role: 'staff' | 'manager' }
+interface StaffAddForm { name: string; pin: string; password: string; role: 'staff' | 'manager' }
 interface StaffEditForm { name: string; role: 'staff' | 'manager'; is_active: boolean }
 
-const emptyAdd: StaffAddForm = { name: '', email: '', pin: '', password: '', role: 'staff' }
+const emptyAdd: StaffAddForm = { name: '', pin: '', password: '', role: 'staff' }
 
 /* ═══════════════════════════════════════════════════════════════ */
 /*  CSV Download Helper                                          */
@@ -136,7 +136,6 @@ export default function StaffPage() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           name: v.name,
-          email: v.email.trim() || undefined,
           password: v.password,
           pin: v.pin,
           role: v.role,
@@ -626,10 +625,6 @@ export default function StaffPage() {
             <div className="grid gap-2">
               <Label className="text-xs font-medium text-muted-foreground">Full Name <span className="text-red-500">*</span></Label>
               <Input placeholder="e.g. John Kamau" value={addForm.name} onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))} />
-            </div>
-            <div className="grid gap-2">
-              <Label className="text-xs font-medium text-muted-foreground">Email <span className="text-xs font-normal text-muted-foreground">(optional)</span></Label>
-              <Input type="email" placeholder="e.g. john@store.com" value={addForm.email} onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
