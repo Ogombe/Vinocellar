@@ -145,7 +145,7 @@ export default function StaffPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          email: values.email,
+          email: values.email || `${values.name.trim().toLowerCase().replace(/\s+/g, '.')}@staff.vinocellar.app`,
           password: values.password,
           name: values.name,
           pin: values.pin,
@@ -242,7 +242,7 @@ export default function StaffPage() {
   }
 
   const handleAddSave = () => {
-    if (!addForm.name.trim() || !addForm.email.trim() || !addForm.pin || !addForm.password) return
+    if (!addForm.name.trim() || !addForm.pin || !addForm.password) return
     if (addForm.pin.length !== 4) return
     addMutation.mutate(addForm)
   }
@@ -477,7 +477,7 @@ export default function StaffPage() {
             {/* Email */}
             <div className="grid gap-2">
               <Label htmlFor="staff-email" className="text-xs font-medium text-muted-foreground">
-                Email <span className="text-red-500">*</span>
+                Email <span className="text-xs text-muted-foreground font-normal">(optional — auto-generated if blank)</span>
               </Label>
               <Input
                 id="staff-email"
@@ -560,7 +560,6 @@ export default function StaffPage() {
               disabled={
                 addMutation.isPending ||
                 !addForm.name.trim() ||
-                !addForm.email.trim() ||
                 !addForm.pin ||
                 addForm.pin.length !== 4 ||
                 !addForm.password ||
