@@ -18,7 +18,6 @@ export async function GET(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Get sale counts per staff member
   const { data: saleCounts } = await auth.db
     .from('sales')
     .select('staff_id')
@@ -55,15 +54,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Name, password and PIN are required' }, { status: 400 })
   }
   if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
-    return NextResponse.json({ error: 'PIN must be 4 digits' }, { status: 400 })
+    return NextResponse.json({ error: 'PIN must be exactly 4 digits' }, { status: 400 })
   }
   if (password.length < 6) {
     return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 })
   }
 
-  const cleanedEmail = email ? email.trim().toLowerCase() : null
+  const cleanedEmail = email?.trim()?.toLowerCase() || null
 
-  // Check if email already exists in this organisation (only if email was provided)
   if (cleanedEmail) {
     const { data: existing } = await auth.db
       .from('users')
@@ -73,20 +71,18 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (existing) {
-      return NextResponse.json({ error: 'Email already exists in organisation' }, { status: 409 })
+      return NextResponse.json({ error: 'A staff member with this email already exists' }, { status: 409 })
     }
   }
 
-  // Step 1: Create Supabase Auth user via /auth/v1/signup
-  // If no email provided, use a system-internal email (invisible to user)
-  const authEmail = cleanedEmail || `noemail_${Date.now()}_${Math.random().toString(36).slice(2, 8)}@internal.vinocellar.app`
+  // Create Supabase Auth user. If no email, use a system-internal address
+  // that passes Supabase validation but stays hidden from the user.
+  const systemEmail = `sys.${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 8)}@example.org`
+  const authEmail = cleanedEmail || systemEmail
 
   const authRes = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: SUPABASE_ANON_KEY,
-    },
+    headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY },
     body: JSON.stringify({
       email: authEmail,
       password,
@@ -102,18 +98,21 @@ export async function POST(request: NextRequest) {
   const authData = await authRes.json()
 
   if (!authRes.ok || !authData.user) {
-    const errMsg = authData.msg || authData.error_description || authData.error || 'Failed to create auth user'
-    return NextResponse.json({ error: errMsg }, { status: authRes.status || 500 })
+    // Never expose the internal system email to the user
+    const msg = authData.msg || authData.error_description || authData.error || ''
+    const safeMsg = msg.includes('@example.org')
+      ? 'Could not create account. Please try again.'
+      : msg
+    return NextResponse.json({ error: safeMsg || 'Failed to create staff account' }, { status: authRes.status || 500 })
   }
 
   const newUserId = authData.user.id
 
-  // Step 2: Insert the profile row in users table
   const { error: insertErr } = await auth.db
     .from('users')
     .insert({
       id: newUserId,
-      email: cleanedEmail || null, // Store null in profile — user sees blank
+      email: cleanedEmail || null,
       name,
       pin,
       role: role || 'staff',
@@ -123,9 +122,8 @@ export async function POST(request: NextRequest) {
     })
 
   if (insertErr) {
-    // Profile insert failed — attempt to clean up the auth user
     console.error('Profile insert failed:', insertErr.message)
-    return NextResponse.json({ error: insertErr.message }, { status: 500 })
+    return NextResponse.json({ error: 'Staff account created but profile setup failed. Contact support.' }, { status: 500 })
   }
 
   await auditLog({
@@ -153,7 +151,6 @@ export async function PUT(request: NextRequest) {
   const { id, ...data } = await request.json()
   if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
 
-  // Check user exists in org
   const { data: existing } = await auth.db
     .from('users')
     .select('id, name')
@@ -163,7 +160,6 @@ export async function PUT(request: NextRequest) {
 
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // Build update object with snake_case columns
   const updateData: any = {}
   if (data.name) updateData.name = data.name
   if (data.email !== undefined) updateData.email = data.email ? data.email.toLowerCase() : null
@@ -172,11 +168,7 @@ export async function PUT(request: NextRequest) {
   if (data.pin) updateData.pin = data.pin
   if (data.isActive !== undefined) updateData.is_active = data.isActive
 
-  const { error } = await auth.db
-    .from('users')
-    .update(updateData)
-    .eq('id', id)
-
+  const { error } = await auth.db.from('users').update(updateData).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
   await auditLog({
@@ -194,7 +186,7 @@ export async function DELETE(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
-  if (id === auth.userId) return NextResponse.json({ error: 'Cannot delete yourself' }, { status: 400 })
+  if (id === auth.userId) return NextResponse.json({ error: 'Cannot deactivate yourself' }, { status: 400 })
 
   const { data: existing } = await auth.db
     .from('users')
@@ -205,12 +197,7 @@ export async function DELETE(request: NextRequest) {
 
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // Deactivate instead of deleting (soft delete via is_active flag)
-  const { error } = await auth.db
-    .from('users')
-    .update({ is_active: false })
-    .eq('id', id)
-
+  const { error } = await auth.db.from('users').update({ is_active: false }).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
   await auditLog({
