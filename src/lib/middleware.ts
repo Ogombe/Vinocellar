@@ -36,10 +36,26 @@ export async function withAuth(request: Request, requireManager: boolean = false
     return { error: NextResponse.json({ error: 'Session invalid or expired' }, { status: 401 }) }
   }
 
-  // 3. Extract organisation_id and role from app_metadata (set during signup)
-  const orgId = user.app_metadata?.organisation_id
-  const role = user.app_metadata?.role || 'staff'
-  const storeId = user.app_metadata?.store_id || null
+  // 3. Get org/role from app_metadata first, then fallback to users table
+  let orgId = user.app_metadata?.organisation_id
+  let role = user.app_metadata?.role || 'staff'
+  let storeId = user.app_metadata?.store_id || null
+
+  // If app_metadata doesn't have org info, fetch from users table
+  if (!orgId) {
+    const db = createServerClient(token)
+    const { data: profile } = await db
+      .from('users')
+      .select('organisation_id, role, store_id')
+      .eq('id', user.id)
+      .single()
+
+    if (profile) {
+      orgId = profile.organisation_id
+      role = profile.role || 'staff'
+      storeId = profile.store_id || null
+    }
+  }
 
   if (!orgId) {
     return { error: NextResponse.json({ error: 'No organisation assigned. Please contact support.' }, { status: 403 }) }
