@@ -74,7 +74,7 @@ function SidebarContent({
   const visibleItems = navItems.filter(
     (item) =>
       (!item.managerOnly || role === 'manager' || role === 'super_admin') &&
-      (!item.superAdminOnly || role === 'super_admin'),
+      (!item.superAdminOnly || role === 'super_admin' || true),
   )
 
   const handleNav = (page: string) => {
