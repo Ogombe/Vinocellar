@@ -1,0 +1,816 @@
+     1→'use client'
+     2→
+     3→import { useState, useEffect, useCallback } from 'react'
+     4→import { supabase } from '@/lib/supabase'
+     5→import { useAuth } from '@/contexts/auth-context'
+     6→import type { Product } from '@/lib/types'
+     7→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     8→import { Button } from '@/components/ui/button'
+     9→import { Input } from '@/components/ui/input'
+    10→import { Badge } from '@/components/ui/badge'
+    11→import { Skeleton } from '@/components/ui/skeleton'
+    12→import { Separator } from '@/components/ui/separator'
+    13→import { ScrollArea } from '@/components/ui/scroll-area'
+    14→import {
+    15→  Table,
+    16→  TableBody,
+    17→  TableCell,
+    18→  TableHead,
+    19→  TableHeader,
+    20→  TableRow,
+    21→} from '@/components/ui/table'
+    22→import {
+    23→  AlertDialog,
+    24→  AlertDialogAction,
+    25→  AlertDialogCancel,
+    26→  AlertDialogContent,
+    27→  AlertDialogDescription,
+    28→  AlertDialogFooter,
+    29→  AlertDialogHeader,
+    30→  AlertDialogTitle,
+    31→} from '@/components/ui/alert-dialog'
+    32→import {
+    33→  ClipboardCheck,
+    34→  Plus,
+    35→  Search,
+    36→  Send,
+    37→  CheckCircle2,
+    38→  XCircle,
+    39→  Clock,
+    40→  AlertTriangle,
+    41→  History,
+    42→  Package,
+    43→} from 'lucide-react'
+    44→import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+    45→import { useIsMobile } from '@/hooks/use-mobile'
+    46→
+    47→/* ------------------------------------------------------------------ */
+    48→/*  Constants                                                          */
+    49→/* ------------------------------------------------------------------ */
+    50→
+    51→const ACCENT = '#7C3AED'
+    52→
+    53→interface StockTake {
+    54→  id: string
+    55→  status: 'in_progress' | 'pending' | 'approved' | 'rejected'
+    56→  started_by: string
+    57→  approved_by: string | null
+    58→  approved_at: string | null
+    59→  organisation_id: string
+    60→  store_id: string
+    61→  started_at: string
+    62→  submitted_at: string | null
+    63→}
+    64→
+    65→interface StockTakeItem {
+    66→  id: string
+    67→  expected: number
+    68→  counted: number | null
+    69→  stock_take_id: string
+    70→  product_id: string
+    71→  product?: Product
+    72→}
+    73→
+    74→const STATUS_STYLES: Record<string, string> = {
+    75→  in_progress: 'border-blue-200 bg-blue-50 text-blue-700',
+    76→  pending: 'border-amber-200 bg-amber-50 text-amber-700',
+    77→  approved: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    78→  rejected: 'border-red-200 bg-red-50 text-red-700',
+    79→}
+    80→
+    81→const STATUS_ICONS: Record<string, React.ReactNode> = {
+    82→  in_progress: <Clock className="h-3.5 w-3.5" />,
+    83→  pending: <AlertTriangle className="h-3.5 w-3.5" />,
+    84→  approved: <CheckCircle2 className="h-3.5 w-3.5" />,
+    85→  rejected: <XCircle className="h-3.5 w-3.5" />,
+    86→}
+    87→
+    88→function formatDateTime(iso: string) {
+    89→  return new Date(iso).toLocaleDateString('en-KE', {
+    90→    day: '2-digit',
+    91→    month: 'short',
+    92→    year: 'numeric',
+    93→    hour: '2-digit',
+    94→    minute: '2-digit',
+    95→  })
+    96→}
+    97→
+    98→/* ------------------------------------------------------------------ */
+    99→/*  Component                                                          */
+   100→/* ------------------------------------------------------------------ */
+   101→
+   102→export default function StockCountPage() {
+   103→  const isMobile = useIsMobile()
+   104→  const { store, appUser, organisation } = useAuth()
+   105→  const queryClient = useQueryClient()
+   106→
+   107→  const [search, setSearch] = useState('')
+   108→  const [counts, setCounts] = useState<Record<string, string>>({})
+   109→  const [submitDialogOpen, setSubmitDialogOpen] = useState(false)
+   110→  const [approveDialogOpen, setApproveDialogOpen] = useState(false)
+   111→  const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
+   112→  const [selectedTake, setSelectedTake] = useState<StockTake | null>(null)
+   113→
+   114→  const isManager = appUser?.role === 'manager' || appUser?.role === 'super_admin'
+   115→
+   116→  /* ── Fetch active stock take ────────────────────────────────────── */
+   117→
+   118→  const { data: activeTake, isLoading: activeLoading } = useQuery<StockTake>({
+   119→    queryKey: ['stock-take-active', store?.id],
+   120→    queryFn: async () => {
+   121→      const { data } = await supabase
+   122→        .from('stock_takes')
+   123→        .select('*')
+   124→        .eq('store_id', store!.id)
+   125→        .eq('status', 'in_progress')
+   126→        .maybeSingle()
+   127→      return data as StockTake | null
+   128→    },
+   129→    enabled: !!store?.id,
+   130→  })
+   131→
+   132→  /* ── Fetch active stock take items ──────────────────────────────── */
+   133→
+   134→  const { data: activeItems = [], isLoading: itemsLoading } = useQuery<(StockTakeItem & { product: Product })[]>({
+   135→    queryKey: ['stock-take-items', activeTake?.id],
+   136→    queryFn: async () => {
+   137→      const { data } = await supabase
+   138→        .from('stock_take_items')
+   139→        .select('*, product:products!inner(id, name, sku, current_stock)')
+   140→        .eq('stock_take_id', activeTake!.id)
+   141→      return (data as (StockTakeItem & { product: Product })[]) || []
+   142→    },
+   143→    enabled: !!activeTake?.id,
+   144→  })
+   145→
+   146→  /* ── Fetch all products (for creating new stock take) ───────────── */
+   147→
+   148→  const { data: allProducts = [] } = useQuery<Product[]>({
+   149→    queryKey: ['products-stock-take', store?.id],
+   150→    queryFn: async () => {
+   151→      const { data } = await supabase
+   152→        .from('products')
+   153→        .select('*')
+   154→        .eq('store_id', store!.id)
+   155→        .order('name')
+   156→      return (data as Product[]) || []
+   157→    },
+   158→    enabled: !!store?.id,
+   159→  })
+   160→
+   161→  /* ── Fetch stock take history ───────────────────────────────────── */
+   162→
+   163→  const { data: history = [], isLoading: historyLoading } = useQuery<(StockTake & {
+   164→    stock_take_items: (StockTakeItem & { product: Product })[]
+   165→  })[]>({
+   166→    queryKey: ['stock-take-history', store?.id],
+   167→    queryFn: async () => {
+   168→      const { data } = await supabase
+   169→        .from('stock_takes')
+   170→        .select('*, stock_take_items(*, product:products!inner(id, name, current_stock))')
+   171→        .eq('store_id', store!.id)
+   172→        .neq('status', 'in_progress')
+   173→        .order('started_at', { ascending: false })
+   174→        .limit(20)
+   175→      return (data as (StockTake & {
+   176→        stock_take_items: (StockTakeItem & { product: Product })[]
+   177→      })[]) || []
+   178→    },
+   179→    enabled: !!store?.id,
+   180→  })
+   181→
+   182→  /* ── Start new stock take mutation ──────────────────────────────── */
+   183→
+   184→  const startMutation = useMutation({
+   185→    mutationFn: async () => {
+   186→      if (!store || !appUser) throw new Error('Missing store or user')
+   187→
+   188→      // Create the stock take
+   189→      const { data: take, error: takeError } = await supabase
+   190→        .from('stock_takes')
+   191→        .insert({
+   192→          status: 'in_progress',
+   193→          started_by: appUser.id,
+   194→          organisation_id: organisation!.id,
+   195→          store_id: store.id,
+   196→        })
+   197→        .select()
+   198→        .single()
+   199→
+   200→      if (takeError) throw takeError
+   201→
+   202→      // Create items for each product
+   203→      const items = allProducts.map((p) => ({
+   204→        expected: p.current_stock,
+   205→        counted: null,
+   206→        stock_take_id: take.id,
+   207→        product_id: p.id,
+   208→      }))
+   209→
+   210→      const { error: itemsError } = await supabase
+   211→        .from('stock_take_items')
+   212→        .insert(items)
+   213→
+   214→      if (itemsError) throw itemsError
+   215→    },
+   216→    onSuccess: () => {
+   217→      queryClient.invalidateQueries({ queryKey: ['stock-take-active'] })
+   218→      queryClient.invalidateQueries({ queryKey: ['stock-take-items'] })
+   219→      setCounts({})
+   220→    },
+   221→  })
+   222→
+   223→  /* ── Save single counted value ──────────────────────────────────── */
+   224→
+   225→  const saveCountMutation = useMutation({
+   226→    mutationFn: async ({ itemId, counted }: { itemId: string; counted: number | null }) => {
+   227→      const { error } = await supabase
+   228→        .from('stock_take_items')
+   229→        .update({ counted })
+   230→        .eq('id', itemId)
+   231→      if (error) throw error
+   232→    },
+   233→    onSuccess: () => {
+   234→      queryClient.invalidateQueries({ queryKey: ['stock-take-items'] })
+   235→    },
+   236→  })
+   237→
+   238→  /* ── Submit stock take mutation ─────────────────────────────────── */
+   239→
+   240→  const submitMutation = useMutation({
+   241→    mutationFn: async () => {
+   242→      if (!activeTake) throw new Error('No active stock take')
+   243→      const { error } = await supabase
+   244→        .from('stock_takes')
+   245→        .update({
+   246→          status: 'pending',
+   247→          submitted_at: new Date().toISOString(),
+   248→        })
+   249→        .eq('id', activeTake.id)
+   250→      if (error) throw error
+   251→    },
+   252→    onSuccess: () => {
+   253→      queryClient.invalidateQueries({ queryKey: ['stock-take-active'] })
+   254→      queryClient.invalidateQueries({ queryKey: ['stock-take-items'] })
+   255→      queryClient.invalidateQueries({ queryKey: ['stock-take-history'] })
+   256→      setSubmitDialogOpen(false)
+   257→      setCounts({})
+   258→    },
+   259→  })
+   260→
+   261→  /* ── Approve / Reject mutation ──────────────────────────────────── */
+   262→
+   263→  const statusMutation = useMutation({
+   264→    mutationFn: async ({ id, status }: { id: string; status: 'approved' | 'rejected' }) => {
+   265→      const { error } = await supabase
+   266→        .from('stock_takes')
+   267→        .update({
+   268→          status,
+   269→          approved_by: appUser!.id,
+   270→          approved_at: new Date().toISOString(),
+   271→        })
+   272→        .eq('id', id)
+   273→      if (error) throw error
+   274→    },
+   275→    onSuccess: () => {
+   276→      queryClient.invalidateQueries({ queryKey: ['stock-take-history'] })
+   277→      setApproveDialogOpen(false)
+   278→      setRejectDialogOpen(false)
+   279→      setSelectedTake(null)
+   280→    },
+   281→  })
+   282→
+   283→  /* ── Update counted value ───────────────────────────────────────── */
+   284→
+   285→  const handleCountChange = useCallback(
+   286→    (itemId: string, value: string) => {
+   287→      setCounts((prev) => ({ ...prev, [itemId]: value }))
+   288→      const num = value === '' ? null : parseInt(value, 10)
+   289→      if (num !== null && !isNaN(num) && num >= 0) {
+   290→        saveCountMutation.mutate({ itemId, counted: num })
+   291→      }
+   292→    },
+   293→    [saveCountMutation]
+   294→  )
+   295→
+   296→  /* ── Computed: variance stats for active take ───────────────────── */
+   297→
+   298→  const totalItems = activeItems.length
+   299→  const countedItems = activeItems.filter((i) => i.counted !== null).length
+   300→  const variances = activeItems
+   301→    .filter((i) => i.counted !== null)
+   302→    .map((i) => ({
+   303→      name: i.product?.name ?? 'Unknown',
+   304→      expected: i.expected,
+   305→      counted: i.counted!,
+   306→      variance: (i.counted ?? 0) - i.expected,
+   307→    }))
+   308→  const totalVariance = variances.reduce((s, v) => s + v.variance, 0)
+   309→  const positiveVariance = variances.filter((v) => v.variance > 0)
+   310→  const negativeVariance = variances.filter((v) => v.variance < 0)
+   311→
+   312→  /* ── Filtered active items ──────────────────────────────────────── */
+   313→
+   314→  const filteredItems = activeItems.filter((i) =>
+   315→    !search.trim() ||
+   316→    i.product?.name?.toLowerCase().includes(search.toLowerCase()) ||
+   317→    i.product?.sku?.toLowerCase().includes(search.toLowerCase())
+   318→  )
+   319→
+   320→  /* ── Loading skeleton ──────────────────────────────────────────── */
+   321→
+   322→  if (activeLoading) {
+   323→    return (
+   324→      <div className="space-y-4 p-4 md:p-6">
+   325→        <Skeleton className="h-8 w-52" />
+   326→        <Skeleton className="h-28 w-full" />
+   327→        <Skeleton className="h-10 w-full" />
+   328→        {Array.from({ length: 6 }).map((_, i) => (
+   329→          <Skeleton key={i} className="h-16 w-full" />
+   330→        ))}
+   331→      </div>
+   332→    )
+   333→  }
+   334→
+   335→  /* ── Render: Active Stock Take ──────────────────────────────────── */
+   336→
+   337→  const renderActiveTake = () => (
+   338→    <div className="space-y-5">
+   339→      {/* Progress bar */}
+   340→      <Card className="border-border/60 shadow-sm" style={{ borderLeftWidth: '4px', borderLeftColor: ACCENT }}>
+   341→        <CardContent className="p-4 md:p-5">
+   342→          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+   343→            <div className="flex items-center gap-3">
+   344→              <div
+   345→                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+   346→                style={{ backgroundColor: `${ACCENT}14` }}
+   347→              >
+   348→                <ClipboardCheck className="h-5 w-5" style={{ color: ACCENT }} />
+   349→              </div>
+   350→              <div>
+   351→                <p className="text-sm font-semibold text-foreground">Stock Count in Progress</p>
+   352→                <p className="text-xs text-muted-foreground">
+   353→                  Started {formatDateTime(activeTake!.started_at)}
+   354→                </p>
+   355→              </div>
+   356→            </div>
+   357→            <div className="flex items-center gap-3">
+   358→              <div className="text-right">
+   359→                <p className="text-lg font-bold tabular-nums" style={{ color: ACCENT }}>
+   360→                  {countedItems} <span className="text-sm font-normal text-muted-foreground">/ {totalItems}</span>
+   361→                </p>
+   362→                <p className="text-[11px] text-muted-foreground">items counted</p>
+   363→              </div>
+   364→              <Button
+   365→                onClick={() => setSubmitDialogOpen(true)}
+   366→                disabled={countedItems === 0 || submitMutation.isPending}
+   367→                className="shadow-md transition-all hover:shadow-lg"
+   368→                style={{ backgroundColor: ACCENT, borderColor: ACCENT }}
+   369→              >
+   370→                <Send className="mr-2 h-4 w-4" />
+   371→                Submit
+   372→              </Button>
+   373→            </div>
+   374→          </div>
+   375→
+   376→          {/* Progress bar visual */}
+   377→          <div className="mt-4">
+   378→            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+   379→              <div
+   380→                className="h-full rounded-full transition-all duration-300"
+   381→                style={{
+   382→                  width: `${totalItems > 0 ? (countedItems / totalItems) * 100 : 0}%`,
+   383→                  backgroundColor: ACCENT,
+   384→                }}
+   385→              />
+   386→            </div>
+   387→          </div>
+   388→        </CardContent>
+   389→      </Card>
+   390→
+   391→      {/* Search */}
+   392→      <div className="relative w-full sm:w-72">
+   393→        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+   394→        <Input
+   395→          placeholder="Search products..."
+   396→          value={search}
+   397→          onChange={(e) => setSearch(e.target.value)}
+   398→          className="pl-10"
+   399→        />
+   400→      </div>
+   401→
+   402→      {/* Items table / cards */}
+   403→      {isMobile ? (
+   404→        <div className="grid gap-3">
+   405→          {filteredItems.length === 0 && (
+   406→            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+   407→              <Search className="mb-3 h-10 w-10 opacity-40" />
+   408→              <p className="text-sm font-medium">No products found</p>
+   409→            </div>
+   410→          )}
+   411→          {filteredItems.map((item) => {
+   412→            const variance = item.counted !== null ? item.counted - item.expected : null
+   413→            return (
+   414→              <Card key={item.id} className="border-border/60 shadow-sm">
+   415→                <CardContent className="p-4">
+   416→                  <div className="flex items-start justify-between gap-3">
+   417→                    <div className="min-w-0 flex-1">
+   418→                      <p className="truncate text-sm font-semibold text-foreground">
+   419→                        {item.product?.name ?? 'Unknown'}
+   420→                      </p>
+   421→                      <p className="text-xs text-muted-foreground">{item.product?.sku}</p>
+   422→                    </div>
+   423→                    {variance !== null && (
+   424→                      <Badge
+   425→                        variant="outline"
+   426→                        className={`shrink-0 text-[11px] font-medium ${
+   427→                          variance === 0
+   428→                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+   429→                            : variance > 0
+   430→                              ? 'border-blue-200 bg-blue-50 text-blue-700'
+   431→                              : 'border-red-200 bg-red-50 text-red-700'
+   432→                        }`}
+   433→                      >
+   434→                        {variance === 0 ? 'Match' : `${variance > 0 ? '+' : ''}${variance}`}
+   435→                      </Badge>
+   436→                    )}
+   437→                  </div>
+   438→                  <div className="mt-3 grid grid-cols-2 gap-3">
+   439→                    <div>
+   440→                      <p className="text-[10px] font-medium uppercase text-muted-foreground">Expected</p>
+   441→                      <p className="text-base font-semibold tabular-nums">{item.expected}</p>
+   442→                    </div>
+   443→                    <div>
+   444→                      <p className="text-[10px] font-medium uppercase text-muted-foreground">Counted</p>
+   445→                      <Input
+   446→                        type="number"
+   447→                        min="0"
+   448→                        inputMode="numeric"
+   449→                        placeholder="—"
+   450→                        value={counts[item.id] ?? (item.counted?.toString() ?? '')}
+   451→                        onChange={(e) => handleCountChange(item.id, e.target.value)}
+   452→                        className="mt-0.5 h-8 text-base tabular-nums"
+   453→                      />
+   454→                    </div>
+   455→                  </div>
+   456→                </CardContent>
+   457→              </Card>
+   458→            )
+   459→          })}
+   460→        </div>
+   461→      ) : (
+   462→        <Card className="border-border/60 shadow-sm">
+   463→          <CardContent className="p-0">
+   464→            <div className="overflow-x-auto">
+   465→              <Table>
+   466→                <TableHeader>
+   467→                  <TableRow className="border-border/60 hover:bg-transparent">
+   468→                    <TableHead className="pl-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Product</TableHead>
+   469→                    <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">SKU</TableHead>
+   470→                    <TableHead className="text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Expected</TableHead>
+   471→                    <TableHead className="text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Counted</TableHead>
+   472→                    <TableHead className="text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Variance</TableHead>
+   473→                  </TableRow>
+   474→                </TableHeader>
+   475→                <TableBody>
+   476→                  {filteredItems.length === 0 && (
+   477→                    <TableRow>
+   478→                      <TableCell colSpan={5} className="h-40 text-center">
+   479→                        <div className="flex flex-col items-center text-muted-foreground">
+   480→                          <Search className="mb-3 h-10 w-10 opacity-40" />
+   481→                          <p className="text-sm font-medium">No products found</p>
+   482→                        </div>
+   483→                      </TableCell>
+   484→                    </TableRow>
+   485→                  )}
+   486→                  {filteredItems.map((item) => {
+   487→                    const variance = item.counted !== null ? item.counted - item.expected : null
+   488→                    return (
+   489→                      <TableRow key={item.id} className="border-border/40 transition-colors hover:bg-muted/30">
+   490→                        <TableCell className="pl-4 text-sm font-medium text-foreground">
+   491→                          {item.product?.name ?? 'Unknown'}
+   492→                        </TableCell>
+   493→                        <TableCell className="text-sm text-muted-foreground">
+   494→                          {item.product?.sku}
+   495→                        </TableCell>
+   496→                        <TableCell className="text-right text-sm tabular-nums font-medium">
+   497→                          {item.expected}
+   498→                        </TableCell>
+   499→                        <TableCell className="text-right pr-2">
+   500→                          <Input
+   501→                            type="number"
+   502→                            min="0"
+   503→                            placeholder="—"
+   504→                            value={counts[item.id] ?? (item.counted?.toString() ?? '')}
+   505→                            onChange={(e) => handleCountChange(item.id, e.target.value)}
+   506→                            className="ml-auto h-8 w-20 text-right text-sm tabular-nums"
+   507→                          />
+   508→                        </TableCell>
+   509→                        <TableCell className="pr-4 text-right">
+   510→                          {variance !== null && (
+   511→                            <span
+   512→                              className={`text-sm font-semibold tabular-nums ${
+   513→                                variance === 0 ? 'text-emerald-600' : variance > 0 ? 'text-blue-600' : 'text-red-600'
+   514→                              }`}
+   515→                            >
+   516→                              {variance === 0 ? '✓' : `${variance > 0 ? '+' : ''}${variance}`}
+   517→                            </span>
+   518→                          )}
+   519→                        </TableCell>
+   520→                      </TableRow>
+   521→                    )
+   522→                  })}
+   523→                </TableBody>
+   524→              </Table>
+   525→            </div>
+   526→          </CardContent>
+   527→        </Card>
+   528→      )}
+   529→    </div>
+   530→  )
+   531→
+   532→  /* ── Render: No active take ─────────────────────────────────────── */
+   533→
+   534→  const renderNoActiveTake = () => (
+   535→    <Card className="border-border/60 shadow-sm">
+   536→      <CardContent className="flex flex-col items-center justify-center py-20 text-center">
+   537→        <div
+   538→          className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl"
+   539→          style={{ backgroundColor: `${ACCENT}14` }}
+   540→        >
+   541→          <ClipboardCheck className="h-8 w-8" style={{ color: ACCENT }} />
+   542→        </div>
+   543→        <p className="text-base font-semibold text-foreground">No Stock Count in Progress</p>
+   544→        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+   545→          Start a new stock take to verify your physical inventory against recorded stock levels.
+   546→        </p>
+   547→        <Button
+   548→          onClick={() => startMutation.mutate()}
+   549→          disabled={startMutation.isPending}
+   550→          className="mt-4 shadow-md transition-all hover:shadow-lg"
+   551→          style={{ backgroundColor: ACCENT, borderColor: ACCENT }}
+   552→        >
+   553→          {startMutation.isPending ? (
+   554→            'Starting…'
+   555→          ) : (
+   556→            <>
+   557→              <Plus className="mr-2 h-4 w-4" />
+   558→              Start New Stock Count
+   559→            </>
+   560→          )}
+   561→        </Button>
+   562→        {startMutation.isError && (
+   563→          <p className="mt-3 text-xs text-red-600">
+   564→            {startMutation.error instanceof Error ? startMutation.error.message : 'Failed to start stock count'}
+   565→          </p>
+   566→        )}
+   567→      </CardContent>
+   568→    </Card>
+   569→  )
+   570→
+   571→  /* ── Render: History ────────────────────────────────────────────── */
+   572→
+   573→  const renderHistory = () => (
+   574→    <div className="space-y-4">
+   575→      <div className="flex items-center gap-2">
+   576→        <History className="h-5 w-5 text-muted-foreground" />
+   577→        <h2 className="text-lg font-semibold text-foreground">Stock Take History</h2>
+   578→        {history.length > 0 && (
+   579→          <Badge variant="secondary" className="text-xs">{history.length}</Badge>
+   580→        )}
+   581→      </div>
+   582→
+   583→      {historyLoading ? (
+   584→        <div className="space-y-3">
+   585→          {Array.from({ length: 3 }).map((_, i) => (
+   586→            <Skeleton key={i} className="h-24 w-full rounded-xl" />
+   587→          ))}
+   588→        </div>
+   589→      ) : history.length === 0 ? (
+   590→        <Card className="border-border/60 shadow-sm">
+   591→          <CardContent className="flex flex-col items-center justify-center py-14 text-center">
+   592→            <Package className="mb-3 h-10 w-10 text-muted-foreground/40" />
+   593→            <p className="text-sm font-medium text-muted-foreground">No stock take history</p>
+   594→            <p className="text-xs text-muted-foreground">Completed stock takes will appear here.</p>
+   595→          </CardContent>
+   596→        </Card>
+   597→      ) : (
+   598→        <div className="grid gap-3">
+   599→          {history.map((take) => {
+   600→            const items = take.stock_take_items || []
+   601→            const countedCount = items.filter((i) => i.counted !== null).length
+   602→            const totalVar = items.reduce(
+   603→              (s, i) => s + ((i.counted ?? 0) - i.expected),
+   604→              0
+   605→            )
+   606→            const hasVariance = totalVar !== 0
+   607→
+   608→            return (
+   609→              <Card key={take.id} className="border-border/60 shadow-sm transition-shadow hover:shadow-md">
+   610→                <CardContent className="p-4 md:p-5">
+   611→                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+   612→                    <div className="flex items-start gap-3">
+   613→                      <div
+   614→                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+   615→                        style={{
+   616→                          backgroundColor: take.status === 'approved'
+   617→                            ? '#ECFDF5'
+   618→                            : take.status === 'rejected'
+   619→                              ? '#FEF2F2'
+   620→                              : '#FFFBEB',
+   621→                        }}
+   622→                      >
+   623→                        {STATUS_ICONS[take.status]}
+   624→                      </div>
+   625→                      <div>
+   626→                        <div className="flex items-center gap-2">
+   627→                          <p className="text-sm font-semibold text-foreground">Stock Take</p>
+   628→                          <Badge
+   629→                            variant="outline"
+   630→                            className={`text-[10px] font-medium ${STATUS_STYLES[take.status]}`}
+   631→                          >
+   632→                            {take.status.replace('_', ' ')}
+   633→                          </Badge>
+   634→                        </div>
+   635→                        <p className="text-xs text-muted-foreground mt-0.5">
+   636→                          {formatDateTime(take.started_at)}
+   637→                          {take.submitted_at && (
+   638→                            <> &middot; Submitted {formatDateTime(take.submitted_at)}</>
+   639→                          )}
+   640→                        </p>
+   641→                      </div>
+   642→                    </div>
+   643→
+   644→                    <div className="flex items-center gap-4 pl-13 sm:pl-0">
+   645→                      <div className="text-right">
+   646→                        <p className="text-xs text-muted-foreground">
+   647→                          {countedCount} / {items.length} items
+   648→                        </p>
+   649→                        <p className={`text-sm font-semibold tabular-nums ${
+   650→                          hasVariance ? (totalVar > 0 ? 'text-blue-600' : 'text-red-600') : 'text-emerald-600'
+   651→                        }`}>
+   652→                          {totalVar === 0 ? 'No variance' : `${totalVar > 0 ? '+' : ''}${totalVar} units`}
+   653→                        </p>
+   654→                      </div>
+   655→
+   656→                      {take.status === 'pending' && isManager && (
+   657→                        <div className="flex items-center gap-2">
+   658→                          <Button
+   659→                            size="sm"
+   660→                            variant="outline"
+   661→                            className="h-8 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+   662→                            onClick={() => {
+   663→                              setSelectedTake(take)
+   664→                              setApproveDialogOpen(true)
+   665→                            }}
+   666→                          >
+   667→                            <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+   668→                            Approve
+   669→                          </Button>
+   670→                          <Button
+   671→                            size="sm"
+   672→                            variant="outline"
+   673→                            className="h-8 text-xs border-red-300 text-red-700 hover:bg-red-50"
+   674→                            onClick={() => {
+   675→                              setSelectedTake(take)
+   676→                              setRejectDialogOpen(true)
+   677→                            }}
+   678→                          >
+   679→                            <XCircle className="mr-1 h-3.5 w-3.5" />
+   680→                            Reject
+   681→                          </Button>
+   682→                        </div>
+   683→                      )}
+   684→                    </div>
+   685→                  </div>
+   686→                </CardContent>
+   687→              </Card>
+   688→            )
+   689→          })}
+   690→        </div>
+   691→      )}
+   692→    </div>
+   693→  )
+   694→
+   695→  /* ── Main render ───────────────────────────────────────────────── */
+   696→
+   697→  return (
+   698→    <div className="space-y-6 p-4 md:p-6">
+   699→      {/* Page header */}
+   700→      <div>
+   701→        <h1 className="text-2xl font-bold tracking-tight text-foreground">Stock Count</h1>
+   702→        <p className="mt-1 text-sm text-muted-foreground">
+   703→          Verify physical inventory against recorded stock levels
+   704→        </p>
+   705→      </div>
+   706→
+   707→      {/* Active stock take or start new */}
+   708→      {activeTake ? renderActiveTake() : renderNoActiveTake()}
+   709→
+   710→      <Separator className="my-2" />
+   711→
+   712→      {/* History */}
+   713→      {renderHistory()}
+   714→
+   715→      {/* ── Submit confirmation dialog ────────────────────────────── */}
+   716→      <AlertDialog open={submitDialogOpen} onOpenChange={setSubmitDialogOpen}>
+   717→        <AlertDialogContent className="max-w-lg">
+   718→          <AlertDialogHeader>
+   719→            <AlertDialogTitle>Submit Stock Count</AlertDialogTitle>
+   720→            <AlertDialogDescription asChild>
+   721→              <div className="space-y-3">
+   722→                <p>
+   723→                  You have counted <strong>{countedItems} of {totalItems}</strong> items.
+   724→                  {countedItems < totalItems && (
+   725→                    <span className="mt-1 block text-amber-600 font-medium">
+   726→                      {totalItems - countedItems} items are still uncounted.
+   727→                    </span>
+   728→                  )}
+   729→                </p>
+   730→
+   731→                {variances.length > 0 && (
+   732→                  <div className="rounded-lg border border-border/60 p-3 space-y-2 max-h-48 overflow-y-auto">
+   733→                    <p className="text-xs font-semibold text-foreground">Variance Summary</p>
+   734→                    {positiveVariance.length > 0 && (
+   735→                      <p className="text-xs text-blue-600">
+   736→                        Surplus in {positiveVariance.length} item(s): +{positiveVariance.reduce((s, v) => s + v.variance, 0)} units
+   737→                      </p>
+   738→                    )}
+   739→                    {negativeVariance.length > 0 && (
+   740→                      <p className="text-xs text-red-600">
+   741→                        Shortage in {negativeVariance.length} item(s): {negativeVariance.reduce((s, v) => s + v.variance, 0)} units
+   742→                      </p>
+   743→                    )}
+   744→                    {totalVariance === 0 && positiveVariance.length === 0 && negativeVariance.length === 0 && (
+   745→                      <p className="text-xs text-emerald-600">All counted items match expected stock.</p>
+   746→                    )}
+   747→                  </div>
+   748→                )}
+   749→
+   750→                <p>Once submitted, this stock count will require manager approval.</p>
+   751→              </div>
+   752→            </AlertDialogDescription>
+   753→          </AlertDialogHeader>
+   754→          <AlertDialogFooter>
+   755→            <AlertDialogCancel disabled={submitMutation.isPending}>Cancel</AlertDialogCancel>
+   756→            <AlertDialogAction
+   757→              onClick={() => submitMutation.mutate()}
+   758→              disabled={submitMutation.isPending}
+   759→              className="bg-red-600 text-white hover:bg-red-700"
+   760→            >
+   761→              {submitMutation.isPending ? 'Submitting…' : 'Submit for Approval'}
+   762→            </AlertDialogAction>
+   763→          </AlertDialogFooter>
+   764→        </AlertDialogContent>
+   765→      </AlertDialog>
+   766→
+   767→      {/* ── Approve dialog ────────────────────────────────────────── */}
+   768→      <AlertDialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
+   769→        <AlertDialogContent>
+   770→          <AlertDialogHeader>
+   771→            <AlertDialogTitle>Approve Stock Take</AlertDialogTitle>
+   772→            <AlertDialogDescription>
+   773→              This will approve the stock take and update product stock levels accordingly. This action cannot be undone.
+   774→            </AlertDialogDescription>
+   775→          </AlertDialogHeader>
+   776→          <AlertDialogFooter>
+   777→            <AlertDialogCancel disabled={statusMutation.isPending}>Cancel</AlertDialogCancel>
+   778→            <AlertDialogAction
+   779→              onClick={() => {
+   780→                if (selectedTake) statusMutation.mutate({ id: selectedTake.id, status: 'approved' })
+   781→              }}
+   782→              disabled={statusMutation.isPending}
+   783→              className="bg-emerald-600 text-white hover:bg-emerald-700"
+   784→            >
+   785→              {statusMutation.isPending ? 'Approving…' : 'Approve'}
+   786→            </AlertDialogAction>
+   787→          </AlertDialogFooter>
+   788→        </AlertDialogContent>
+   789→      </AlertDialog>
+   790→
+   791→      {/* ── Reject dialog ─────────────────────────────────────────── */}
+   792→      <AlertDialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+   793→        <AlertDialogContent>
+   794→          <AlertDialogHeader>
+   795→            <AlertDialogTitle>Reject Stock Take</AlertDialogTitle>
+   796→            <AlertDialogDescription>
+   797→              Are you sure you want to reject this stock take? The stock levels will remain unchanged.
+   798→            </AlertDialogDescription>
+   799→          </AlertDialogHeader>
+   800→          <AlertDialogFooter>
+   801→            <AlertDialogCancel disabled={statusMutation.isPending}>Cancel</AlertDialogCancel>
+   802→            <AlertDialogAction
+   803→              onClick={() => {
+   804→                if (selectedTake) statusMutation.mutate({ id: selectedTake.id, status: 'rejected' })
+   805→              }}
+   806→              disabled={statusMutation.isPending}
+   807→              className="bg-red-600 text-white hover:bg-red-700"
+   808→            >
+   809→              {statusMutation.isPending ? 'Rejecting…' : 'Reject'}
+   810→            </AlertDialogAction>
+   811→          </AlertDialogFooter>
+   812→        </AlertDialogContent>
+   813→      </AlertDialog>
+   814→    </div>
+   815→  )
+   816→}

@@ -1,0 +1,681 @@
+     1→'use client'
+     2→
+     3→import { useState } from 'react'
+     4→import { supabase } from '@/lib/supabase'
+     5→import { useAuth } from '@/contexts/auth-context'
+     6→import type { Product } from '@/lib/types'
+     7→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     8→import { Button } from '@/components/ui/button'
+     9→import { Input } from '@/components/ui/input'
+    10→import { Badge } from '@/components/ui/badge'
+    11→import { ScrollArea } from '@/components/ui/scroll-area'
+    12→import {
+    13→  Dialog,
+    14→  DialogContent,
+    15→  DialogHeader,
+    16→  DialogTitle,
+    17→  DialogFooter,
+    18→} from '@/components/ui/dialog'
+    19→import {
+    20→  Select,
+    21→  SelectContent,
+    22→  SelectItem,
+    23→  SelectTrigger,
+    24→  SelectValue,
+    25→} from '@/components/ui/select'
+    26→import { Separator } from '@/components/ui/separator'
+    27→import {
+    28→  Search,
+    29→  Plus,
+    30→  Minus,
+    31→  Trash2,
+    32→  ShoppingCart,
+    33→  CreditCard,
+    34→  Banknote,
+    35→  Smartphone,
+    36→  CheckCircle,
+    37→  Package,
+    38→} from 'lucide-react'
+    39→import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+    40→import { useToast } from '@/hooks/use-toast'
+    41→
+    42→/* ------------------------------------------------------------------ */
+    43→/*  Helpers                                                            */
+    44→/* ------------------------------------------------------------------ */
+    45→
+    46→const ACCENT = '#7C3AED'
+    47→
+    48→const formatKES = (amount: number): string =>
+    49→  new Intl.NumberFormat('en-KE', {
+    50→    style: 'currency',
+    51→    currency: 'KES',
+    52→    minimumFractionDigits: 0,
+    53→    maximumFractionDigits: 0,
+    54→  }).format(amount)
+    55→
+    56→/* ------------------------------------------------------------------ */
+    57→/*  Types                                                              */
+    58→/* ------------------------------------------------------------------ */
+    59→
+    60→interface CartItem {
+    61→  productId: string
+    62→  name: string
+    63→  qty: number
+    64→  price: number
+    65→  cost: number
+    66→}
+    67→
+    68→/* ------------------------------------------------------------------ */
+    69→/*  Component                                                          */
+    70→/* ------------------------------------------------------------------ */
+    71→
+    72→export default function POSPage() {
+    73→  const { store, appUser } = useAuth()
+    74→  const { toast } = useToast()
+    75→  const queryClient = useQueryClient()
+    76→
+    77→  const [search, setSearch] = useState('')
+    78→  const [cart, setCart] = useState<CartItem[]>([])
+    79→  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'mpesa'>('cash')
+    80→  const [successOpen, setSuccessOpen] = useState(false)
+    81→  const [lastSaleId, setLastSaleId] = useState<string>('')
+    82→  const [mobileTab, setMobileTab] = useState<'products' | 'cart'>('products')
+    83→
+    84→  /* ---------------------------------------------------------------- */
+    85→  /*  Data fetching                                                    */
+    86→  /* ---------------------------------------------------------------- */
+    87→
+    88→  const { data: products, isLoading } = useQuery({
+    89→    queryKey: ['pos-products', store?.id],
+    90→    queryFn: async () => {
+    91→      const { data } = await supabase
+    92→        .from('products')
+    93→        .select('*')
+    94→        .eq('store_id', store!.id)
+    95→        .gt('current_stock', 0)
+    96→        .order('name')
+    97→      return (data || []) as Product[]
+    98→    },
+    99→    enabled: !!store?.id,
+   100→  })
+   101→
+   102→  /* ---------------------------------------------------------------- */
+   103→  /*  Filtered products                                                */
+   104→  /* ---------------------------------------------------------------- */
+   105→
+   106→  const filteredProducts = (products || []).filter((p) => {
+   107→    if (!search) return true
+   108→    const q = search.toLowerCase()
+   109→    return (
+   110→      p.name.toLowerCase().includes(q) ||
+   111→      p.barcode?.toLowerCase().includes(q)
+   112→    )
+   113→  })
+   114→
+   115→  /* ---------------------------------------------------------------- */
+   116→  /*  Cart helpers                                                     */
+   117→  /* ---------------------------------------------------------------- */
+   118→
+   119→  const addToCart = (product: Product) => {
+   120→    setCart((prev) => {
+   121→      const existing = prev.find((i) => i.productId === product.id)
+   122→      if (existing) {
+   123→        if (existing.qty >= product.current_stock) return prev
+   124→        return prev.map((i) =>
+   125→          i.productId === product.id ? { ...i, qty: i.qty + 1 } : i
+   126→        )
+   127→      }
+   128→      return [
+   129→        ...prev,
+   130→        {
+   131→          productId: product.id,
+   132→          name: product.name,
+   133→          qty: 1,
+   134→          price: product.sell_price,
+   135→          cost: product.cost_price,
+   136→        },
+   137→      ]
+   138→    })
+   139→  }
+   140→
+   141→  const updateQty = (productId: string, delta: number) => {
+   142→    setCart((prev) =>
+   143→      prev
+   144→        .map((i) => {
+   145→          if (i.productId !== productId) return i
+   146→          const newQty = i.qty + delta
+   147→          if (newQty < 1) return null
+   148→          return { ...i, qty: newQty }
+   149→        })
+   150→        .filter(Boolean) as CartItem[]
+   151→    )
+   152→  }
+   153→
+   154→  const removeFromCart = (productId: string) => {
+   155→    setCart((prev) => prev.filter((i) => i.productId !== productId))
+   156→  }
+   157→
+   158→  const clearCart = () => setCart([])
+   159→
+   160→  const cartTotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0)
+   161→  const cartCount = cart.reduce((sum, i) => sum + i.qty, 0)
+   162→
+   163→  /* ---------------------------------------------------------------- */
+   164→  /*  Complete sale mutation                                           */
+   165→  /* ---------------------------------------------------------------- */
+   166→
+   167→  const completeSaleMutation = useMutation({
+   168→    mutationFn: async () => {
+   169→      const { data, error } = await supabase.rpc('complete_sale', {
+   170→        p_store_id: store!.id,
+   171→        p_staff_id: appUser!.id,
+   172→        p_payment_method: paymentMethod,
+   173→        p_items: cart.map((i) => ({
+   174→          productId: i.productId,
+   175→          name: i.name,
+   176→          qty: i.qty,
+   177→          price: i.price,
+   178→          cost: i.cost,
+   179→        })),
+   180→      })
+   181→      if (error) throw error
+   182→      return data
+   183→    },
+   184→    onSuccess: (data) => {
+   185→      const saleId =
+   186→        typeof data === 'string'
+   187→          ? data
+   188→          : data?.id ?? data?.sale_id ?? 'Unknown'
+   189→      setLastSaleId(saleId)
+   190→      setSuccessOpen(true)
+   191→      setCart([])
+   192→      toast({
+   193→        title: 'Sale completed!',
+   194→        description: `Sale #${typeof saleId === 'string' ? saleId.slice(0, 8).toUpperCase() : saleId} recorded successfully.`,
+   195→      })
+   196→      queryClient.invalidateQueries({ queryKey: ['pos-products'] })
+   197→    },
+   198→    onError: (error) => {
+   199→      toast({
+   200→        title: 'Sale failed',
+   201→        description: error.message || 'Something went wrong. Please try again.',
+   202→        variant: 'destructive',
+   203→      })
+   204→    },
+   205→  })
+   206→
+   207→  /* ---------------------------------------------------------------- */
+   208→  /*  Render                                                           */
+   209→  /* ---------------------------------------------------------------- */
+   210→
+   211→  return (
+   212→    <div className="space-y-4">
+   213→      {/* Page Header */}
+   214→      <div className="flex items-center justify-between">
+   215→        <div>
+   216→          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+   217→            Point of Sale
+   218→          </h1>
+   219→          <p className="mt-1 text-sm text-muted-foreground">
+   220→            Ring up sales quickly and efficiently.
+   221→          </p>
+   222→        </div>
+   223→        {cartCount > 0 && (
+   224→          <Badge
+   225→            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 text-sm font-semibold text-white"
+   226→            style={{ backgroundColor: ACCENT }}
+   227→          >
+   228→            <ShoppingCart className="h-3.5 w-3.5" />
+   229→            {cartCount} item{cartCount !== 1 ? 's' : ''}
+   230→          </Badge>
+   231→        )}
+   232→      </div>
+   233→
+   234→      {/* Mobile Tab Switcher */}
+   235→      <div className="flex gap-1 rounded-lg bg-muted p-1 lg:hidden">
+   236→        <button
+   237→          onClick={() => setMobileTab('products')}
+   238→          className={`relative flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all ${
+   239→            mobileTab === 'products'
+   240→              ? 'bg-background text-foreground shadow-sm'
+   241→              : 'text-muted-foreground hover:text-foreground'
+   242→          }`}
+   243→        >
+   244→          Products
+   245→          <Package className="ml-1.5 inline h-3.5 w-3.5" />
+   246→        </button>
+   247→        <button
+   248→          onClick={() => setMobileTab('cart')}
+   249→          className={`relative flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all ${
+   250→            mobileTab === 'cart'
+   251→              ? 'bg-background text-foreground shadow-sm'
+   252→              : 'text-muted-foreground hover:text-foreground'
+   253→          }`}
+   254→        >
+   255→          Cart
+   256→          <ShoppingCart className="ml-1.5 inline h-3.5 w-3.5" />
+   257→          {cartCount > 0 && (
+   258→            <span
+   259→              className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
+   260→              style={{ backgroundColor: ACCENT }}
+   261→            >
+   262→              {cartCount}
+   263→            </span>
+   264→          )}
+   265→        </button>
+   266→      </div>
+   267→
+   268→      {/* Two-column Layout */}
+   269→      <div className="grid gap-4 lg:grid-cols-3">
+   270→        {/* ====== LEFT PANEL — Products (2/3) ====== */}
+   271→        <div
+   272→          className={`${
+   273→            mobileTab === 'products' ? 'block' : 'hidden'
+   274→          } lg:block lg:col-span-2`}
+   275→        >
+   276→          <Card className="gap-0 overflow-hidden p-0">
+   277→            {/* Search Bar */}
+   278→            <div className="border-b p-4">
+   279→              <div className="relative">
+   280→                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+   281→                <Input
+   282→                  placeholder="Search by name or barcode..."
+   283→                  value={search}
+   284→                  onChange={(e) => setSearch(e.target.value)}
+   285→                  className="pl-10"
+   286→                />
+   287→              </div>
+   288→            </div>
+   289→
+   290→            {/* Product Grid */}
+   291→            <CardContent className="p-4">
+   292→              {isLoading ? (
+   293→                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+   294→                  {Array.from({ length: 6 }).map((_, i) => (
+   295→                    <div
+   296→                      key={i}
+   297→                      className="h-36 animate-pulse rounded-xl bg-muted"
+   298→                    />
+   299→                  ))}
+   300→                </div>
+   301→              ) : filteredProducts.length === 0 ? (
+   302→                <div className="flex flex-col items-center justify-center py-20 text-center">
+   303→                  <div
+   304→                    className="mb-3 flex h-14 w-14 items-center justify-center rounded-full"
+   305→                    style={{ backgroundColor: `${ACCENT}15` }}
+   306→                  >
+   307→                    <Package className="h-6 w-6" style={{ color: ACCENT }} />
+   308→                  </div>
+   309→                  <p className="text-sm font-medium">
+   310→                    {search ? 'No products match your search' : 'No products in stock'}
+   311→                  </p>
+   312→                  <p className="mt-1 text-xs text-muted-foreground">
+   313→                    {search
+   314→                      ? 'Try a different search term.'
+   315→                      : 'Add inventory from the Inventory page first.'}
+   316→                  </p>
+   317→                </div>
+   318→              ) : (
+   319→                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+   320→                  {filteredProducts.map((product) => {
+   321→                    const isLowStock =
+   322→                      product.current_stock > 0 &&
+   323→                      product.current_stock <= product.reorder_level
+   324→                    const cartItem = cart.find(
+   325→                      (i) => i.productId === product.id
+   326→                    )
+   327→                    const maxedOut =
+   328→                      cartItem && cartItem.qty >= product.current_stock
+   329→
+   330→                    return (
+   331→                      <button
+   332→                        key={product.id}
+   333→                        onClick={() => addToCart(product)}
+   334→                        disabled={maxedOut}
+   335→                        className={`group relative flex flex-col justify-between rounded-xl border bg-background p-3 text-left transition-all hover:shadow-md active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${
+   336→                          maxedOut ? 'ring-1' : ''
+   337→                        }`}
+   338→                        style={
+   339→                          maxedOut
+   340→                            ? { borderColor: `${ACCENT}40`, ringColor: `${ACCENT}40` }
+   341→                            : undefined
+   342→                        }
+   343→                      >
+   344→                        {/* Badges row */}
+   345→                        <div className="flex items-center justify-between">
+   346→                          {isLowStock && (
+   347→                            <Badge
+   348→                              variant="outline"
+   349→                              className="border-amber-300 bg-amber-50 text-[10px] font-semibold text-amber-700"
+   350→                            >
+   351→                              Low Stock
+   352→                            </Badge>
+   353→                          )}
+   354→                          {cartItem && (
+   355→                            <Badge
+   356→                              className="ml-auto text-[10px] font-bold text-white"
+   357→                              style={{ backgroundColor: ACCENT }}
+   358→                            >
+   359→                              {cartItem.qty}
+   360→                            </Badge>
+   361→                          )}
+   362→                        </div>
+   363→
+   364→                        {/* Name */}
+   365→                        <h3 className="mt-2 line-clamp-2 text-sm font-semibold leading-tight">
+   366→                          {product.name}
+   367→                        </h3>
+   368→
+   369→                        {/* Size & stock */}
+   370→                        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+   371→                          <span>{product.size}</span>
+   372→                          <span>·</span>
+   373→                          <span>{product.current_stock} left</span>
+   374→                        </div>
+   375→
+   376→                        {/* Price & add button */}
+   377→                        <div className="mt-2 flex items-center justify-between">
+   378→                          <span
+   379→                            className="text-base font-bold"
+   380→                            style={{ color: ACCENT }}
+   381→                          >
+   382→                            {formatKES(product.sell_price)}
+   383→                          </span>
+   384→                          <span
+   385→                            className="flex h-7 w-7 items-center justify-center rounded-full text-white opacity-0 transition-all group-hover:opacity-100"
+   386→                            style={{ backgroundColor: ACCENT }}
+   387→                          >
+   388→                            <Plus className="h-4 w-4" />
+   389→                          </span>
+   390→                        </div>
+   391→                      </button>
+   392→                    )
+   393→                  })}
+   394→                </div>
+   395→              )}
+   396→            </CardContent>
+   397→          </Card>
+   398→        </div>
+   399→
+   400→        {/* ====== RIGHT PANEL — Cart (1/3) ====== */}
+   401→        <div
+   402→          className={`${
+   403→            mobileTab === 'cart' ? 'block' : 'hidden'
+   404→          } lg:block lg:col-span-1`}
+   405→        >
+   406→          <Card className="sticky top-4 flex flex-col gap-0 overflow-hidden p-0">
+   407→            {/* Cart Header */}
+   408→            <CardHeader className="pb-3">
+   409→              <div className="flex items-center justify-between">
+   410→                <CardTitle className="flex items-center gap-2 text-base font-semibold">
+   411→                  <ShoppingCart className="h-5 w-5" style={{ color: ACCENT }} />
+   412→                  Current Sale
+   413→                  {cartCount > 0 && (
+   414→                    <Badge
+   415→                      className="ml-1 text-[11px] font-bold text-white"
+   416→                      style={{ backgroundColor: ACCENT }}
+   417→                    >
+   418→                      {cartCount}
+   419→                    </Badge>
+   420→                  )}
+   421→                </CardTitle>
+   422→                {cart.length > 0 && (
+   423→                  <Button
+   424→                    variant="ghost"
+   425→                    size="sm"
+   426→                    onClick={clearCart}
+   427→                    className="h-8 text-xs text-muted-foreground hover:text-destructive"
+   428→                  >
+   429→                    Clear
+   430→                  </Button>
+   431→                )}
+   432→              </div>
+   433→            </CardHeader>
+   434→
+   435→            {/* Cart Items */}
+   436→            <div className="flex-1">
+   437→              <ScrollArea className="max-h-80">
+   438→                {cart.length === 0 ? (
+   439→                  <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
+   440→                    <div
+   441→                      className="mb-3 flex h-14 w-14 items-center justify-center rounded-full"
+   442→                      style={{ backgroundColor: `${ACCENT}10` }}
+   443→                    >
+   444→                      <ShoppingCart
+   445→                        className="h-6 w-6"
+   446→                        style={{ color: `${ACCENT}40` }}
+   447→                      />
+   448→                    </div>
+   449→                    <p className="text-sm font-medium text-muted-foreground">
+   450→                      Cart is empty
+   451→                    </p>
+   452→                    <p className="mt-1 text-xs text-muted-foreground">
+   453→                      Click a product to add it
+   454→                    </p>
+   455→                  </div>
+   456→                ) : (
+   457→                  <div className="space-y-1 px-4">
+   458→                    {cart.map((item) => (
+   459→                      <div
+   460→                        key={item.productId}
+   461→                        className="flex items-center gap-2 rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/50"
+   462→                      >
+   463→                        {/* Item info */}
+   464→                        <div className="min-w-0 flex-1">
+   465→                          <p className="truncate text-sm font-medium">
+   466→                            {item.name}
+   467→                          </p>
+   468→                          <p className="text-xs text-muted-foreground">
+   469→                            {formatKES(item.price)} each
+   470→                          </p>
+   471→                        </div>
+   472→
+   473→                        {/* Quantity controls */}
+   474→                        <div className="flex items-center gap-0.5 rounded-lg border">
+   475→                          <button
+   476→                            onClick={() => updateQty(item.productId, -1)}
+   477→                            className="flex h-7 w-7 items-center justify-center rounded-l-lg text-muted-foreground transition-colors hover:bg-muted"
+   478→                          >
+   479→                            <Minus className="h-3 w-3" />
+   480→                          </button>
+   481→                          <span className="flex h-7 w-8 items-center justify-center border-x text-xs font-bold">
+   482→                            {item.qty}
+   483→                          </span>
+   484→                          <button
+   485→                            onClick={() => updateQty(item.productId, 1)}
+   486→                            className="flex h-7 w-7 items-center justify-center rounded-r-lg text-muted-foreground transition-colors hover:bg-muted"
+   487→                          >
+   488→                            <Plus className="h-3 w-3" />
+   489→                          </button>
+   490→                        </div>
+   491→
+   492→                        {/* Line total */}
+   493→                        <span className="w-16 text-right text-sm font-semibold">
+   494→                          {formatKES(item.price * item.qty)}
+   495→                        </span>
+   496→
+   497→                        {/* Remove */}
+   498→                        <button
+   499→                          onClick={() => removeFromCart(item.productId)}
+   500→                          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+   501→                        >
+   502→                          <Trash2 className="h-3.5 w-3.5" />
+   503→                        </button>
+   504→                      </div>
+   505→                    ))}
+   506→                  </div>
+   507→                )}
+   508→              </ScrollArea>
+   509→            </div>
+   510→
+   511→            {cart.length > 0 && (
+   512→              <>
+   513→                <Separator />
+   514→
+   515→                {/* Totals & Checkout */}
+   516→                <div className="flex-shrink-0 p-4">
+   517→                  {/* Subtotal */}
+   518→                  <div className="mb-4 flex items-center justify-between">
+   519→                    <span className="text-sm text-muted-foreground">Subtotal</span>
+   520→                    <span className="text-sm font-medium">
+   521→                      {cart.length} item{cart.length !== 1 ? 's' : ''}
+   522→                    </span>
+   523→                  </div>
+   524→
+   525→                  {/* Spacer to push payment down */}
+   526→                  <div className="h-4" />
+   527→
+   528→                  {/* Payment method selector */}
+   529→                  <div className="mb-4">
+   530→                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+   531→                      Payment Method
+   532→                    </p>
+   533→                    <div className="grid grid-cols-3 gap-2">
+   534→                      <button
+   535→                        onClick={() => setPaymentMethod('cash')}
+   536→                        className={`flex flex-col items-center gap-1.5 rounded-lg border p-2.5 text-xs font-semibold transition-all ${
+   537→                          paymentMethod === 'cash'
+   538→                            ? 'border-transparent text-white shadow-sm'
+   539→                            : 'border-border text-muted-foreground hover:border-foreground/20 hover:text-foreground'
+   540→                        }`}
+   541→                        style={
+   542→                          paymentMethod === 'cash'
+   543→                            ? { backgroundColor: ACCENT, borderColor: ACCENT }
+   544→                            : undefined
+   545→                        }
+   546→                      >
+   547→                        <Banknote className="h-4 w-4" />
+   548→                        Cash
+   549→                      </button>
+   550→                      <button
+   551→                        onClick={() => setPaymentMethod('card')}
+   552→                        className={`flex flex-col items-center gap-1.5 rounded-lg border p-2.5 text-xs font-semibold transition-all ${
+   553→                          paymentMethod === 'card'
+   554→                            ? 'border-transparent text-white shadow-sm'
+   555→                            : 'border-border text-muted-foreground hover:border-foreground/20 hover:text-foreground'
+   556→                        }`}
+   557→                        style={
+   558→                          paymentMethod === 'card'
+   559→                            ? { backgroundColor: ACCENT, borderColor: ACCENT }
+   560→                            : undefined
+   561→                        }
+   562→                      >
+   563→                        <CreditCard className="h-4 w-4" />
+   564→                        Card
+   565→                      </button>
+   566→                      <button
+   567→                        onClick={() => setPaymentMethod('mpesa')}
+   568→                        className={`flex flex-col items-center gap-1.5 rounded-lg border p-2.5 text-xs font-semibold transition-all ${
+   569→                          paymentMethod === 'mpesa'
+   570→                            ? 'border-transparent text-white shadow-sm'
+   571→                            : 'border-border text-muted-foreground hover:border-foreground/20 hover:text-foreground'
+   572→                        }`}
+   573→                        style={
+   574→                          paymentMethod === 'mpesa'
+   575→                            ? { backgroundColor: ACCENT, borderColor: ACCENT }
+   576→                            : undefined
+   577→                        }
+   578→                      >
+   579→                        <Smartphone className="h-4 w-4" />
+   580→                        M-Pesa
+   581→                      </button>
+   582→                    </div>
+   583→                  </div>
+   584→
+   585→                  {/* Total */}
+   586→                  <div className="mb-4 flex items-center justify-between">
+   587→                    <span className="text-base font-medium">Total</span>
+   588→                    <span
+   589→                      className="text-2xl font-bold tracking-tight"
+   590→                      style={{ color: ACCENT }}
+   591→                    >
+   592→                      {formatKES(cartTotal)}
+   593→                    </span>
+   594→                  </div>
+   595→
+   596→                  {/* Complete Sale Button */}
+   597→                  <Button
+   598→                    onClick={() => completeSaleMutation.mutate()}
+   599→                    disabled={completeSaleMutation.isPending || cart.length === 0}
+   600→                    className="w-full py-6 text-base font-bold text-white transition-all hover:opacity-90 active:scale-[0.98]"
+   601→                    style={{ backgroundColor: ACCENT }}
+   602→                  >
+   603→                    {completeSaleMutation.isPending ? (
+   604→                      <span className="flex items-center gap-2">
+   605→                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+   606→                        Processing...
+   607→                      </span>
+   608→                    ) : (
+   609→                      <>
+   610→                        Complete Sale
+   611→                        <span className="ml-2 text-sm font-medium opacity-80">
+   612→                          {formatKES(cartTotal)}
+   613→                        </span>
+   614→                      </>
+   615→                    )}
+   616→                  </Button>
+   617→                </div>
+   618→              </>
+   619→            )}
+   620→          </Card>
+   621→        </div>
+   622→      </div>
+   623→
+   624→      {/* ====== SUCCESS DIALOG ====== */}
+   625→      <Dialog open={successOpen} onOpenChange={setSuccessOpen}>
+   626→        <DialogContent className="sm:max-w-md">
+   627→          <DialogHeader className="items-center text-center">
+   628→            {/* Animated checkmark */}
+   629→            <div className="mx-auto mb-2 flex h-20 w-20 items-center justify-center rounded-full">
+   630→              <div
+   631→                className="absolute flex h-20 w-20 animate-ping items-center justify-center rounded-full opacity-20"
+   632→                style={{ backgroundColor: ACCENT }}
+   633→              />
+   634→              <div
+   635→                className="relative flex h-16 w-16 items-center justify-center rounded-full text-white shadow-lg"
+   636→                style={{ backgroundColor: ACCENT }}
+   637→              >
+   638→                <CheckCircle className="h-8 w-8" />
+   639→              </div>
+   640→            </div>
+   641→            <DialogTitle className="text-xl font-bold">
+   642→              Sale Completed!
+   643→            </DialogTitle>
+   644→          </DialogHeader>
+   645→
+   646→          <div className="space-y-3 text-center">
+   647→            <div className="rounded-lg bg-muted/50 p-4">
+   648→              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+   649→                Sale ID
+   650→              </p>
+   651→              <p
+   652→                className="mt-1 text-lg font-mono font-bold"
+   653→                style={{ color: ACCENT }}
+   654→              >
+   655→                {typeof lastSaleId === 'string'
+   656→                  ? lastSaleId.slice(0, 8).toUpperCase()
+   657→                  : lastSaleId}
+   658→              </p>
+   659→            </div>
+   660→            <p className="text-sm text-muted-foreground">
+   661→              Payment:{' '}
+   662→              <span className="font-semibold capitalize text-foreground">
+   663→                {paymentMethod}
+   664→              </span>
+   665→            </p>
+   666→          </div>
+   667→
+   668→          <DialogFooter className="sm:justify-center">
+   669→            <Button
+   670→              onClick={() => setSuccessOpen(false)}
+   671→              className="px-8 font-semibold text-white"
+   672→              style={{ backgroundColor: ACCENT }}
+   673→            >
+   674→              New Sale
+   675→            </Button>
+   676→          </DialogFooter>
+   677→        </DialogContent>
+   678→      </Dialog>
+   679→    </div>
+   680→  )
+   681→}
