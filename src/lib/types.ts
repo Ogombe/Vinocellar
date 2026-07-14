@@ -151,4 +151,4 @@ export interface Notification {
   created_at: string
 }
 
-export type PageType = 'dashboard' | 'inventory' | 'pos' | 'staff' | 'suppliers' | 'expenses' | 'categories' | 'stock-count' | 'reports' | 'settings'
+export type PageType = 'dashboard' | 'inventory' | 'pos' | 'staff' | 'suppliers' | 'expenses' | 'categories' | 'stock-count' | 'reports' | 'settings' | 'super-admin'

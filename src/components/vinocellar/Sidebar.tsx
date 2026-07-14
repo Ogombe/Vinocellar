@@ -16,6 +16,7 @@ import {
   Settings,
   LogOut,
   Grape,
+  Shield,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -37,6 +38,7 @@ interface NavItem {
   page: string
   icon: React.ElementType
   managerOnly?: boolean
+  superAdminOnly?: boolean
 }
 
 /* ------------------------------------------------------------------ */
@@ -54,6 +56,7 @@ const navItems: NavItem[] = [
   { label: 'Stock Count', page: 'stock-count', icon: ClipboardCheck },
   { label: 'Reports', page: 'reports', icon: BarChart3 },
   { label: 'Settings', page: 'settings', icon: Settings },
+  { label: 'Super Admin', page: 'super-admin', icon: Shield, superAdminOnly: true },
 ]
 
 /* ------------------------------------------------------------------ */
@@ -69,7 +72,9 @@ function SidebarContent({
   role,
 }: SidebarProps) {
   const visibleItems = navItems.filter(
-    (item) => !item.managerOnly || role === 'manager',
+    (item) =>
+      (!item.managerOnly || role === 'manager' || role === 'super_admin') &&
+      (!item.superAdminOnly || role === 'super_admin'),
   )
 
   const handleNav = (page: string) => {
