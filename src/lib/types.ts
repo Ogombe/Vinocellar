@@ -5,6 +5,7 @@ export interface Organisation {
   plan: 'trial' | 'starter' | 'professional' | 'enterprise'
   is_active: boolean
   trial_ends_at: string | null
+  current_period_end: string | null
   max_stores: number
   max_staff: number
   max_products: number
@@ -151,4 +152,4 @@ export interface Notification {
   created_at: string
 }
 
-export type PageType = 'dashboard' | 'inventory' | 'pos' | 'staff' | 'suppliers' | 'expenses' | 'categories' | 'stock-count' | 'reports' | 'settings' | 'super-admin'
+export type PageType = 'dashboard' | 'inventory' | 'pos' | 'staff' | 'suppliers' | 'expenses' | 'categories' | 'stock-count' | 'reports' | 'settings' | 'billing' | 'super-admin'

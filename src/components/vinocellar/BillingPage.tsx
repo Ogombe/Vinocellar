@@ -62,17 +62,12 @@ export default function BillingPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  // Check for payment callback in URL
+  // Check for payment callback in URL (in case user navigates back to billing page)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const reference = params.get('reference')
-    const trxref = params.get('trxref')
-
-    if (reference || trxref) {
-      const ref = reference || trxref
-      verifyPayment(ref)
-      // Clean URL
-      window.history.replaceState({}, '', '/billing/complete')
+    const reference = params.get('reference') || params.get('trxref')
+    if (reference) {
+      window.location.href = `/billing/complete?reference=${reference}`
     }
   }, [])
 
@@ -129,9 +124,14 @@ export default function BillingPage() {
 
   const currentPlan = organisation?.plan || 'trial'
   const trialEnd = organisation?.trial_ends_at
-  const daysLeft = trialEnd
-    ? Math.max(0, Math.ceil((new Date(trialEnd).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-    : 0
+  const periodEnd = organisation?.current_period_end
+  const isPaid = currentPlan !== 'trial'
+
+  const daysLeft = isPaid
+    ? (periodEnd ? Math.max(0, Math.ceil((new Date(periodEnd).getTime() - Date.now()) / (1000 * 60 * 60 * 24))) : 0)
+    : (trialEnd ? Math.max(0, Math.ceil((new Date(trialEnd).getTime() - Date.now()) / (1000 * 60 * 60 * 24))) : 0)
+
+  const periodLabel = isPaid ? `${daysLeft} day${daysLeft !== 1 ? 's' : ''} left in billing cycle` : `Trial period — ${daysLeft} day${daysLeft !== 1 ? 's' : ''} remaining`
 
   if (loading) {
     return (
@@ -161,9 +161,10 @@ export default function BillingPage() {
                 </Badge>
               </div>
               <p className="text-sm text-slate-500">
-                {currentPlan === 'trial'
-                  ? `Trial period — ${daysLeft} day${daysLeft !== 1 ? 's' : ''} remaining`
-                  : `Your ${plans[currentPlan]?.name || currentPlan} plan is active`}
+                {isPaid
+                  ? `Your ${plans[currentPlan]?.name || currentPlan} plan is active — ${periodLabel}`
+                  : periodLabel
+                }
               </p>
             </div>
             {currentPlan === 'trial' && (

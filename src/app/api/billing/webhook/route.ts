@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://rnllkgdsnbybjgvbgagp.supabase.co'
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJubGxrZ2RzbmJ5YmpndmJnYWdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NjQ2NDcsImV4cCI6MjA5OTU0MDY0N30.h9Uk6j3WLC6VCbGGpVY8kGoywh7xT0duULZeazczVjs'
+const PLAN_LIMITS: Record<string, { max_stores: number; max_staff: number; max_products: number }> = {
+  trial:        { max_stores: 3, max_staff: 10, max_products: 200 },
+  starter:      { max_stores: 2, max_staff: 5, max_products: 100 },
+  professional: { max_stores: 5, max_staff: 20, max_products: 500 },
+  enterprise:   { max_stores: 999, max_staff: 999, max_products: 9999 },
+}
 
 /**
  * Paystack webhook handler.
@@ -38,16 +42,20 @@ export async function POST(request: NextRequest) {
     const metadata = data.metadata
 
     if (metadata?.organisation_id && metadata?.plan) {
-      const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      const supabase = createClient(supabaseUrl, supabaseKey)
 
-      // Update organisation plan
+      const limits = PLAN_LIMITS[metadata.plan] || PLAN_LIMITS.trial
+
+      // Update organisation plan and billing period
       const { error } = await supabase
         .from('organisations')
         .update({
           plan: metadata.plan,
           is_active: true,
-          // Set trial end to 30 days from now (subscription period)
-          trial_ends_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          ...limits,
         })
         .eq('id', metadata.organisation_id)
 
