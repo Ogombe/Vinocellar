@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
-import { supabaseServer } from '@/lib/supabase-server'
 
 export async function GET(request: NextRequest) {
   const auth = await withAuth(request)
@@ -10,34 +9,34 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Super admin only' }, { status: 403 })
   }
 
-  const { count: totalOrgs } = await supabaseServer
+  const { count: totalOrgs } = await auth.db
     .from('organisations')
     .select('*', { count: 'exact', head: true })
 
-  const { count: activeOrgs } = await supabaseServer
+  const { count: activeOrgs } = await auth.db
     .from('organisations')
     .select('*', { count: 'exact', head: true })
     .eq('is_active', true)
 
-  const { count: trialOrgs } = await supabaseServer
+  const { count: trialOrgs } = await auth.db
     .from('organisations')
     .select('*', { count: 'exact', head: true })
     .eq('plan', 'trial')
 
-  const { count: totalUsers } = await supabaseServer
+  const { count: totalUsers } = await auth.db
     .from('users')
     .select('*', { count: 'exact', head: true })
 
-  const { count: totalProducts } = await supabaseServer
+  const { count: totalProducts } = await auth.db
     .from('products')
     .select('*', { count: 'exact', head: true })
 
-  const { count: totalSales } = await supabaseServer
+  const { count: totalSales } = await auth.db
     .from('sales')
     .select('*', { count: 'exact', head: true })
 
   // Recent orgs
-  const { data: recentOrgs } = await supabaseServer
+  const { data: recentOrgs } = await auth.db
     .from('organisations')
     .select('*')
     .order('created_at', { ascending: false })

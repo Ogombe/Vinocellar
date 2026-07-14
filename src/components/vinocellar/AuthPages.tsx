@@ -33,6 +33,7 @@ export function LoginPage({ onSwitch }: { onSwitch: () => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [signingIn, setSigningIn] = useState(false)
   const [showForgot, setShowForgot] = useState(false)
   const [resetEmail, setResetEmail] = useState('')
   const [resetSent, setResetSent] = useState(false)
@@ -41,8 +42,10 @@ export function LoginPage({ onSwitch }: { onSwitch: () => void }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    setSigningIn(true)
 
     const result = await signIn(email, password)
+    setSigningIn(false)
     if (result.error) {
       setError(result.error)
     }
@@ -144,10 +147,10 @@ export function LoginPage({ onSwitch }: { onSwitch: () => void }) {
             {/* Submit */}
             <Button
               type="submit"
-              disabled={loading}
+              disabled={signingIn}
               className="w-full h-11 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors"
             >
-              {loading ? (
+              {signingIn ? (
                 <span className="inline-flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Signing in...

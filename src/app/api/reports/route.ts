@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
-import { supabaseServer } from '@/lib/supabase-server'
 import { daysAgo, todayStr } from '@/lib/helpers'
 
 export async function GET(request: NextRequest) {
@@ -15,7 +14,7 @@ export async function GET(request: NextRequest) {
   const startDate = daysAgo(30).toISOString()
 
   if (type === 'sales') {
-    const { data: sales } = await supabaseServer
+    const { data: sales } = await auth.db
       .from('sales')
       .select('*, sale_items(*), staff:users!staff_id(name)')
       .eq('organisation_id', auth.orgId)
@@ -38,7 +37,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (type === 'inventory') {
-    const { data: products } = await supabaseServer
+    const { data: products } = await auth.db
       .from('products')
       .select('*, category:categories(name, colour), supplier:suppliers(name)')
       .eq('organisation_id', auth.orgId)
@@ -56,7 +55,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (type === 'profit-loss') {
-    const { data: sales } = await supabaseServer
+    const { data: sales } = await auth.db
       .from('sales')
       .select('*, sale_items(*)')
       .eq('organisation_id', auth.orgId)
@@ -67,7 +66,7 @@ export async function GET(request: NextRequest) {
     const allItems = (sales || []).flatMap((s: any) => s.sale_items || [])
     const cogs = allItems.reduce((s, item) => s + Number(item.cost) * item.qty, 0)
 
-    const { data: expenses } = await supabaseServer
+    const { data: expenses } = await auth.db
       .from('expenses')
       .select('*')
       .eq('organisation_id', auth.orgId)
@@ -85,7 +84,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (type === 'expense') {
-    const { data: expenses } = await supabaseServer
+    const { data: expenses } = await auth.db
       .from('expenses')
       .select('*')
       .eq('organisation_id', auth.orgId)
@@ -106,7 +105,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (type === 'stock-audit') {
-    const { data: stockTakes } = await supabaseServer
+    const { data: stockTakes } = await auth.db
       .from('stock_takes')
       .select('*, stock_take_items(*, product:products(name)), starter:users!started_by(name), approver:users!approved_by(name)')
       .eq('organisation_id', auth.orgId)

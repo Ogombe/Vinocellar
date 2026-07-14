@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
-import { supabaseServer } from '@/lib/supabase-server'
 import { auditLog } from '@/lib/helpers'
 
 export async function GET(request: NextRequest) {
   const auth = await withAuth(request, true)
   if (auth.error) return auth.error
 
-  const { data: settings, error } = await supabaseServer
+  const { data: settings, error } = await auth.db
     .from('org_settings')
     .select('*')
     .eq('organisation_id', auth.orgId)
@@ -31,7 +30,7 @@ export async function PUT(request: NextRequest) {
 
   for (const [key, value] of entries) {
     // Try update first, then insert if not exists (upsert pattern)
-    const { data: existing } = await supabaseServer
+    const { data: existing } = await auth.db
       .from('org_settings')
       .select('id')
       .eq('organisation_id', auth.orgId)
@@ -39,12 +38,12 @@ export async function PUT(request: NextRequest) {
       .single()
 
     if (existing) {
-      await supabaseServer
+      await auth.db
         .from('org_settings')
         .update({ value: String(value) })
         .eq('id', existing.id)
     } else {
-      await supabaseServer
+      await auth.db
         .from('org_settings')
         .insert({ organisation_id: auth.orgId, key, value: String(value) })
     }

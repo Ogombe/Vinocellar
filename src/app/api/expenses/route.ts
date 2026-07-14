@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
-import { supabaseServer } from '@/lib/supabase-server'
 import { auditLog } from '@/lib/helpers'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -13,7 +12,7 @@ export async function GET(request: NextRequest) {
   const from = searchParams.get('from')
   const to = searchParams.get('to')
 
-  let query = supabaseServer
+  let query = auth.db
     .from('expenses')
     .select('*, recorder:users!recorded_by(name)')
     .eq('organisation_id', auth.orgId)
@@ -56,7 +55,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Date, category, amount required' }, { status: 400 })
   }
 
-  const { data: expense, error } = await supabaseServer
+  const { data: expense, error } = await auth.db
     .from('expenses')
     .insert({
       id: uuidv4(),
@@ -101,7 +100,7 @@ export async function PUT(request: NextRequest) {
   if (data.description !== undefined) updateData.description = data.description
   if (data.amount) updateData.amount = data.amount
 
-  const { error } = await supabaseServer
+  const { error } = await auth.db
     .from('expenses')
     .update(updateData)
     .eq('id', id)
@@ -125,7 +124,7 @@ export async function DELETE(request: NextRequest) {
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
 
-  const { error } = await supabaseServer
+  const { error } = await auth.db
     .from('expenses')
     .delete()
     .eq('id', id)

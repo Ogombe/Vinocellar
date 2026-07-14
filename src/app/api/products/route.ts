@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
-import { supabaseServer } from '@/lib/supabase-server'
 import { auditLog } from '@/lib/helpers'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -15,7 +14,7 @@ export async function GET(request: NextRequest) {
 
   if (!storeId) return NextResponse.json({ error: 'No store selected' }, { status: 400 })
 
-  let query = supabaseServer
+  let query = auth.db
     .from('products')
     .select('*, category:categories(name, colour), supplier:suppliers(name)')
     .eq('organisation_id', auth.orgId)
@@ -76,7 +75,7 @@ export async function POST(request: NextRequest) {
   // Resolve category if name given instead of ID
   let catId = categoryId || null
   if (category && !catId) {
-    const { data: cat } = await supabaseServer
+    const { data: cat } = await auth.db
       .from('categories')
       .select('id')
       .eq('name', category)
@@ -102,7 +101,7 @@ export async function POST(request: NextRequest) {
     supplier_id: supplierId || null,
   }
 
-  const { data: product, error } = await supabaseServer
+  const { data: product, error } = await auth.db
     .from('products')
     .insert(productData)
     .select('*, category:categories(name, colour), supplier:suppliers(name)')
@@ -150,7 +149,7 @@ export async function PUT(request: NextRequest) {
 
   // Resolve category by name if provided
   if (category && !updateData.category_id) {
-    const { data: cat } = await supabaseServer
+    const { data: cat } = await auth.db
       .from('categories')
       .select('id')
       .eq('name', category)
@@ -159,7 +158,7 @@ export async function PUT(request: NextRequest) {
     if (cat) updateData.category_id = cat.id
   }
 
-  const { data: product, error } = await supabaseServer
+  const { data: product, error } = await auth.db
     .from('products')
     .update(updateData)
     .eq('id', id)
@@ -194,7 +193,7 @@ export async function DELETE(request: NextRequest) {
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'Product ID required' }, { status: 400 })
 
-  const { data: existing } = await supabaseServer
+  const { data: existing } = await auth.db
     .from('products')
     .select('name')
     .eq('id', id)
@@ -203,7 +202,7 @@ export async function DELETE(request: NextRequest) {
 
   if (!existing) return NextResponse.json({ error: 'Product not found' }, { status: 404 })
 
-  const { error } = await supabaseServer
+  const { error } = await auth.db
     .from('products')
     .delete()
     .eq('id', id)

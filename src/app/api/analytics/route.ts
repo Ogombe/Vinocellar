@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
-import { supabaseServer } from '@/lib/supabase-server'
 import { daysAgo } from '@/lib/helpers'
 
 export async function GET(request: NextRequest) {
@@ -16,7 +15,7 @@ export async function GET(request: NextRequest) {
   const startDate = daysAgo(days).toISOString()
 
   // Fetch sales with items
-  const { data: sales } = await supabaseServer
+  const { data: sales } = await auth.db
     .from('sales')
     .select('*, sale_items(*)')
     .eq('organisation_id', auth.orgId)
@@ -40,7 +39,7 @@ export async function GET(request: NextRequest) {
     .sort((a, b) => a.date.localeCompare(b.date))
 
   // Category breakdown - fetch products to get category info
-  const { data: products } = await supabaseServer
+  const { data: products } = await auth.db
     .from('products')
     .select('id, category:categories(name)')
     .eq('organisation_id', auth.orgId)
@@ -80,7 +79,7 @@ export async function GET(request: NextRequest) {
   const grossProfit = totalRevenue - totalCost
 
   // Expenses
-  const { data: expenses } = await supabaseServer
+  const { data: expenses } = await auth.db
     .from('expenses')
     .select('*')
     .eq('organisation_id', auth.orgId)

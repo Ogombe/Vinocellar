@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
-import { supabaseServer } from '@/lib/supabase-server'
 import { auditLog } from '@/lib/helpers'
 
 export async function GET(request: NextRequest) {
   const auth = await withAuth(request)
   if (auth.error) return auth.error
 
-  const { data: categories, error } = await supabaseServer
+  const { data: categories, error } = await auth.db
     .from('categories')
     .select('*')
     .eq('organisation_id', auth.orgId)
@@ -34,7 +33,7 @@ export async function POST(request: NextRequest) {
   const { name, colour } = await request.json()
   if (!name) return NextResponse.json({ error: 'Name required' }, { status: 400 })
 
-  const { data: category, error } = await supabaseServer
+  const { data: category, error } = await auth.db
     .from('categories')
     .insert({ name, colour: colour || '#6B7280', organisation_id: auth.orgId })
     .select()
@@ -65,7 +64,7 @@ export async function PUT(request: NextRequest) {
   if (name) updateData.name = name
   if (colour) updateData.colour = colour
 
-  const { error } = await supabaseServer
+  const { error } = await auth.db
     .from('categories')
     .update(updateData)
     .eq('id', id)
@@ -89,7 +88,7 @@ export async function DELETE(request: NextRequest) {
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
 
-  const { data: existing } = await supabaseServer
+  const { data: existing } = await auth.db
     .from('categories')
     .select('name')
     .eq('id', id)
@@ -98,7 +97,7 @@ export async function DELETE(request: NextRequest) {
 
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const { error } = await supabaseServer
+  const { error } = await auth.db
     .from('categories')
     .delete()
     .eq('id', id)

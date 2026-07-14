@@ -28,9 +28,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [organisation, setOrganisation] = useState<Organisation | null>(null)
   const [store, setStore] = useState<Store | null>(null)
   const [loading, setLoading] = useState(true)
+  const [profileError, setProfileError] = useState<string | null>(null)
 
-  const loadProfile = async (userId: string) => {
+  const loadProfile = async (userId: string): Promise<{ ok: boolean; error?: string }> => {
     try {
+      setProfileError(null)
       // Fetch user with organisation (FK exists for org)
       const { data: profile, error } = await supabase
         .from('users')
@@ -39,12 +41,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single()
 
       if (error) {
-        console.error('Profile load error:', error.message)
-        return
+        const msg = 'Could not load your profile. The account may not be set up correctly.'
+        console.error('Profile load error:', error.message, error.code, error.details)
+        setProfileError(msg)
+        return { ok: false, error: msg }
       }
       if (profile) {
         setAppUser(profile)
         setOrganisation(profile.organisation)
+        setProfileError(null)
 
         // Fetch store separately (no FK relationship detected by PostgREST)
         if (profile.store_id) {
@@ -55,9 +60,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .single()
           if (storeData) setStore(storeData)
         }
+        return { ok: true }
+      } else {
+        const msg = 'No profile found for your account.'
+        setProfileError(msg)
+        return { ok: false, error: msg }
       }
     } catch (err) {
+      const msg = 'Network error loading profile.'
       console.error('Profile load exception:', err)
+      setProfileError(msg)
+      return { ok: false, error: msg }
     }
   }
 
@@ -103,8 +116,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!res.ok) return { error: data.error || 'Registration failed' }
 
       // 2. Sign in directly via Supabase Auth client (handles session storage)
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password })
       if (signInError) return { error: signInError.message }
+
+      // 3. Safety net: ensure the users profile row exists.
+      //    The edge function SHOULD create it, but if it doesn't, we create it here.
+      if (signInData.user) {
+        const meta = signInData.user.app_metadata
+        const { data: existingProfile } = await supabase
+          .from('users')
+          .select('id')
+          .eq('id', signInData.user.id)
+          .single()
+
+        if (!existingProfile) {
+          // Profile row missing — create it now
+          await supabase.from('users').insert({
+            id: signInData.user.id,
+            email: signInData.user.email,
+            name: name,
+            role: meta?.role || 'manager',
+            pin: pin,
+            organisation_id: meta?.organisation_id,
+            store_id: meta?.store_id || null,
+            is_active: true,
+          })
+        }
+      }
 
       return { error: null }
     } catch (err) {
@@ -130,8 +168,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Sign in directly via Supabase Auth client
   const signIn = async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      setProfileError(null)
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) return { error: error.message }
+
+      // After successful auth, load the user's profile from the database
+      if (data.user) {
+        const result = await loadProfile(data.user.id)
+        if (!result.ok) {
+          // Profile load failed — sign out to avoid stuck state
+          await supabase.auth.signOut()
+          return { error: result.error || 'Could not load your profile.' }
+        }
+      }
       return { error: null }
     } catch (err) {
       console.error('Signin error:', err)
@@ -148,7 +197,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, user, appUser, organisation, store, loading, signUp, signIn, resetPassword, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ session, user, appUser, organisation, store, loading, profileError, signUp, signIn, resetPassword, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   )

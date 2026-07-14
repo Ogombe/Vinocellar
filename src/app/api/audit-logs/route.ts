@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
-import { supabaseServer } from '@/lib/supabase-server'
 
 export async function GET(request: NextRequest) {
   const auth = await withAuth(request, true)
@@ -10,7 +9,7 @@ export async function GET(request: NextRequest) {
   const limit = parseInt(searchParams.get('limit') || '100')
   const entity = searchParams.get('entity')
 
-  let query = supabaseServer
+  let query = auth.db
     .from('audit_logs')
     .select('*, user:users!user_id(name, email)')
     .eq('organisation_id', auth.orgId)

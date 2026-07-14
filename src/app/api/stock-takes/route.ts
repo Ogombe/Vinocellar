@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
-import { supabaseServer } from '@/lib/supabase-server'
 import { auditLog } from '@/lib/helpers'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -12,7 +11,7 @@ export async function GET(request: NextRequest) {
   const storeId = searchParams.get('storeId') || auth.storeId
   if (!storeId) return NextResponse.json({ error: 'No store' }, { status: 400 })
 
-  const { data: stockTakes, error } = await supabaseServer
+  const { data: stockTakes, error } = await auth.db
     .from('stock_takes')
     .select('*, stock_take_items(*, product:products(name, barcode)), starter:users!started_by(name), approver:users!approved_by(name)')
     .eq('organisation_id', auth.orgId)
@@ -54,7 +53,7 @@ export async function POST(request: NextRequest) {
   if (!sid) return NextResponse.json({ error: 'No store' }, { status: 400 })
 
   // Get all products for this store
-  const { data: products } = await supabaseServer
+  const { data: products } = await auth.db
     .from('products')
     .select('id, current_stock')
     .eq('organisation_id', auth.orgId)
@@ -63,7 +62,7 @@ export async function POST(request: NextRequest) {
   const stockTakeId = uuidv4()
 
   // Create stock take header
-  const { error: stError } = await supabaseServer
+  const { error: stError } = await auth.db
     .from('stock_takes')
     .insert({
       id: stockTakeId,
@@ -85,7 +84,7 @@ export async function POST(request: NextRequest) {
       counted: null,
     }))
 
-    const { error: itemsError } = await supabaseServer
+    const { error: itemsError } = await auth.db
       .from('stock_take_items')
       .insert(items)
 
@@ -111,14 +110,14 @@ export async function PUT(request: NextRequest) {
     // Update counted quantities
     if (items) {
       for (const item of items) {
-        await supabaseServer
+        await auth.db
           .from('stock_take_items')
           .update({ counted: item.counted })
           .eq('id', item.id)
       }
     }
 
-    const { error } = await supabaseServer
+    const { error } = await auth.db
       .from('stock_takes')
       .update({ status: 'pending', submitted_at: new Date().toISOString() })
       .eq('id', stockTakeId)
@@ -139,7 +138,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Get all items for this stock take
-    const { data: stItems } = await supabaseServer
+    const { data: stItems } = await auth.db
       .from('stock_take_items')
       .select('*')
       .eq('stock_take_id', stockTakeId)
@@ -148,7 +147,7 @@ export async function PUT(request: NextRequest) {
     for (const item of (stItems || [])) {
       if (item.counted !== null && item.counted !== undefined) {
         // Update product stock
-        await supabaseServer
+        await auth.db
           .from('products')
           .update({ current_stock: item.counted })
           .eq('id', item.product_id)
@@ -156,13 +155,13 @@ export async function PUT(request: NextRequest) {
         // Log as stock_take movement
         const diff = item.counted - item.expected
         if (diff !== 0) {
-          const { data: product } = await supabaseServer
+          const { data: product } = await auth.db
             .from('products')
             .select('store_id')
             .eq('id', item.product_id)
             .single()
 
-          await supabaseServer
+          await auth.db
             .from('stock_movements')
             .insert({
               product_id: item.product_id,
@@ -179,7 +178,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Mark stock take as approved
-    await supabaseServer
+    await auth.db
       .from('stock_takes')
       .update({
         status: 'approved',
@@ -199,7 +198,7 @@ export async function PUT(request: NextRequest) {
   if (action === 'update-counts') {
     if (items) {
       for (const item of items) {
-        await supabaseServer
+        await auth.db
           .from('stock_take_items')
           .update({ counted: item.counted })
           .eq('id', item.id)

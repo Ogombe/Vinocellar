@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
-import { supabaseServer } from '@/lib/supabase-server'
 import { todayStr, daysAgo, startOfWeek, startOfMonth, calculateHealthScore } from '@/lib/helpers'
 
 export async function GET(request: NextRequest) {
@@ -17,7 +16,7 @@ export async function GET(request: NextRequest) {
   const thirtyDaysAgo = daysAgo(30).toISOString()
 
   // ── Products ──
-  const { data: products } = await supabaseServer
+  const { data: products } = await auth.db
     .from('products')
     .select('id, name, current_stock, reorder_level, cost_price, sell_price')
     .eq('organisation_id', auth.orgId)
@@ -33,7 +32,7 @@ export async function GET(request: NextRequest) {
   const healthScore = calculateHealthScore(allProducts)
 
   // ── Sales (today) ──
-  const { data: todaySales } = await supabaseServer
+  const { data: todaySales } = await auth.db
     .from('sales')
     .select('id, total')
     .eq('organisation_id', auth.orgId)
@@ -47,7 +46,7 @@ export async function GET(request: NextRequest) {
   yesterday.setDate(yesterday.getDate() - 1)
   const yesterdayStr = yesterday.toISOString().split('T')[0]
 
-  const { data: yesterdaySales } = await supabaseServer
+  const { data: yesterdaySales } = await auth.db
     .from('sales')
     .select('id, total')
     .eq('organisation_id', auth.orgId)
@@ -58,7 +57,7 @@ export async function GET(request: NextRequest) {
   const yesterdayRevenue = (yesterdaySales || []).reduce((s, sale) => s + Number(sale.total), 0)
 
   // ── Sales (this week) ──
-  const { data: weekSales } = await supabaseServer
+  const { data: weekSales } = await auth.db
     .from('sales')
     .select('id, total')
     .eq('organisation_id', auth.orgId)
@@ -68,7 +67,7 @@ export async function GET(request: NextRequest) {
   const weekRevenue = (weekSales || []).reduce((s, sale) => s + Number(sale.total), 0)
 
   // ── Sales (this month) ──
-  const { data: monthSales } = await supabaseServer
+  const { data: monthSales } = await auth.db
     .from('sales')
     .select('id, total')
     .eq('organisation_id', auth.orgId)
@@ -83,7 +82,7 @@ export async function GET(request: NextRequest) {
     const d = new Date()
     d.setDate(d.getDate() - i)
     const ds = d.toISOString().split('T')[0]
-    const daySales = await supabaseServer
+    const daySales = await auth.db
       .from('sales')
       .select('id, total')
       .eq('organisation_id', auth.orgId)
@@ -100,7 +99,7 @@ export async function GET(request: NextRequest) {
   }
 
   // ── Top sellers this week (via sale_items) ──
-  const { data: weekSaleItems } = await supabaseServer
+  const { data: weekSaleItems } = await auth.db
     .from('sale_items')
     .select('name, qty, price, product_id, sale:sales!sale_id(created_at, store_id, organisation_id)')
     .gte('created_at', weekStart)
@@ -117,7 +116,7 @@ export async function GET(request: NextRequest) {
   const topSellers = Object.values(productRevenue).sort((a, b) => b.revenue - a.revenue).slice(0, 5)
 
   // ── Fast movers / slow movers (last 30 days) ──
-  const { data: allSaleItems } = await supabaseServer
+  const { data: allSaleItems } = await auth.db
     .from('sale_items')
     .select('name, qty, price, product_id, sale:sales!sale_id(created_at, store_id, organisation_id)')
     .gte('created_at', thirtyDaysAgo)
@@ -145,7 +144,7 @@ export async function GET(request: NextRequest) {
     }))
 
   // ── Recent activity (audit logs) ──
-  const { data: recentLogs } = await supabaseServer
+  const { data: recentLogs } = await auth.db
     .from('audit_logs')
     .select('action, created_at, user:users(name)')
     .eq('organisation_id', auth.orgId)
@@ -176,7 +175,7 @@ export async function GET(request: NextRequest) {
     .map(p => ({ name: p.name, daysSinceSale: 30 }))
 
   // ── Pending stock takes ──
-  const { count: pendingStockTakes } = await supabaseServer
+  const { count: pendingStockTakes } = await auth.db
     .from('stock_takes')
     .select('*', { count: 'exact', head: true })
     .eq('organisation_id', auth.orgId)

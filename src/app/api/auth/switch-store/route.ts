@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
-import { supabaseServer } from '@/lib/supabase-server'
 
 export async function POST(request: NextRequest) {
   const auth = await withAuth(request)
@@ -10,7 +9,7 @@ export async function POST(request: NextRequest) {
   if (!storeId) return NextResponse.json({ error: 'Store ID required' }, { status: 400 })
 
   // Verify the store belongs to this org
-  const { data: store } = await supabaseServer
+  const { data: store } = await auth.db
     .from('stores')
     .select('id')
     .eq('id', storeId)
@@ -20,7 +19,7 @@ export async function POST(request: NextRequest) {
   if (!store) return NextResponse.json({ error: 'Store not found' }, { status: 404 })
 
   // Update the user's store_id in the users table
-  const { error } = await supabaseServer
+  const { error } = await auth.db
     .from('users')
     .update({ store_id: storeId })
     .eq('id', auth.userId)

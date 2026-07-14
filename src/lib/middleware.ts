@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { supabaseServer } from '@/lib/supabase-server'
+import { createServerClient } from '@/lib/supabase-server'
+import { SupabaseClient } from '@supabase/supabase-js'
 
 export interface AuthResult {
   userId: string
@@ -7,6 +8,7 @@ export interface AuthResult {
   orgId: string
   storeId: string | null
   role: string
+  db: SupabaseClient  // Authenticated Supabase client — use this for all queries
   error?: never
 }
 
@@ -16,8 +18,8 @@ export interface AuthError {
 
 /**
  * Extract and verify the Supabase access token from the request.
- * The token is sent by the client in the Authorization: Bearer <token> header.
- * Supabase JWTs contain app_metadata with organisation_id, role, store_id.
+ * Returns an authenticated Supabase client (db) that carries the user's
+ * JWT so that RLS policies can identify the user via auth.uid().
  */
 export async function withAuth(request: Request, requireManager: boolean = false): Promise<AuthResult | AuthError> {
   // 1. Get the token from the Authorization header
@@ -29,7 +31,7 @@ export async function withAuth(request: Request, requireManager: boolean = false
   const token = authHeader.slice(7) // Remove "Bearer " prefix
 
   // 2. Verify the token with Supabase
-  const { data: { user }, error } = await supabaseServer.auth.getUser(token)
+  const { data: { user }, error } = await createServerClient(token).auth.getUser(token)
   if (error || !user) {
     return { error: NextResponse.json({ error: 'Session invalid or expired' }, { status: 401 }) }
   }
@@ -48,11 +50,15 @@ export async function withAuth(request: Request, requireManager: boolean = false
     return { error: NextResponse.json({ error: 'Manager access required' }, { status: 403 }) }
   }
 
+  // 5. Return an authenticated Supabase client for this user
+  const db = createServerClient(token)
+
   return {
     userId: user.id,
     email: user.email || '',
     orgId,
     storeId,
-    role
+    role,
+    db,
   }
 }

@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
-import { supabaseServer } from '@/lib/supabase-server'
 import { auditLog } from '@/lib/helpers'
 
 export async function GET(request: NextRequest) {
   const auth = await withAuth(request, true)
   if (auth.error) return auth.error
 
-  const { data: suppliers, error } = await supabaseServer
+  const { data: suppliers, error } = await auth.db
     .from('suppliers')
     .select('*')
     .eq('organisation_id', auth.orgId)
@@ -16,7 +15,7 @@ export async function GET(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // Get product counts per supplier
-  const { data: productCounts } = await supabaseServer
+  const { data: productCounts } = await auth.db
     .from('products')
     .select('supplier_id')
     .eq('organisation_id', auth.orgId)
@@ -50,7 +49,7 @@ export async function POST(request: NextRequest) {
   const { name, contact, phone, email, productTypes } = body
   if (!name) return NextResponse.json({ error: 'Name required' }, { status: 400 })
 
-  const { data: supplier, error } = await supabaseServer
+  const { data: supplier, error } = await auth.db
     .from('suppliers')
     .insert({
       name,
@@ -95,7 +94,7 @@ export async function PUT(request: NextRequest) {
   if (email !== undefined) updateData.email = email
   if (productTypes !== undefined) updateData.product_types = productTypes
 
-  const { data: existing } = await supabaseServer
+  const { data: existing } = await auth.db
     .from('suppliers')
     .select('id')
     .eq('id', id)
@@ -104,7 +103,7 @@ export async function PUT(request: NextRequest) {
 
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const { error } = await supabaseServer
+  const { error } = await auth.db
     .from('suppliers')
     .update(updateData)
     .eq('id', id)
@@ -127,7 +126,7 @@ export async function DELETE(request: NextRequest) {
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
 
-  const { data: existing } = await supabaseServer
+  const { data: existing } = await auth.db
     .from('suppliers')
     .select('name')
     .eq('id', id)
@@ -136,7 +135,7 @@ export async function DELETE(request: NextRequest) {
 
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const { error } = await supabaseServer
+  const { error } = await auth.db
     .from('suppliers')
     .delete()
     .eq('id', id)

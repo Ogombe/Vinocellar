@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
-import { supabaseServer } from '@/lib/supabase-server'
 import { auditLog, todayStr } from '@/lib/helpers'
 
 export async function GET(request: NextRequest) {
@@ -13,7 +12,7 @@ export async function GET(request: NextRequest) {
   if (!storeId) return NextResponse.json({ error: 'No store' }, { status: 400 })
 
   // Check if reconciliation exists for this date + store
-  const { data: existing } = await supabaseServer
+  const { data: existing } = await auth.db
     .from('reconciliations')
     .select('*, reconciliation_items(*, product:products(name))')
     .eq('organisation_id', auth.orgId)
@@ -24,14 +23,14 @@ export async function GET(request: NextRequest) {
   if (existing) return NextResponse.json(existing)
 
   // Auto-build from products + today's sales
-  const { data: products } = await supabaseServer
+  const { data: products } = await auth.db
     .from('products')
     .select('id, name, opening_stock, current_stock')
     .eq('organisation_id', auth.orgId)
     .eq('store_id', storeId)
 
   // Get today's sales items
-  const { data: saleItems } = await supabaseServer
+  const { data: saleItems } = await auth.db
     .from('sale_items')
     .select('product_id, qty, sale:sales!sale_id(store_id, created_at)')
     .gte('created_at', date + 'T00:00:00')

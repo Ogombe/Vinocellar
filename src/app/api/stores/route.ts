@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
-import { supabaseServer } from '@/lib/supabase-server'
 import { auditLog } from '@/lib/helpers'
 
 export async function GET(request: NextRequest) {
   const auth = await withAuth(request, true)
   if (auth.error) return auth.error
 
-  const { data: stores } = await supabaseServer
+  const { data: stores } = await auth.db
     .from('stores')
     .select('*')
     .eq('organisation_id', auth.orgId)
@@ -23,7 +22,7 @@ export async function POST(request: NextRequest) {
   const { name, location } = await request.json()
   if (!name) return NextResponse.json({ error: 'Name required' }, { status: 400 })
 
-  const { data: store, error } = await supabaseServer
+  const { data: store, error } = await auth.db
     .from('stores')
     .insert({ name, location: location || '', organisation_id: auth.orgId })
     .select()
@@ -43,7 +42,7 @@ export async function PUT(request: NextRequest) {
   const { id, ...data } = await request.json()
   if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
 
-  const { error } = await supabaseServer
+  const { error } = await auth.db
     .from('stores')
     .update(data)
     .eq('id', id)

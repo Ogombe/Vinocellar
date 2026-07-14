@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
-import { supabaseServer } from '@/lib/supabase-server'
 import { auditLog } from '@/lib/helpers'
 
 // GET: List recent stock receives (use the receive_stock RPC or query purchases)
@@ -13,7 +12,7 @@ export async function GET(request: NextRequest) {
   if (!storeId) return NextResponse.json({ error: 'No store' }, { status: 400 })
 
   // Query purchases table for stock receive history
-  const { data: purchases, error } = await supabaseServer
+  const { data: purchases, error } = await auth.db
     .from('purchases')
     .select('*, supplier:suppliers(name), purchase_items(*)')
     .eq('organisation_id', auth.orgId)
@@ -24,7 +23,7 @@ export async function GET(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // Also get recent stock movements for this store
-  const { data: movements } = await supabaseServer
+  const { data: movements } = await auth.db
     .from('stock_movements')
     .select('*, product:products(name)')
     .eq('organisation_id', auth.orgId)
@@ -58,7 +57,7 @@ export async function POST(request: NextRequest) {
     costPrice: i.costPrice || 0,
   }))
 
-  const { data: purchaseId, error } = await supabaseServer.rpc('receive_stock', {
+  const { data: purchaseId, error } = await auth.db.rpc('receive_stock', {
     p_store_id: sid,
     p_supplier_id: supplierId || null,
     p_items: rpcItems,
@@ -73,7 +72,7 @@ export async function POST(request: NextRequest) {
   // Fetch updated product stock for the response
   const results = []
   for (const item of items) {
-    const { data: product } = await supabaseServer
+    const { data: product } = await auth.db
       .from('products')
       .select('name, current_stock')
       .eq('id', item.productId)

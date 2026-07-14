@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
-import { supabaseServer } from '@/lib/supabase-server'
 import { auditLog } from '@/lib/helpers'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://rnllkgdsnbybjgvbgagp.supabase.co'
@@ -10,7 +9,7 @@ export async function GET(request: NextRequest) {
   const auth = await withAuth(request, true)
   if (auth.error) return auth.error
 
-  const { data: staff, error } = await supabaseServer
+  const { data: staff, error } = await auth.db
     .from('users')
     .select('id, email, name, role, pin, store_id, is_active, last_login_at')
     .eq('organisation_id', auth.orgId)
@@ -20,7 +19,7 @@ export async function GET(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // Get sale counts per staff member
-  const { data: saleCounts } = await supabaseServer
+  const { data: saleCounts } = await auth.db
     .from('sales')
     .select('staff_id')
     .eq('organisation_id', auth.orgId)
@@ -60,7 +59,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Check if email already exists in this organisation
-  const { data: existing } = await supabaseServer
+  const { data: existing } = await auth.db
     .from('users')
     .select('id')
     .eq('email', email.toLowerCase())
@@ -117,7 +116,7 @@ export async function PUT(request: NextRequest) {
   if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
 
   // Check user exists in org
-  const { data: existing } = await supabaseServer
+  const { data: existing } = await auth.db
     .from('users')
     .select('id, name')
     .eq('id', id)
@@ -135,7 +134,7 @@ export async function PUT(request: NextRequest) {
   if (data.pin) updateData.pin = data.pin
   if (data.isActive !== undefined) updateData.is_active = data.isActive
 
-  const { error } = await supabaseServer
+  const { error } = await auth.db
     .from('users')
     .update(updateData)
     .eq('id', id)
@@ -165,7 +164,7 @@ export async function DELETE(request: NextRequest) {
   if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
   if (id === auth.userId) return NextResponse.json({ error: 'Cannot delete yourself' }, { status: 400 })
 
-  const { data: existing } = await supabaseServer
+  const { data: existing } = await auth.db
     .from('users')
     .select('name')
     .eq('id', id)
@@ -175,7 +174,7 @@ export async function DELETE(request: NextRequest) {
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // Deactivate instead of deleting (soft delete via is_active flag)
-  const { error } = await supabaseServer
+  const { error } = await auth.db
     .from('users')
     .update({ is_active: false })
     .eq('id', id)

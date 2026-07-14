@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
-import { supabaseServer } from '@/lib/supabase-server'
 import { auditLog } from '@/lib/helpers'
 
 export async function GET(request: NextRequest) {
@@ -15,7 +14,7 @@ export async function GET(request: NextRequest) {
 
   if (!storeId) return NextResponse.json({ error: 'No store' }, { status: 400 })
 
-  let query = supabaseServer
+  let query = auth.db
     .from('sales')
     .select('*, sale_items(*), staff:users!staff_id(name)')
     .eq('organisation_id', auth.orgId)
@@ -71,7 +70,7 @@ export async function POST(request: NextRequest) {
 
   // Call the complete_sale() RPC function in Supabase
   // This atomically: creates the sale, creates sale items, deducts stock, logs stock movements
-  const { data: saleId, error } = await supabaseServer.rpc('complete_sale', {
+  const { data: saleId, error } = await auth.db.rpc('complete_sale', {
     p_store_id: sid,
     p_staff_id: auth.userId,
     p_payment_method: paymentMethod || 'cash',
@@ -93,7 +92,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Fetch the completed sale with items for the response
-  const { data: sale } = await supabaseServer
+  const { data: sale } = await auth.db
     .from('sales')
     .select('*, sale_items(*)')
     .eq('id', saleId)
