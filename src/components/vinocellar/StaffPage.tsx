@@ -123,7 +123,7 @@ export default function StaffPage() {
         .order('created_at', { ascending: false })
       return (data as User[]) || []
     },
-    enabled: !!organisation?.id && appUser?.role === 'manager',
+    enabled: !!organisation?.id && (appUser?.role === 'manager' || appUser?.role === 'super_admin'),
   })
 
   const addMutation = useMutation({
@@ -247,7 +247,7 @@ export default function StaffPage() {
      ACCESS GUARD
      ════════════════════════════════════════════════════════════════ */
 
-  if (appUser?.role !== 'manager') {
+  if (appUser?.role !== 'manager' && appUser?.role !== 'super_admin') {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
         <ShieldOff className="mb-4 h-16 w-16 opacity-30" />
