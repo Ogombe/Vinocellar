@@ -58,10 +58,10 @@ function todayStr() {
 /*  Form Types                                                   */
 /* ═══════════════════════════════════════════════════════════════ */
 
-interface StaffAddForm { name: string; pin: string; password: string; role: 'staff' | 'manager' }
+interface StaffAddForm { name: string; pin: string; role: 'staff' | 'manager' }
 interface StaffEditForm { name: string; role: 'staff' | 'manager'; is_active: boolean }
 
-const emptyAdd: StaffAddForm = { name: '', pin: '', password: '', role: 'staff' }
+const emptyAdd: StaffAddForm = { name: '', pin: '', role: 'staff' }
 
 /* ═══════════════════════════════════════════════════════════════ */
 /*  CSV Download Helper                                          */
@@ -136,7 +136,6 @@ export default function StaffPage() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           name: v.name,
-          password: v.password,
           pin: v.pin,
           role: v.role,
         }),
@@ -211,7 +210,7 @@ export default function StaffPage() {
   const closeEdit = () => { setEditOpen(false); setSelected(null) }
 
   const handleAdd = () => {
-    if (!addForm.name.trim() || !addForm.pin || addForm.pin.length !== 4 || !addForm.password || addForm.password.length < 6) return
+    if (!addForm.name.trim() || addForm.pin.length !== 4) return
     addMutation.mutate(addForm)
   }
 
@@ -633,19 +632,15 @@ export default function StaffPage() {
                   onChange={e => setAddForm(f => ({ ...f, pin: e.target.value.replace(/\D/g, '').slice(0, 4) }))} />
               </div>
               <div className="grid gap-2">
-                <Label className="text-xs font-medium text-muted-foreground">Password <span className="text-red-500">*</span></Label>
-                <Input type="password" placeholder="Min. 6 characters" value={addForm.password} onChange={e => setAddForm(f => ({ ...f, password: e.target.value }))} />
+                <Label className="text-xs font-medium text-muted-foreground">Role</Label>
+                <Select value={addForm.role} onValueChange={v => setAddForm(f => ({ ...f, role: v as any }))}>
+                  <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="staff">Staff</SelectItem>
+                    <SelectItem value="manager">Manager</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            </div>
-            <div className="grid gap-2">
-              <Label className="text-xs font-medium text-muted-foreground">Role</Label>
-              <Select value={addForm.role} onValueChange={v => setAddForm(f => ({ ...f, role: v as any }))}>
-                <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="staff">Staff</SelectItem>
-                  <SelectItem value="manager">Manager</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
             {addMutation.isError && (
               <div className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-600">
@@ -656,7 +651,7 @@ export default function StaffPage() {
           <DialogFooter className="flex-row gap-3 pt-2 sm:justify-end">
             <Button variant="outline" className="flex-1 sm:flex-none" onClick={closeAdd} disabled={addMutation.isPending}>Cancel</Button>
             <Button className="flex-1 sm:flex-none" style={{ backgroundColor: ACCENT, borderColor: ACCENT }} onClick={handleAdd}
-              disabled={addMutation.isPending || !addForm.name.trim() || addForm.pin.length !== 4 || addForm.password.length < 6}>
+              disabled={addMutation.isPending || !addForm.name.trim() || addForm.pin.length !== 4}>
               {addMutation.isPending ? 'Adding...' : 'Add Staff Member'}
             </Button>
           </DialogFooter>

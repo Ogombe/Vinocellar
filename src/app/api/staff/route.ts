@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
 import { auditLog } from '@/lib/helpers'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://rnllkgdsnbybjgvbgagp.supabase.co'
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJubGxrZ2RzbmJ5YmpndmJnYWdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NjQ2NDcsImV4cCI6MjA5OTU0MDY0N30.h9Uk6j3WLC6VCbGGpVY8kGoywh7xT0duULZeazczVjs'
-
 export async function GET(request: NextRequest) {
   const auth = await withAuth(request, true)
   if (auth.error) return auth.error
@@ -48,71 +45,23 @@ export async function POST(request: NextRequest) {
   if (auth.error) return auth.error
 
   const body = await request.json()
-  const { name, email, password, pin, role, storeId } = body
+  const { name, pin, role, storeId } = body
 
-  if (!name || !password || !pin) {
-    return NextResponse.json({ error: 'Name, password and PIN are required' }, { status: 400 })
+  if (!name || !pin) {
+    return NextResponse.json({ error: 'Name and PIN are required' }, { status: 400 })
   }
   if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
     return NextResponse.json({ error: 'PIN must be exactly 4 digits' }, { status: 400 })
   }
-  if (password.length < 6) {
-    return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 })
-  }
 
-  const cleanedEmail = email?.trim()?.toLowerCase() || null
-
-  if (cleanedEmail) {
-    const { data: existing } = await auth.db
-      .from('users')
-      .select('id')
-      .eq('email', cleanedEmail)
-      .eq('organisation_id', auth.orgId)
-      .single()
-
-    if (existing) {
-      return NextResponse.json({ error: 'A staff member with this email already exists' }, { status: 409 })
-    }
-  }
-
-  // Create Supabase Auth user. If no email, use a system-internal address
-  // that passes Supabase validation but stays hidden from the user.
-  const systemEmail = `sys.${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 8)}@example.org`
-  const authEmail = cleanedEmail || systemEmail
-
-  const authRes = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY },
-    body: JSON.stringify({
-      email: authEmail,
-      password,
-      data: {
-        organisation_id: auth.orgId,
-        role: role || 'staff',
-        store_id: storeId || auth.storeId,
-        name,
-      },
-    }),
-  })
-
-  const authData = await authRes.json()
-
-  if (!authRes.ok || !authData.user) {
-    // Never expose the internal system email to the user
-    const msg = authData.msg || authData.error_description || authData.error || ''
-    const safeMsg = msg.includes('@example.org')
-      ? 'Could not create account. Please try again.'
-      : msg
-    return NextResponse.json({ error: safeMsg || 'Failed to create staff account' }, { status: authRes.status || 500 })
-  }
-
-  const newUserId = authData.user.id
+  // Generate a UUID and insert directly — no auth user needed
+  const newId = crypto.randomUUID()
 
   const { error: insertErr } = await auth.db
     .from('users')
     .insert({
-      id: newUserId,
-      email: cleanedEmail || null,
+      id: newId,
+      email: null,
       name,
       pin,
       role: role || 'staff',
@@ -122,23 +71,22 @@ export async function POST(request: NextRequest) {
     })
 
   if (insertErr) {
-    console.error('Profile insert failed:', insertErr.message)
-    return NextResponse.json({ error: 'Staff account created but profile setup failed. Contact support.' }, { status: 500 })
+    return NextResponse.json({ error: insertErr.message }, { status: 500 })
   }
 
   await auditLog({
     action: 'staff.created',
     entity: 'User',
-    entityId: newUserId,
-    afterValue: { name, role: role || 'staff', email: cleanedEmail || null },
+    entityId: newId,
+    afterValue: { name, role: role || 'staff' },
     userId: auth.userId,
     organisationId: auth.orgId,
   })
 
   return NextResponse.json({
-    id: newUserId,
+    id: newId,
     name,
-    email: cleanedEmail || null,
+    email: null,
     role: role || 'staff',
     pin,
   }, { status: 201 })
