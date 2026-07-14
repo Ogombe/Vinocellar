@@ -127,7 +127,6 @@ export default function VinoCellarApp() {
               <Menu className="w-5 h-5 text-slate-700" />
             </button>
             <h1 className="text-lg font-semibold text-slate-900">{pageTitle}</h1>
-            <span className="text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{appUser.role}</span>
           </div>
 
           <div className="flex items-center gap-3">
