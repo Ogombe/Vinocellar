@@ -1,3 +1,62 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import { useState } from 'react'
+     4→     4→import { supabase } from '@/lib/supabase'
+     5→     5→import { useAuth } from '@/contexts/auth-context'
+     6→     6→import type { User } from '@/lib/types'
+     7→     7→import { Card, CardContent } from '@/components/ui/card'
+     8→     8→import { Button } from '@/components/ui/button'
+     9→     9→import { Input } from '@/components/ui/input'
+    10→    10→import {
+    11→    11→  Dialog,
+    12→    12→  DialogContent,
+    13→    13→  DialogHeader,
+    14→    14→  DialogTitle,
+    15→    15→  DialogFooter,
+    16→    16→} from '@/components/ui/dialog'
+    17→    17→import {
+    18→    18→  AlertDialog,
+    19→    19→  AlertDialogAction,
+    20→    20→  AlertDialogCancel,
+    21→    21→  AlertDialogContent,
+    22→    22→  AlertDialogDescription,
+    23→    23→  AlertDialogFooter,
+    24→    24→  AlertDialogHeader,
+    25→    25→  AlertDialogTitle,
+    26→    26→} from '@/components/ui/alert-dialog'
+    27→    27→import { Label } from '@/components/ui/label'
+    28→    28→import {
+    29→    29→  Select,
+    30→    30→  SelectContent,
+    31→    31→  SelectItem,
+    32→    32→  SelectTrigger,
+    33→    33→  SelectValue,
+    34→    34→} from '@/components/ui/select'
+    35→    35→import { Badge } from '@/components/ui/badge'
+    36→    36→import { Skeleton } from '@/components/ui/skeleton'
+    37→    37→import { Switch } from '@/components/ui/switch'
+    38→    38→import {
+    39→    39→  Table,
+    40→    40→  TableBody,
+    41→    41→  TableCell,
+    42→    42→  TableHead,
+    43→    43→  TableHeader,
+    44→    44→  TableRow,
+    45→    45→} from '@/components/ui/table'
+    46→    46→import {
+    47→    47→  Plus,
+    48→    48→  Edit,
+    49→    49→  Trash2,
+    50→    50→  Users,
+    51→    51→  ShieldCheck,
+    52→    52→  ShieldOff,
+    53→    53→} from 'lucide-react'
+    54→    54→import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+    55→    55→import { useIsMobile } from '@/hooks/use-mobile'
+    56→    56→
+    57→    57→/* ------------------------------------------------------------------ */
+    58→    58→/*  Constants                                                          */
+    59→    59→/* ------------------------------------------------------------------ */
     60→    60→
     61→    61→const ACCENT = '#7C3AED'
     62→    62→

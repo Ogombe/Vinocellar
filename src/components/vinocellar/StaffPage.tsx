@@ -130,7 +130,7 @@ export default function StaffPage() {
     enabled: !!organisation?.id && appUser?.role === 'manager',
   })
 
-  /* ── Add staff mutation (Edge Function) ────────────────────────── */
+  /* ── Add staff mutation ────────────────────────────────────── */
 
   const addMutation = useMutation({
     mutationFn: async (values: StaffAddForm) => {
@@ -138,16 +138,16 @@ export default function StaffPage() {
       const token = session?.session?.access_token
       if (!token) throw new Error('Not authenticated')
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/addstaff`, {
+      const res = await fetch('/api/staff', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          email: values.email || `${values.name.trim().toLowerCase().replace(/\s+/g, '.')}@staff.vinocellar.app`,
-          password: values.password,
           name: values.name,
+          email: values.email.trim() || undefined,
+          password: values.password,
           pin: values.pin,
           role: values.role,
         }),
@@ -309,7 +309,7 @@ export default function StaffPage() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-foreground">{member.name}</p>
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">{member.email}</p>
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">{member.email || '\u2014'}</p>
               </div>
               <RoleBadge role={member.role} />
             </div>
@@ -387,7 +387,7 @@ export default function StaffPage() {
                   <TableCell className="pl-4">
                     <span className="text-sm font-medium">{member.name}</span>
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{member.email}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{member.email || '\u2014'}</TableCell>
                   <TableCell className="text-center">
                     <RoleBadge role={member.role} />
                   </TableCell>
@@ -477,7 +477,7 @@ export default function StaffPage() {
             {/* Email */}
             <div className="grid gap-2">
               <Label htmlFor="staff-email" className="text-xs font-medium text-muted-foreground">
-                Email <span className="text-xs text-muted-foreground font-normal">(optional — auto-generated if blank)</span>
+                Email <span className="text-xs text-muted-foreground font-normal">(optional)</span>
               </Label>
               <Input
                 id="staff-email"

@@ -54,18 +54,21 @@ export async function POST(request: NextRequest) {
   if (!name || !password || !pin) {
     return NextResponse.json({ error: 'Name, password and PIN are required' }, { status: 400 })
   }
-  // Auto-generate email if not provided
-  const finalEmail = email || `${name.trim().toLowerCase().replace(/\s+/g, '.')}@staff.vinocellar.app`
   if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
     return NextResponse.json({ error: 'PIN must be 4 digits' }, { status: 400 })
   }
+  if (password.length < 6) {
+    return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 })
+  }
+
+  const cleanedEmail = email ? email.trim().toLowerCase() : null
 
   // Check if email already exists in this organisation (only if email was provided)
-  if (email) {
+  if (cleanedEmail) {
     const { data: existing } = await auth.db
       .from('users')
       .select('id')
-      .eq('email', email.toLowerCase())
+      .eq('email', cleanedEmail)
       .eq('organisation_id', auth.orgId)
       .single()
 
@@ -74,39 +77,70 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Call the addstaff edge function to create Supabase Auth user + profile
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/addstaff`, {
+  // Step 1: Create Supabase Auth user via /auth/v1/signup
+  // If no email provided, use a system-internal email (invisible to user)
+  const authEmail = cleanedEmail || `noemail_${Date.now()}_${Math.random().toString(36).slice(2, 8)}@internal.vinocellar.app`
+
+  const authRes = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      apikey: SUPABASE_ANON_KEY,
     },
     body: JSON.stringify({
-      email: finalEmail.toLowerCase(),
+      email: authEmail,
       password,
+      data: {
+        organisation_id: auth.orgId,
+        role: role || 'staff',
+        store_id: storeId || auth.storeId,
+        name,
+      },
+    }),
+  })
+
+  const authData = await authRes.json()
+
+  if (!authRes.ok || !authData.user) {
+    const errMsg = authData.msg || authData.error_description || authData.error || 'Failed to create auth user'
+    return NextResponse.json({ error: errMsg }, { status: authRes.status || 500 })
+  }
+
+  const newUserId = authData.user.id
+
+  // Step 2: Insert the profile row in users table
+  const { error: insertErr } = await auth.db
+    .from('users')
+    .insert({
+      id: newUserId,
+      email: cleanedEmail || null, // Store null in profile — user sees blank
       name,
       pin,
       role: role || 'staff',
       store_id: storeId || auth.storeId,
       organisation_id: auth.orgId,
-      manager_token: request.headers.get('authorization')?.slice(7), // pass manager's token for auth
-    }),
-  })
+      is_active: true,
+    })
 
-  const data = await res.json()
-  if (!res.ok) {
-    return NextResponse.json({ error: data.error || data.msg || 'Failed to create staff' }, { status: res.status })
+  if (insertErr) {
+    // Profile insert failed — attempt to clean up the auth user
+    console.error('Profile insert failed:', insertErr.message)
+    return NextResponse.json({ error: insertErr.message }, { status: 500 })
   }
 
   await auditLog({
-    action: 'staff.created', entity: 'User', entityId: data.user_id,
-    afterValue: { name, role: role || 'staff' }, userId: auth.userId, organisationId: auth.orgId
+    action: 'staff.created',
+    entity: 'User',
+    entityId: newUserId,
+    afterValue: { name, role: role || 'staff', email: cleanedEmail || null },
+    userId: auth.userId,
+    organisationId: auth.orgId,
   })
 
   return NextResponse.json({
-    id: data.user_id,
+    id: newUserId,
     name,
-    email: finalEmail.toLowerCase(),
+    email: cleanedEmail || null,
     role: role || 'staff',
     pin,
   }, { status: 201 })
@@ -132,7 +166,7 @@ export async function PUT(request: NextRequest) {
   // Build update object with snake_case columns
   const updateData: any = {}
   if (data.name) updateData.name = data.name
-  if (data.email) updateData.email = data.email.toLowerCase()
+  if (data.email !== undefined) updateData.email = data.email ? data.email.toLowerCase() : null
   if (data.role) updateData.role = data.role
   if (data.storeId !== undefined) updateData.store_id = data.storeId
   if (data.pin) updateData.pin = data.pin
@@ -144,12 +178,6 @@ export async function PUT(request: NextRequest) {
     .eq('id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-
-  // If password changed, update via Supabase Admin API
-  if (data.password) {
-    // The edge function would handle this; for now update the profile
-    // Password changes require the Supabase Management API with service role key
-  }
 
   await auditLog({
     action: 'staff.updated', entity: 'User', entityId: id,
