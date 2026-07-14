@@ -103,12 +103,27 @@ interface AuditLog {
 /* ------------------------------------------------------------------ */
 
 async function saFetch(action: string, opts?: RequestInit) {
-  const { data } = await (await import('@supabase/supabase-js')).createClient(
-    'https://rnllkgdsnbybjgvbgagp.supabase.co',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJubGxrZ2RzbmJ5YmpndmJnYWdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NjQ2NDcsImV4cCI6MjA5OTU0MDY0N30.h9Uk6j3WLC6VCbGGpVY8kGoywh7xT0duULZeazczVjs'
-  ).auth.getSession()
+  // Get token from Supabase auth session stored in localStorage
+  let token = ''
+  try {
+    const { createClient } = await import('@supabase/supabase-js')
+    const sb = createClient(
+      'https://rnllkgdsnbybjgvbgagp.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJubGxrZ2RzbmJ5YmpndmJnYWdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NjQ2NDcsImV4cCI6MjA5OTU0MDY0N30.h9Uk6j3WLC6VCbGGpVY8kGoywh7xT0duULZeazczVjs'
+    )
+    const { data } = await sb.auth.getSession()
+    token = data.session?.access_token || ''
+  } catch {
+    // fallback: try reading from localStorage directly
+    try {
+      const stored = localStorage.getItem('sb-rnllkgdsnbybjgvbgagp-auth-token')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        token = parsed?.access_token || ''
+      }
+    } catch { /* ignore */ }
+  }
 
-  const token = data.session?.access_token
   const url = `/api/super-admin${action ? `?action=${action}` : ''}`
 
   return fetch(url, {
@@ -181,6 +196,7 @@ export default function SuperAdminPage() {
   const { setCurrentPage } = useAppStore()
   const [activeTab, setActiveTab] = useState('overview')
   const [searchQuery, setSearchQuery] = useState('')
+  const [renderError, setRenderError] = useState<string | null>(null)
 
   // Data states
   const [summary, setSummary] = useState<OrgSummary | null>(null)
@@ -198,21 +214,34 @@ export default function SuperAdminPage() {
 
   // ── Fetch data ──
   const loadSummary = useCallback(async () => {
-    const res = await saFetch('summary')
-    const data = await res.json()
-    setSummary(data.summary)
+    try {
+      const res = await saFetch('summary')
+      const data = await res.json()
+      setSummary(data.summary)
+    } catch (e) {
+      console.error('loadSummary error:', e)
+      setRenderError('Failed to load summary')
+    }
   }, [])
 
   const loadOrganisations = useCallback(async () => {
-    const res = await saFetch('organisations')
-    const data = await res.json()
-    setOrganisations(data.organisations || [])
+    try {
+      const res = await saFetch('organisations')
+      const data = await res.json()
+      setOrganisations(data.organisations || [])
+    } catch (e) {
+      console.error('loadOrganisations error:', e)
+    }
   }, [])
 
   const loadActivity = useCallback(async () => {
-    const res = await saFetch('activity&limit=100')
-    const data = await res.json()
-    setActivityLogs(data.logs || [])
+    try {
+      const res = await saFetch('activity&limit=100')
+      const data = await res.json()
+      setActivityLogs(data.logs || [])
+    } catch (e) {
+      console.error('loadActivity error:', e)
+    }
   }, [])
 
   useEffect(() => {
@@ -286,6 +315,19 @@ export default function SuperAdminPage() {
           <Shield className="h-4 w-4 text-red-600" />
           <AlertDescription className="text-red-800">
             Access denied. Super admin privileges required.
+          </AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
+
+  if (renderError) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Alert className="max-w-md border-amber-200 bg-amber-50">
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-800">
+            {renderError}. Check that RLS policies allow super_admin access to all tables.
           </AlertDescription>
         </Alert>
       </div>
