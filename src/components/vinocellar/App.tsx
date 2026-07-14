@@ -17,6 +17,7 @@ import StockCountPage from './StockCountPage'
 import ReportsPage from './ReportsPage'
 import SettingsPage from './SettingsPage'
 import SuperAdminPage from './SuperAdminPage'
+import BillingPage from './BillingPage'
 import { Menu, Bell } from 'lucide-react'
 
 const PAGE_MAP: Record<string, React.FC> = {
@@ -31,6 +32,7 @@ const PAGE_MAP: Record<string, React.FC> = {
   reports: ReportsPage,
   settings: SettingsPage,
   'super-admin': SuperAdminPage,
+  billing: BillingPage,
 }
 
 const PAGE_TITLES: Record<string, string> = {
@@ -45,6 +47,7 @@ const PAGE_TITLES: Record<string, string> = {
   reports: 'Reports',
   settings: 'Settings',
   'super-admin': 'Super Admin',
+  billing: 'Billing',
 }
 
 export default function VinoCellarApp() {

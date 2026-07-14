@@ -17,6 +17,7 @@ import {
   LogOut,
   Grape,
   Shield,
+  CreditCard,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -55,6 +56,7 @@ const navItems: NavItem[] = [
   { label: 'Categories', page: 'categories', icon: Tag },
   { label: 'Stock Count', page: 'stock-count', icon: ClipboardCheck },
   { label: 'Reports', page: 'reports', icon: BarChart3 },
+  { label: 'Billing', page: 'billing', icon: CreditCard },
   { label: 'Settings', page: 'settings', icon: Settings },
   { label: 'Super Admin', page: 'super-admin', icon: Shield, superAdminOnly: true },
 ]
