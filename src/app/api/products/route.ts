@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
 import { supabaseServer } from '@/lib/supabase-server'
-import { auditLog, generateId, generateBarcode } from '@/lib/auth'
+import { auditLog } from '@/lib/helpers'
 import { v4 as uuidv4 } from 'uuid'
 
 export async function GET(request: NextRequest) {
