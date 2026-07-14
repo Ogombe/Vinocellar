@@ -14,6 +14,7 @@ interface AuthContextType {
   loading: boolean
   signUp: (data: { email: string; password: string; name: string; businessName: string; pin: string }) => Promise<{ error: string | null }>
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
+  resetPassword: (email: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
 }
@@ -112,6 +113,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // Reset password: sends a reset link to the user's email
+  const resetPassword = async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/`,
+      })
+      if (error) return { error: error.message }
+      return { error: null }
+    } catch (err) {
+      console.error('Reset password error:', err)
+      return { error: 'Network error. Please try again.' }
+    }
+  }
+
   // Sign in directly via Supabase Auth client
   const signIn = async (email: string, password: string) => {
     try {
@@ -133,7 +148,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, user, appUser, organisation, store, loading, signUp, signIn, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ session, user, appUser, organisation, store, loading, signUp, signIn, resetPassword, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   )

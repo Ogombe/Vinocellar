@@ -28,11 +28,15 @@ import {
    LOGIN PAGE
    ═══════════════════════════════════════════ */
 export function LoginPage({ onSwitch }: { onSwitch: () => void }) {
-  const { signIn, loading } = useAuth()
+  const { signIn, resetPassword, loading } = useAuth()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [showForgot, setShowForgot] = useState(false)
+  const [resetEmail, setResetEmail] = useState('')
+  const [resetSent, setResetSent] = useState(false)
+  const [resetError, setResetError] = useState('')
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -41,6 +45,21 @@ export function LoginPage({ onSwitch }: { onSwitch: () => void }) {
     const result = await signIn(email, password)
     if (result.error) {
       setError(result.error)
+    }
+  }
+
+  async function handleReset(e: React.FormEvent) {
+    e.preventDefault()
+    setResetError('')
+    if (!resetEmail.trim()) {
+      setResetError('Please enter your email')
+      return
+    }
+    const result = await resetPassword(resetEmail.trim())
+    if (result.error) {
+      setResetError(result.error)
+    } else {
+      setResetSent(true)
     }
   }
 
@@ -111,6 +130,17 @@ export function LoginPage({ onSwitch }: { onSwitch: () => void }) {
               </div>
             </div>
 
+            {/* Forgot password toggle */}
+            <div className="text-right">
+              <button
+                type="button"
+                onClick={() => { setShowForgot(true); setError('') }}
+                className="text-sm text-purple-600 hover:text-purple-700 hover:underline transition-colors"
+              >
+                Forgot Password?
+              </button>
+            </div>
+
             {/* Submit */}
             <Button
               type="submit"
@@ -127,6 +157,59 @@ export function LoginPage({ onSwitch }: { onSwitch: () => void }) {
               )}
             </Button>
           </form>
+
+          {/* Forgot Password Panel */}
+          {showForgot && (
+            <div className="mt-4 p-4 rounded-lg bg-purple-50 border border-purple-200">
+              {resetSent ? (
+                <div className="text-center py-2">
+                  <p className="text-sm font-medium text-purple-700">Check your email inbox!</p>
+                  <p className="text-xs text-purple-500 mt-1">A password reset link has been sent to {resetEmail}</p>
+                  <button
+                    type="button"
+                    onClick={() => { setShowForgot(false); setResetSent(false); setResetEmail('') }}
+                    className="text-sm text-purple-600 hover:underline mt-3"
+                  >
+                    Back to Sign In
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleReset} className="space-y-3">
+                  <p className="text-sm font-medium text-purple-800">Reset your password</p>
+                  {resetError && (
+                    <p className="text-xs text-red-500">{resetError}</p>
+                  )}
+                  <Input
+                    type="email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    placeholder="Enter your email address"
+                    className="h-10"
+                    disabled={loading}
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={loading}
+                      className="flex-1 h-9 bg-purple-600 hover:bg-purple-700 text-white text-sm"
+                    >
+                      {loading ? 'Sending...' : 'Send Reset Link'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { setShowForgot(false); setResetError('') }}
+                      className="h-9 text-sm"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
         </CardContent>
 
         <CardFooter className="justify-center pb-6 pt-0">
@@ -370,6 +453,136 @@ export function RegisterPage({ onSwitch }: { onSwitch: () => void }) {
             </button>
           </p>
         </CardFooter>
+      </Card>
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════
+   RESET PASSWORD PAGE (shown after clicking email reset link)
+   ═══════════════════════════════════════════ */
+import { supabase } from '@/lib/supabase'
+
+export function ResetPasswordPage({ onComplete }: { onComplete: () => void }) {
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+
+    if (newPassword.length < 6) {
+      setError('Password must be at least 6 characters')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match')
+      return
+    }
+
+    setLoading(true)
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: newPassword,
+    })
+    setLoading(false)
+
+    if (updateError) {
+      setError(updateError.message)
+    } else {
+      setSuccess(true)
+      // Clear the recovery hash from URL
+      window.location.hash = ''
+      setTimeout(() => onComplete(), 1500)
+    }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4 py-10 bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900">
+      <Card className="w-full max-w-md shadow-2xl border-0 bg-white/95 backdrop-blur-sm">
+        <CardHeader className="text-center pb-2">
+          <div className="flex flex-col items-center gap-3 mb-2">
+            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center shadow-lg">
+              <Grape className="w-7 h-7 text-white" />
+            </div>
+            <CardTitle className="text-2xl font-bold tracking-tight text-gray-900">
+              Set New Password
+            </CardTitle>
+            <CardDescription className="text-sm text-gray-500">
+              Enter your new password below
+            </CardDescription>
+          </div>
+        </CardHeader>
+
+        <CardContent className="pt-2 pb-4">
+          {success ? (
+            <div className="text-center py-6">
+              <p className="text-green-600 font-semibold text-lg">Password updated!</p>
+              <p className="text-sm text-gray-500 mt-1">Signing you in...</p>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <div className="px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm font-medium">
+                  {error}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="new-password" className="text-sm font-medium text-gray-700">
+                  New Password
+                </Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Input
+                    id="new-password"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Min. 6 characters"
+                    className="pl-10 h-11"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password" className="text-sm font-medium text-gray-700">
+                  Confirm Password
+                </Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Input
+                    id="confirm-password"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Repeat your password"
+                    className="pl-10 h-11"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                disabled={loading}
+                className="w-full h-11 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors"
+              >
+                {loading ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Updating...
+                  </span>
+                ) : (
+                  'Update Password'
+                )}
+              </Button>
+            </form>
+          )}
+        </CardContent>
       </Card>
     </div>
   )

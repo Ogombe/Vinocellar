@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useAppStore } from '@/lib/store'
 import { useAuth } from '@/contexts/auth-context'
+import { supabase } from '@/lib/supabase'
 import { Sidebar } from './Sidebar'
-import { LoginPage, RegisterPage } from './AuthPages'
+import { LoginPage, RegisterPage, ResetPasswordPage } from './AuthPages'
 import DashboardPage from './DashboardPage'
 import InventoryPage from './InventoryPage'
 import POSPage from './POSPage'
@@ -47,6 +48,27 @@ export default function VinoCellarApp() {
   const { currentPage, setSidebarOpen } = useAppStore()
   const { session, appUser, organisation, loading, signOut } = useAuth()
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
+  const [showResetPassword, setShowResetPassword] = useState(false)
+
+  // Detect password recovery redirect from email link
+  useEffect(() => {
+    const hash = window.location.hash
+    if (hash.includes('type=recovery') || hash.includes('access_token')) {
+      // Check if this is a password recovery flow
+      supabase.auth.onAuthStateChange((event) => {
+        if (event === 'PASSWORD_RECOVERY') {
+          setShowResetPassword(true)
+        }
+      })
+      // Also check current session for recovery type
+      supabase.auth.getSession().then(({ data: { session: s } }) => {
+        if (s) {
+          // If session exists from recovery, we still need the form
+          setShowResetPassword(true)
+        }
+      })
+    }
+  }, [])
 
   useEffect(() => {
     if (session && !PAGE_MAP[useAppStore.getState().currentPage]) {
@@ -60,6 +82,10 @@ export default function VinoCellarApp() {
         <div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
       </div>
     )
+  }
+
+  if (showResetPassword) {
+    return <ResetPasswordPage onComplete={() => setShowResetPassword(false)} />
   }
 
   if (!session || !appUser) {
