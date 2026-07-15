@@ -11,8 +11,7 @@ const PLAN_LIMITS: Record<string, { max_stores: number; max_staff: number; max_p
 
 /**
  * Paystack webhook handler.
- * Paystack sends a POST here when a payment event occurs.
- * We verify the signature, then update the org's plan.
+ * Verifies signature, updates org plan, records payment.
  */
 export async function POST(request: NextRequest) {
   const secretKey = process.env.PAYSTACK_SECRET_KEY
@@ -65,7 +64,21 @@ export async function POST(request: NextRequest) {
         console.log(`Updated org ${metadata.organisation_id} to plan ${metadata.plan}`)
       }
 
-      // Log payment
+      // Record payment
+      await supabase.from('payments').upsert({
+        organisation_id: metadata.organisation_id,
+        user_id: metadata.user_id || null,
+        reference: data.reference,
+        paystack_ref: data.id?.toString() || null,
+        plan: metadata.plan,
+        amount: data.amount,
+        currency: data.currency || 'KES',
+        status: 'success',
+        payment_method: data.channel || null,
+        paid_at: data.paid_at || new Date().toISOString(),
+      }, { onConflict: 'reference' })
+
+      // Audit log
       await supabase.from('audit_logs').insert({
         organisation_id: metadata.organisation_id,
         user_id: metadata.user_id || null,

@@ -57,6 +57,20 @@ export async function POST(request: NextRequest) {
           ...limits,
         })
         .eq('id', metadata.organisation_id)
+
+      // Record payment in payments table (ignore if duplicate)
+      await auth.db.from('payments').upsert({
+        organisation_id: metadata.organisation_id,
+        user_id: auth.userId,
+        reference: payment.reference,
+        paystack_ref: payment.id?.toString() || null,
+        plan: metadata.plan,
+        amount: payment.amount,
+        currency: payment.currency || 'KES',
+        status: 'success',
+        payment_method: payment.channel || null,
+        paid_at: payment.paid_at || new Date().toISOString(),
+      }, { onConflict: 'reference' })
     }
 
     return NextResponse.json({
