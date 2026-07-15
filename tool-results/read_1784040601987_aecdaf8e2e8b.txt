@@ -1,0 +1,683 @@
+     1→'use client'
+     2→
+     3→import { useState } from 'react'
+     4→import { supabase } from '@/lib/supabase'
+     5→import { useAuth } from '@/contexts/auth-context'
+     6→import type { User } from '@/lib/types'
+     7→import { Card, CardContent } from '@/components/ui/card'
+     8→import { Button } from '@/components/ui/button'
+     9→import { Input } from '@/components/ui/input'
+    10→import {
+    11→  Dialog,
+    12→  DialogContent,
+    13→  DialogHeader,
+    14→  DialogTitle,
+    15→  DialogFooter,
+    16→} from '@/components/ui/dialog'
+    17→import {
+    18→  AlertDialog,
+    19→  AlertDialogAction,
+    20→  AlertDialogCancel,
+    21→  AlertDialogContent,
+    22→  AlertDialogDescription,
+    23→  AlertDialogFooter,
+    24→  AlertDialogHeader,
+    25→  AlertDialogTitle,
+    26→} from '@/components/ui/alert-dialog'
+    27→import { Label } from '@/components/ui/label'
+    28→import {
+    29→  Select,
+    30→  SelectContent,
+    31→  SelectItem,
+    32→  SelectTrigger,
+    33→  SelectValue,
+    34→} from '@/components/ui/select'
+    35→import { Badge } from '@/components/ui/badge'
+    36→import { Skeleton } from '@/components/ui/skeleton'
+    37→import { Switch } from '@/components/ui/switch'
+    38→import {
+    39→  Table,
+    40→  TableBody,
+    41→  TableCell,
+    42→  TableHead,
+    43→  TableHeader,
+    44→  TableRow,
+    45→} from '@/components/ui/table'
+    46→import {
+    47→  Plus,
+    48→  Edit,
+    49→  Trash2,
+    50→  Users,
+    51→  ShieldCheck,
+    52→  ShieldOff,
+    53→} from 'lucide-react'
+    54→import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+    55→import { useIsMobile } from '@/hooks/use-mobile'
+    56→
+    57→/* ------------------------------------------------------------------ */
+    58→/*  Constants                                                          */
+    59→/* ------------------------------------------------------------------ */
+    60→
+    61→const ACCENT = '#7C3AED'
+    62→
+    63→/* ------------------------------------------------------------------ */
+    64→/*  Helpers                                                            */
+    65→/* ------------------------------------------------------------------ */
+    66→
+    67→function formatDate(iso: string | null) {
+    68→  if (!iso) return 'Never'
+    69→  const d = new Date(iso)
+    70→  return d.toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' })
+    71→    + ' '
+    72→    + d.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })
+    73→}
+    74→
+    75→/* ------------------------------------------------------------------ */
+    76→/*  Form types                                                         */
+    77→/* ------------------------------------------------------------------ */
+    78→
+    79→interface StaffAddForm {
+    80→  name: string
+    81→  email: string
+    82→  pin: string
+    83→  password: string
+    84→  role: 'staff' | 'manager'
+    85→}
+    86→
+    87→interface StaffEditForm {
+    88→  name: string
+    89→  role: 'staff' | 'manager'
+    90→  is_active: boolean
+    91→}
+    92→
+    93→const emptyAddForm: StaffAddForm = {
+    94→  name: '',
+    95→  email: '',
+    96→  pin: '',
+    97→  password: '',
+    98→  role: 'staff',
+    99→}
+   100→
+   101→/* ------------------------------------------------------------------ */
+   102→/*  Component                                                          */
+   103→/* ------------------------------------------------------------------ */
+   104→
+   105→export default function StaffPage() {
+   106→  const isMobile = useIsMobile()
+   107→  const { appUser, organisation } = useAuth()
+   108→  const queryClient = useQueryClient()
+   109→
+   110→  const [addDialogOpen, setAddDialogOpen] = useState(false)
+   111→  const [editDialogOpen, setEditDialogOpen] = useState(false)
+   112→  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+   113→  const [selectedStaff, setSelectedStaff] = useState<User | null>(null)
+   114→  const [addForm, setAddForm] = useState<StaffAddForm>(emptyAddForm)
+   115→  const [editForm, setEditForm] = useState<StaffEditForm>({ name: '', role: 'staff', is_active: true })
+   116→
+   117→  /* ── Data fetching ────────────────────────────────────────────── */
+   118→
+   119→  const { data: staff = [], isLoading } = useQuery({
+   120→    queryKey: ['staff', organisation?.id],
+   121→    queryFn: async () => {
+   122→      const { data } = await supabase
+   123→        .from('users')
+   124→        .select('*')
+   125→        .eq('organisation_id', organisation!.id)
+   126→        .neq('id', appUser!.id)
+   127→        .order('created_at', { ascending: false })
+   128→      return (data as User[]) || []
+   129→    },
+   130→    enabled: !!organisation?.id && appUser?.role === 'manager',
+   131→  })
+   132→
+   133→  /* ── Add staff mutation (Edge Function) ────────────────────────── */
+   134→
+   135→  const addMutation = useMutation({
+   136→    mutationFn: async (values: StaffAddForm) => {
+   137→      const { data: session } = await supabase.auth.getSession()
+   138→      const token = session?.session?.access_token
+   139→      if (!token) throw new Error('Not authenticated')
+   140→
+   141→      const autoEmail = values.email.trim() || undefined
+   142→
+   143→      const res = await fetch('/api/staff', {
+   144→        method: 'POST',
+   145→        headers: {
+   146→          'Content-Type': 'application/json',
+   147→          Authorization: `Bearer ${token}`,
+   148→        },
+   149→        body: JSON.stringify({
+   150→          name: values.name,
+   151→          email: values.email.trim() || undefined,
+   152→          password: values.password,
+   153→          pin: values.pin,
+   154→          role: values.role,
+   155→        }),
+   156→      })
+   157→
+   158→      const result = await res.json()
+   159→      if (!res.ok) throw new Error(result.error || 'Failed to add staff member')
+   160→      return result
+   161→    },
+   162→    onSuccess: () => {
+   163→      queryClient.invalidateQueries({ queryKey: ['staff'] })
+   164→      handleCloseAddDialog()
+   165→    },
+   166→  })
+   167→
+   168→  /* ── Edit staff mutation ───────────────────────────────────────── */
+   169→
+   170→  const editMutation = useMutation({
+   171→    mutationFn: async ({ id, form }: { id: string; form: StaffEditForm }) => {
+   172→      const { error } = await supabase
+   173→        .from('users')
+   174→        .update({
+   175→          name: form.name,
+   176→          role: form.role,
+   177→          is_active: form.is_active,
+   178→        })
+   179→        .eq('id', id)
+   180→      if (error) throw error
+   181→    },
+   182→    onSuccess: () => {
+   183→      queryClient.invalidateQueries({ queryKey: ['staff'] })
+   184→      handleCloseEditDialog()
+   185→    },
+   186→  })
+   187→
+   188→  /* ── Delete staff mutation ─────────────────────────────────────── */
+   189→
+   190→  const deleteMutation = useMutation({
+   191→    mutationFn: async (id: string) => {
+   192→      const { error } = await supabase.from('users').delete().eq('id', id)
+   193→      if (error) throw error
+   194→    },
+   195→    onSuccess: () => {
+   196→      queryClient.invalidateQueries({ queryKey: ['staff'] })
+   197→      setDeleteDialogOpen(false)
+   198→      setSelectedStaff(null)
+   199→    },
+   200→  })
+   201→
+   202→  /* ── Access guard (after all hooks) ────────────────────────────── */
+   203→
+   204→  if (appUser?.role !== 'manager') {
+   205→    return (
+   206→      <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
+   207→        <ShieldOff className="mb-4 h-16 w-16 opacity-30" />
+   208→        <p className="text-lg font-semibold">Access Denied</p>
+   209→        <p className="mt-1 text-sm">Only managers can manage staff members.</p>
+   210→      </div>
+   211→    )
+   212→  }
+   213→
+   214→  /* ── Dialog helpers ────────────────────────────────────────────── */
+   215→
+   216→  const handleOpenAddDialog = () => {
+   217→    setAddForm(emptyAddForm)
+   218→    setAddDialogOpen(true)
+   219→  }
+   220→
+   221→  const handleCloseAddDialog = () => {
+   222→    setAddDialogOpen(false)
+   223→    setAddForm(emptyAddForm)
+   224→  }
+   225→
+   226→  const handleOpenEditDialog = (member: User) => {
+   227→    setSelectedStaff(member)
+   228→    setEditForm({
+   229→      name: member.name,
+   230→      role: member.role as 'staff' | 'manager',
+   231→      is_active: member.is_active,
+   232→    })
+   233→    setEditDialogOpen(true)
+   234→  }
+   235→
+   236→  const handleCloseEditDialog = () => {
+   237→    setEditDialogOpen(false)
+   238→    setSelectedStaff(null)
+   239→  }
+   240→
+   241→  const handleOpenDeleteDialog = (member: User) => {
+   242→    setSelectedStaff(member)
+   243→    setDeleteDialogOpen(true)
+   244→  }
+   245→
+   246→  const handleAddSave = () => {
+   247→    if (!addForm.name.trim() || !addForm.pin || !addForm.password) return
+   248→    if (addForm.pin.length !== 4) return
+   249→    addMutation.mutate(addForm)
+   250→  }
+   251→
+   252→  const handleEditSave = () => {
+   253→    if (!selectedStaff || !editForm.name.trim()) return
+   254→    editMutation.mutate({ id: selectedStaff.id, form: editForm })
+   255→  }
+   256→
+   257→  /* ── Loading skeleton ──────────────────────────────────────────── */
+   258→
+   259→  if (isLoading) {
+   260→    return (
+   261→      <div className="space-y-4 p-4 md:p-6">
+   262→        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+   263→          <Skeleton className="h-8 w-48" />
+   264→          <Skeleton className="h-10 w-40" />
+   265→        </div>
+   266→        {Array.from({ length: 5 }).map((_, i) => (
+   267→          <Skeleton key={i} className="h-20 w-full" />
+   268→        ))}
+   269→      </div>
+   270→    )
+   271→  }
+   272→
+   273→  /* ── Role badge helper ─────────────────────────────────────────── */
+   274→
+   275→  const RoleBadge = ({ role }: { role: string }) => {
+   276→    if (role === 'manager') {
+   277→      return (
+   278→        <Badge
+   279→          variant="outline"
+   280→          className="border-purple-200 bg-purple-50 text-[11px] font-medium text-purple-700"
+   281→        >
+   282→          <ShieldCheck className="mr-1 h-3 w-3" />
+   283→          Manager
+   284→        </Badge>
+   285→      )
+   286→    }
+   287→    return (
+   288→      <Badge
+   289→        variant="outline"
+   290→        className="border-slate-200 bg-slate-50 text-[11px] font-medium text-slate-600"
+   291→      >
+   292→        Staff
+   293→      </Badge>
+   294→    )
+   295→  }
+   296→
+   297→  /* ── Render: Mobile cards ──────────────────────────────────────── */
+   298→
+   299→  const renderMobileCards = () => (
+   300→    <div className="grid gap-3">
+   301→      {staff.length === 0 && (
+   302→        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+   303→          <Users className="mb-3 h-12 w-12 opacity-40" />
+   304→          <p className="text-sm font-medium">No staff members yet</p>
+   305→          <p className="text-xs">Add your first team member to get started</p>
+   306→        </div>
+   307→      )}
+   308→      {staff.map((member) => (
+   309→        <Card key={member.id} className="overflow-hidden border border-border/60 shadow-sm transition-shadow hover:shadow-md">
+   310→          <CardContent className="p-4">
+   311→            <div className="flex items-start justify-between gap-3">
+   312→              <div className="min-w-0 flex-1">
+   313→                <p className="truncate text-sm font-semibold text-foreground">{member.name}</p>
+   314→                <p className="mt-0.5 truncate text-xs text-muted-foreground">{member.email || '—'}</p>
+   315→              </div>
+   316→              <RoleBadge role={member.role} />
+   317→            </div>
+   318→
+   319→            <div className="mt-3 grid grid-cols-2 gap-3 border-t border-border/50 pt-3">
+   320→              <div>
+   321→                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Status</p>
+   322→                <p className={`text-xs font-semibold ${member.is_active ? 'text-emerald-600' : 'text-red-500'}`}>
+   323→                  {member.is_active ? '● Active' : '● Inactive'}
+   324→                </p>
+   325→              </div>
+   326→              <div>
+   327→                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Last Login</p>
+   328→                <p className="text-xs text-muted-foreground">{formatDate(member.last_login_at)}</p>
+   329→              </div>
+   330→            </div>
+   331→
+   332→            <div className="mt-3 flex items-center justify-end gap-2 border-t border-border/50 pt-3">
+   333→              <Button
+   334→                variant="ghost"
+   335→                size="sm"
+   336→                className="h-8 px-3 text-xs"
+   337→                onClick={() => handleOpenEditDialog(member)}
+   338→              >
+   339→                <Edit className="mr-1.5 h-3.5 w-3.5" />
+   340→                Edit
+   341→              </Button>
+   342→              <Button
+   343→                variant="ghost"
+   344→                size="sm"
+   345→                className="h-8 px-3 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+   346→                onClick={() => handleOpenDeleteDialog(member)}
+   347→              >
+   348→                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+   349→                Delete
+   350→              </Button>
+   351→            </div>
+   352→          </CardContent>
+   353→        </Card>
+   354→      ))}
+   355→    </div>
+   356→  )
+   357→
+   358→  /* ── Render: Desktop table ─────────────────────────────────────── */
+   359→
+   360→  const renderDesktopTable = () => (
+   361→    <Card className="border-border/60 shadow-sm">
+   362→      <CardContent className="p-0">
+   363→        <div className="overflow-x-auto">
+   364→          <Table>
+   365→            <TableHeader>
+   366→              <TableRow className="border-border/60 hover:bg-transparent">
+   367→                <TableHead className="pl-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Name</TableHead>
+   368→                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Email</TableHead>
+   369→                <TableHead className="text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Role</TableHead>
+   370→                <TableHead className="text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</TableHead>
+   371→                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Last Login</TableHead>
+   372→                <TableHead className="pr-4 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Actions</TableHead>
+   373→              </TableRow>
+   374→            </TableHeader>
+   375→            <TableBody>
+   376→              {staff.length === 0 && (
+   377→                <TableRow>
+   378→                  <TableCell colSpan={6} className="h-48 text-center">
+   379→                    <div className="flex flex-col items-center text-muted-foreground">
+   380→                      <Users className="mb-3 h-12 w-12 opacity-40" />
+   381→                      <p className="text-sm font-medium">No staff members yet</p>
+   382→                      <p className="text-xs">Add your first team member to get started</p>
+   383→                    </div>
+   384→                  </TableCell>
+   385→                </TableRow>
+   386→              )}
+   387→              {staff.map((member) => (
+   388→                <TableRow key={member.id} className="border-border/40 transition-colors hover:bg-muted/30">
+   389→                  <TableCell className="pl-4">
+   390→                    <span className="text-sm font-medium">{member.name}</span>
+   391→                  </TableCell>
+   392→                  <TableCell className="text-sm text-muted-foreground">{member.email || '—'}</TableCell>
+   393→                  <TableCell className="text-center">
+   394→                    <RoleBadge role={member.role} />
+   395→                  </TableCell>
+   396→                  <TableCell className="text-center">
+   397→                    <span className={`text-xs font-semibold ${member.is_active ? 'text-emerald-600' : 'text-red-500'}`}>
+   398→                      {member.is_active ? '● Active' : '● Inactive'}
+   399→                    </span>
+   400→                  </TableCell>
+   401→                  <TableCell className="text-sm text-muted-foreground">{formatDate(member.last_login_at)}</TableCell>
+   402→                  <TableCell className="pr-4 text-right">
+   403→                    <div className="flex items-center justify-end gap-1">
+   404→                      <Button
+   405→                        variant="ghost"
+   406→                        size="icon"
+   407→                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+   408→                        onClick={() => handleOpenEditDialog(member)}
+   409→                      >
+   410→                        <Edit className="h-4 w-4" />
+   411→                        <span className="sr-only">Edit {member.name}</span>
+   412→                      </Button>
+   413→                      <Button
+   414→                        variant="ghost"
+   415→                        size="icon"
+   416→                        className="h-8 w-8 text-muted-foreground hover:text-red-600"
+   417→                        onClick={() => handleOpenDeleteDialog(member)}
+   418→                      >
+   419→                        <Trash2 className="h-4 w-4" />
+   420→                        <span className="sr-only">Delete {member.name}</span>
+   421→                      </Button>
+   422→                    </div>
+   423→                  </TableCell>
+   424→                </TableRow>
+   425→              ))}
+   426→            </TableBody>
+   427→          </Table>
+   428→        </div>
+   429→      </CardContent>
+   430→    </Card>
+   431→  )
+   432→
+   433→  /* ── Main render ───────────────────────────────────────────────── */
+   434→
+   435→  return (
+   436→    <div className="space-y-5 p-4 md:p-6">
+   437→      {/* Page header */}
+   438→      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+   439→        <div>
+   440→          <h1 className="text-2xl font-bold tracking-tight text-foreground">Staff</h1>
+   441→          <p className="mt-1 text-sm text-muted-foreground">
+   442→            {staff.length} team member{staff.length !== 1 ? 's' : ''}
+   443→          </p>
+   444→        </div>
+   445→        <Button
+   446→          onClick={handleOpenAddDialog}
+   447→          className="shrink-0 shadow-md transition-all hover:shadow-lg"
+   448→          style={{ backgroundColor: ACCENT, borderColor: ACCENT }}
+   449→        >
+   450→          <Plus className="mr-2 h-4 w-4" />
+   451→          Add Staff
+   452→        </Button>
+   453→      </div>
+   454→
+   455→      {/* Staff list */}
+   456→      {isMobile ? renderMobileCards() : renderDesktopTable()}
+   457→
+   458→      {/* ── Add Staff dialog ──────────────────────────────────────── */}
+   459→      <Dialog open={addDialogOpen} onOpenChange={(open) => { if (!open) handleCloseAddDialog() }}>
+   460→        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+   461→          <DialogHeader>
+   462→            <DialogTitle className="text-lg font-semibold">Add New Staff Member</DialogTitle>
+   463→          </DialogHeader>
+   464→
+   465→          <div className="grid gap-4 py-4">
+   466→            {/* Name */}
+   467→            <div className="grid gap-2">
+   468→              <Label htmlFor="staff-name" className="text-xs font-medium text-muted-foreground">
+   469→                Full Name <span className="text-red-500">*</span>
+   470→              </Label>
+   471→              <Input
+   472→                id="staff-name"
+   473→                placeholder="e.g. John Kamau"
+   474→                value={addForm.name}
+   475→                onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
+   476→              />
+   477→            </div>
+   478→
+   479→            {/* Email */}
+   480→            <div className="grid gap-2">
+   481→              <Label htmlFor="staff-email" className="text-xs font-medium text-muted-foreground">
+   482→                Email <span className="text-xs text-muted-foreground font-normal">(optional)</span>
+   483→              </Label>
+   484→              <Input
+   485→                id="staff-email"
+   486→                type="email"
+   487→                placeholder="e.g. john@store.com"
+   488→                value={addForm.email}
+   489→                onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))}
+   490→              />
+   491→            </div>
+   492→
+   493→            {/* PIN & Password row */}
+   494→            <div className="grid grid-cols-2 gap-4">
+   495→              <div className="grid gap-2">
+   496→                <Label htmlFor="staff-pin" className="text-xs font-medium text-muted-foreground">
+   497→                  PIN (4 digits) <span className="text-red-500">*</span>
+   498→                </Label>
+   499→                <Input
+   500→                  id="staff-pin"
+   501→                  type="password"
+   502→                  maxLength={4}
+   503→                  placeholder="e.g. 1234"
+   504→                  value={addForm.pin}
+   505→                  onChange={(e) => {
+   506→                    const v = e.target.value.replace(/\D/g, '').slice(0, 4)
+   507→                    setAddForm((f) => ({ ...f, pin: v }))
+   508→                  }}
+   509→                />
+   510→              </div>
+   511→              <div className="grid gap-2">
+   512→                <Label htmlFor="staff-password" className="text-xs font-medium text-muted-foreground">
+   513→                  Password <span className="text-red-500">*</span>
+   514→                </Label>
+   515→                <Input
+   516→                  id="staff-password"
+   517→                  type="password"
+   518→                  placeholder="Min. 6 characters"
+   519→                  value={addForm.password}
+   520→                  onChange={(e) => setAddForm((f) => ({ ...f, password: e.target.value }))}
+   521→                />
+   522→              </div>
+   523→            </div>
+   524→
+   525→            {/* Role */}
+   526→            <div className="grid gap-2">
+   527→              <Label className="text-xs font-medium text-muted-foreground">Role</Label>
+   528→              <Select
+   529→                value={addForm.role}
+   530→                onValueChange={(v) => setAddForm((f) => ({ ...f, role: v as 'staff' | 'manager' }))}
+   531→              >
+   532→                <SelectTrigger className="h-10">
+   533→                  <SelectValue />
+   534→                </SelectTrigger>
+   535→                <SelectContent>
+   536→                  <SelectItem value="staff">Staff</SelectItem>
+   537→                  <SelectItem value="manager">Manager</SelectItem>
+   538→                </SelectContent>
+   539→              </Select>
+   540→            </div>
+   541→
+   542→            {addMutation.isError && (
+   543→              <div className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-600">
+   544→                {addMutation.error instanceof Error ? addMutation.error.message : 'Failed to add staff member'}
+   545→              </div>
+   546→            )}
+   547→          </div>
+   548→
+   549→          <DialogFooter className="flex-row gap-3 pt-2 sm:justify-end">
+   550→            <Button
+   551→              variant="outline"
+   552→              className="flex-1 sm:flex-none"
+   553→              onClick={handleCloseAddDialog}
+   554→              disabled={addMutation.isPending}
+   555→            >
+   556→              Cancel
+   557→            </Button>
+   558→            <Button
+   559→              className="flex-1 sm:flex-none"
+   560→              style={{ backgroundColor: ACCENT, borderColor: ACCENT }}
+   561→              onClick={handleAddSave}
+   562→              disabled={
+   563→                addMutation.isPending ||
+   564→                !addForm.name.trim() ||
+   565→                !addForm.pin ||
+   566→                addForm.pin.length !== 4 ||
+   567→                !addForm.password ||
+   568→                addForm.password.length < 6
+   569→              }
+   570→            >
+   571→              {addMutation.isPending ? 'Adding…' : 'Add Staff Member'}
+   572→            </Button>
+   573→          </DialogFooter>
+   574→        </DialogContent>
+   575→      </Dialog>
+   576→
+   577→      {/* ── Edit Staff dialog ─────────────────────────────────────── */}
+   578→      <Dialog open={editDialogOpen} onOpenChange={(open) => { if (!open) handleCloseEditDialog() }}>
+   579→        <DialogContent className="sm:max-w-lg">
+   580→          <DialogHeader>
+   581→            <DialogTitle className="text-lg font-semibold">Edit Staff Member</DialogTitle>
+   582→          </DialogHeader>
+   583→
+   584→          <div className="grid gap-4 py-4">
+   585→            {/* Name */}
+   586→            <div className="grid gap-2">
+   587→              <Label htmlFor="edit-name" className="text-xs font-medium text-muted-foreground">
+   588→                Full Name <span className="text-red-500">*</span>
+   589→              </Label>
+   590→              <Input
+   591→                id="edit-name"
+   592→                value={editForm.name}
+   593→                onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+   594→              />
+   595→            </div>
+   596→
+   597→            {/* Role */}
+   598→            <div className="grid gap-2">
+   599→              <Label className="text-xs font-medium text-muted-foreground">Role</Label>
+   600→              <Select
+   601→                value={editForm.role}
+   602→                onValueChange={(v) => setEditForm((f) => ({ ...f, role: v as 'staff' | 'manager' }))}
+   603→              >
+   604→                <SelectTrigger className="h-10">
+   605→                  <SelectValue />
+   606→                </SelectTrigger>
+   607→                <SelectContent>
+   608→                  <SelectItem value="staff">Staff</SelectItem>
+   609→                  <SelectItem value="manager">Manager</SelectItem>
+   610→                </SelectContent>
+   611→              </Select>
+   612→            </div>
+   613→
+   614→            {/* Active toggle */}
+   615→            <div className="flex items-center justify-between rounded-lg border border-border/60 p-3">
+   616→              <div>
+   617→                <p className="text-sm font-medium">Active Status</p>
+   618→                <p className="text-xs text-muted-foreground">
+   619→                  {editForm.is_active ? 'Staff member can log in and perform duties' : 'Staff member is suspended'}
+   620→                </p>
+   621→              </div>
+   622→              <Switch
+   623→                checked={editForm.is_active}
+   624→                onCheckedChange={(checked) => setEditForm((f) => ({ ...f, is_active: checked }))}
+   625→                style={{ '--ring-color': ACCENT } as React.CSSProperties}
+   626→              />
+   627→            </div>
+   628→
+   629→            {editMutation.isError && (
+   630→              <div className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-600">
+   631→                {editMutation.error instanceof Error ? editMutation.error.message : 'Failed to update staff member'}
+   632→              </div>
+   633→            )}
+   634→          </div>
+   635→
+   636→          <DialogFooter className="flex-row gap-3 pt-2 sm:justify-end">
+   637→            <Button
+   638→              variant="outline"
+   639→              className="flex-1 sm:flex-none"
+   640→              onClick={handleCloseEditDialog}
+   641→              disabled={editMutation.isPending}
+   642→            >
+   643→              Cancel
+   644→            </Button>
+   645→            <Button
+   646→              className="flex-1 sm:flex-none"
+   647→              style={{ backgroundColor: ACCENT, borderColor: ACCENT }}
+   648→              onClick={handleEditSave}
+   649→              disabled={editMutation.isPending || !editForm.name.trim()}
+   650→            >
+   651→              {editMutation.isPending ? 'Saving…' : 'Update Staff'}
+   652→            </Button>
+   653→          </DialogFooter>
+   654→        </DialogContent>
+   655→      </Dialog>
+   656→
+   657→      {/* ── Delete confirmation ───────────────────────────────────── */}
+   658→      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+   659→        <AlertDialogContent>
+   660→          <AlertDialogHeader>
+   661→            <AlertDialogTitle>Remove Staff Member</AlertDialogTitle>
+   662→            <AlertDialogDescription>
+   663→              Are you sure you want to remove <strong>{selectedStaff?.name}</strong>? This action
+   664→              cannot be undone. The staff member will lose access to the system.
+   665→            </AlertDialogDescription>
+   666→          </AlertDialogHeader>
+   667→          <AlertDialogFooter>
+   668→            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
+   669→            <AlertDialogAction
+   670→              className="bg-red-600 text-white hover:bg-red-700"
+   671→              onClick={() => {
+   672→                if (selectedStaff) deleteMutation.mutate(selectedStaff.id)
+   673→              }}
+   674→              disabled={deleteMutation.isPending}
+   675→            >
+   676→              {deleteMutation.isPending ? 'Removing…' : 'Remove'}
+   677→            </AlertDialogAction>
+   678→          </AlertDialogFooter>
+   679→        </AlertDialogContent>
+   680→      </AlertDialog>
+   681→    </div>
+   682→  )
+   683→}
