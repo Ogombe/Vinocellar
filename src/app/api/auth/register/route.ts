@@ -1,18 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { hashPin } from '@/lib/auth'
+import { rateLimit, getClientIp } from '@/lib/rate-limit'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://rnllkgdsnbybjgvbgagp.supabase.co'
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJubGxrZ2RzbmJ5YmpndmJnYWdwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NjQ2NDcsImV4cCI6MjA5OTU0MDY0N30.h9Uk6j3WLC6VCbGGpVY8kGoywh7xT0duULZeazczVjs'
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 /**
  * Register route — handles the full signup flow:
- * 1. Creates auth user via Supabase Auth
- * 2. Uses the new user's session to create organisation and profile
+ * 1. Validates input
+ * 2. Creates auth user via Supabase Auth
+ * 3. Uses the new user's session to create organisation and profile
  */
 export async function POST(request: NextRequest) {
   try {
+    // ── Rate limit: 5 registrations per 10 minutes per IP ──
+    const ip = getClientIp(request)
+    const rl = rateLimit(ip, 'register', 5, 10 * 60 * 1000)
+    if (!rl.success) {
+      return NextResponse.json(
+        { error: 'Too many registration attempts. Please wait and try again.' },
+        { status: 429 }
+      )
+    }
+
     const { email, password, name, business_name, pin } = await request.json()
 
+    // ── Input validation ──
     if (!email || !password || !name || !business_name) {
       return NextResponse.json(
         { error: 'Email, password, name, and business name are required' },
@@ -20,12 +34,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const emailStr = String(email).toLowerCase().trim()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailStr)) {
+      return NextResponse.json({ error: 'Please enter a valid email address' }, { status: 400 })
+    }
+
+    if (password.length < 8) {
+      return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 })
+    }
+
+    if (name.length > 100 || business_name.length > 100) {
+      return NextResponse.json({ error: 'Name and business name must be under 100 characters' }, { status: 400 })
+    }
+
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      return NextResponse.json({ error: 'Service not configured' }, { status: 500 })
+    }
+
     // Use a temporary client for signup
     const tempClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
     // 1. Create auth user
     const { data: authData, error: authError } = await tempClient.auth.signUp({
-      email,
+      email: emailStr,
       password,
       options: {
         data: { name, role: 'manager' },
@@ -33,21 +64,8 @@ export async function POST(request: NextRequest) {
     })
 
     if (authError) {
-      if (authError.message.includes('already registered') || authError.message.includes('already been registered')) {
-        // User exists — try signing in
-        const { data: signInData, error: signInError } = await tempClient.auth.signInWithPassword({
-          email, password,
-        })
-        if (signInError) {
-          return NextResponse.json({ error: `Account exists but login failed: ${signInError.message}` }, { status: 409 })
-        }
-        return NextResponse.json({
-          user: signInData.user,
-          session: signInData.session,
-          message: 'Signed in to existing account',
-        }, { status: 200 })
-      }
-      return NextResponse.json({ error: authError.message }, { status: 400 })
+      // Generic error — don't leak whether email exists
+      return NextResponse.json({ error: 'Could not create account. Please check your details and try again.' }, { status: 400 })
     }
 
     if (!authData.user) {
@@ -58,7 +76,6 @@ export async function POST(request: NextRequest) {
     const sessionToken = authData.session?.access_token
 
     // 2. Create an authenticated client with the new user's token
-    //    This is critical — the anon client won't pass RLS for inserts
     const authClient: SupabaseClient = sessionToken
       ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
           global: { headers: { Authorization: `Bearer ${sessionToken}` } },
@@ -70,7 +87,7 @@ export async function POST(request: NextRequest) {
     const { data: org, error: orgError } = await authClient
       .from('organisations')
       .insert({
-        name: business_name,
+        name: business_name.trim(),
         slug,
         plan: 'trial',
         is_active: true,
@@ -85,20 +102,22 @@ export async function POST(request: NextRequest) {
     if (orgError) {
       console.error('Org creation error:', orgError.message, orgError.code)
       return NextResponse.json(
-        { error: `Failed to create organisation: ${orgError.message}` },
+        { error: 'Failed to create organisation. Please try again.' },
         { status: 500 }
       )
     }
 
-    // 4. Create user profile row
+    // 4. Hash PIN and create user profile row
+    const hashedPin = await hashPin(pin && /^\d{4}$/.test(pin) ? pin : '0000')
+
     const { error: profileError } = await authClient
       .from('users')
       .insert({
         id: userId,
-        email,
-        name,
+        email: emailStr,
+        name: name.trim(),
         role: 'manager',
-        pin: pin || '0000',
+        pin: hashedPin,
         organisation_id: org.id,
         store_id: null,
         is_active: true,
@@ -117,6 +136,6 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Registration failed'
     console.error('Registration error:', message)
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: 'Registration failed. Please try again.' }, { status: 500 })
   }
 }

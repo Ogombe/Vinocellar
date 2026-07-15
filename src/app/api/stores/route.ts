@@ -50,12 +50,22 @@ export async function PUT(request: NextRequest) {
   const auth = await withAuth(request, true)
   if (auth.error) return auth.error
 
-  const { id, ...data } = await request.json()
+  const body = await request.json()
+  const { id, name, location } = body
   if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
+
+  // Whitelist allowed fields — prevent mass assignment
+  const updateData: Record<string, any> = {}
+  if (name && typeof name === 'string' && name.trim().length <= 100) {
+    updateData.name = name.trim()
+  }
+  if (location !== undefined && typeof location === 'string' && location.length <= 200) {
+    updateData.location = location.trim()
+  }
 
   const { error } = await auth.db
     .from('stores')
-    .update(data)
+    .update(updateData)
     .eq('id', id)
     .eq('organisation_id', auth.orgId)
 

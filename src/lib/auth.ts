@@ -2,6 +2,31 @@ import { createHash, randomBytes, randomUUID, createHmac, timingSafeEqual, scryp
 
 const HMAC_SECRET = process.env.HMAC_SECRET || 'vinocellar-pro-secret-key-2024'
 
+// ==================== PIN HASHING ====================
+
+export async function hashPin(pin: string): Promise<string> {
+  const salt = randomBytes(16).toString('hex')
+  const hash = await scryptHash(pin, salt)
+  return `${salt}:${hash}`
+}
+
+export async function verifyPin(pin: string, stored: string): Promise<boolean> {
+  // Plain 4-digit PINs (legacy — not hashed yet)
+  if (/^\d{4}$/.test(stored)) {
+    return pin === stored
+  }
+  // Hashed PINs (new format: salt:hash)
+  const [salt, hash] = stored.split(':')
+  if (!salt || !hash) return false
+  const verify = await scryptHash(pin, salt)
+  return timingSafeEqual(Buffer.from(hash), Buffer.from(verify))
+}
+
+/** Check if a stored PIN is plaintext (needs migration) */
+export function isPinPlaintext(stored: string): boolean {
+  return /^\d{4}$/.test(stored)
+}
+
 // ==================== PASSWORD HASHING ====================
 
 export async function hashPassword(password: string): Promise<string> {

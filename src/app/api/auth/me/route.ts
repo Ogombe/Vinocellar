@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   // Fetch user profile from public.users table
   const { data: profile } = await auth.db
     .from('users')
-    .select('id, email, name, role, pin, store_id, is_active, last_login_at')
+    .select('id, email, name, role, store_id, is_active, last_login_at')
     .eq('id', auth.userId)
     .single()
 
