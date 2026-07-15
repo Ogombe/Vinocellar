@@ -1,16 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
-
-const PLAN_LIMITS: Record<string, { max_stores: number; max_staff: number; max_products: number }> = {
-  trial:        { max_stores: 3, max_staff: 10, max_products: 200 },
-  starter:      { max_stores: 2, max_staff: 5, max_products: 100 },
-  professional: { max_stores: 5, max_staff: 20, max_products: 500 },
-  enterprise:   { max_stores: 999, max_staff: 999, max_products: 9999 },
-}
-
-function getPlanLimits(plan: string) {
-  return PLAN_LIMITS[plan] || PLAN_LIMITS.trial
-}
+import { getPlanLimitFields } from '@/lib/plan-limits'
 
 /**
  * Verify a payment by reference. Called after Paystack redirect.
@@ -47,7 +37,7 @@ export async function POST(request: NextRequest) {
 
     if (metadata?.organisation_id && metadata?.plan) {
       // Update organisation plan and set billing period
-      const limits = getPlanLimits(metadata.plan)
+      const limits = getPlanLimitFields(metadata.plan)
       await auth.db
         .from('organisations')
         .update({

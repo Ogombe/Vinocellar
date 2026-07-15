@@ -352,8 +352,37 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Subscription Period</p>
+              <div className="flex items-center gap-1.5">
+                <CalendarClock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <p className="text-sm text-foreground">
+                  {currentOrg?.current_period_end
+                    ? formatDate(currentOrg.current_period_end)
+                    : currentOrg?.plan === 'trial' ? 'In trial' : 'N/A'}
+                </p>
+                {currentOrg?.current_period_end && new Date(currentOrg.current_period_end) < new Date() && (
+                  <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700 text-[10px]">
+                    Expired
+                  </Badge>
+                )}
+              </div>
+            </div>
+            <div className="space-y-1">
               <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Organisation ID</p>
               <p className="truncate text-xs font-mono text-muted-foreground">{currentOrg?.id ?? '—'}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Status</p>
+              <Badge
+                variant="outline"
+                className={
+                  currentOrg?.is_active
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : 'border-red-200 bg-red-50 text-red-700'
+                }
+              >
+                {currentOrg?.is_active ? 'Active' : 'Inactive'}
+              </Badge>
             </div>
           </div>
         </CardContent>

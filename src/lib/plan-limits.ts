@@ -1,7 +1,37 @@
 /**
- * Plan limit enforcement.
- * Fetches org limits from DB and checks against current usage.
+ * Plan limits — single source of truth for the entire app.
+ * Used by billing/verify, billing/webhook, super-admin, and plan-limits enforcement.
  */
+
+export interface PlanLimitConfig {
+  max_stores: number
+  max_staff: number
+  max_products: number
+  price: number        // Price in KES per month
+  label: string        // Display name
+}
+
+export const PLAN_LIMITS: Record<string, PlanLimitConfig> = {
+  trial:        { max_stores: 3,   max_staff: 10,  max_products: 200,  price: 0,    label: 'Trial' },
+  starter:      { max_stores: 2,   max_staff: 5,   max_products: 100,  price: 2999, label: 'Starter' },
+  professional: { max_stores: 5,   max_staff: 20,  max_products: 500,  price: 4999, label: 'Professional' },
+  enterprise:   { max_stores: 999, max_staff: 999, max_products: 9999, price: 9999, label: 'Enterprise' },
+}
+
+/** Get limits for a plan, falling back to trial */
+export function getPlanLimits(plan: string): PlanLimitConfig {
+  return PLAN_LIMITS[plan] || PLAN_LIMITS.trial
+}
+
+/** Get just the numeric limit fields (for DB updates) */
+export function getPlanLimitFields(plan: string) {
+  const limits = getPlanLimits(plan)
+  return { max_stores: limits.max_stores, max_staff: limits.max_staff, max_products: limits.max_products }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Plan limit enforcement                                             */
+/* ------------------------------------------------------------------ */
 
 interface LimitCheck {
   passed: boolean

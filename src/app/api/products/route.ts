@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withAuth } from '@/lib/middleware'
+import { withAuth, checkSubscription, subscriptionErrorResponse } from '@/lib/middleware'
 import { auditLog } from '@/lib/helpers'
 import { v4 as uuidv4 } from 'uuid'
 import { checkPlanLimit } from '@/lib/plan-limits'
@@ -7,6 +7,9 @@ import { checkPlanLimit } from '@/lib/plan-limits'
 export async function GET(request: NextRequest) {
   const auth = await withAuth(request)
   if (auth.error) return auth.error
+
+  const sub = await checkSubscription(auth.db, auth.orgId, auth.role)
+  if (!sub.active) return subscriptionErrorResponse(sub)
 
   const { searchParams } = new URL(request.url)
   const storeId = searchParams.get('storeId') || auth.storeId

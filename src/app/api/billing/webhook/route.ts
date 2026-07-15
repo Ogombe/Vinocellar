@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createClient } from '@supabase/supabase-js'
-
-const PLAN_LIMITS: Record<string, { max_stores: number; max_staff: number; max_products: number }> = {
-  trial:        { max_stores: 3, max_staff: 10, max_products: 200 },
-  starter:      { max_stores: 2, max_staff: 5, max_products: 100 },
-  professional: { max_stores: 5, max_staff: 20, max_products: 500 },
-  enterprise:   { max_stores: 999, max_staff: 999, max_products: 9999 },
-}
+import { getPlanLimitFields } from '@/lib/plan-limits'
 
 /**
  * Paystack webhook handler.
@@ -45,7 +39,7 @@ export async function POST(request: NextRequest) {
       const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       const supabase = createClient(supabaseUrl, supabaseKey)
 
-      const limits = PLAN_LIMITS[metadata.plan] || PLAN_LIMITS.trial
+      const limits = getPlanLimitFields(metadata.plan)
 
       // Update organisation plan and billing period
       const { error } = await supabase

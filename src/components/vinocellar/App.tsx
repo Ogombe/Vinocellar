@@ -117,8 +117,8 @@ export default function VinoCellarApp() {
   const isPaid = organisation?.plan !== 'trial' && organisation?.plan !== undefined
   const trialExpired = isTrial && organisation?.trial_ends_at && new Date(organisation.trial_ends_at) < new Date()
   const subscriptionExpired = isPaid && organisation?.current_period_end && new Date(organisation.current_period_end) < new Date()
-  const isExpired = !isSuperAdmin && !isSuspended && (trialExpired || subscriptionExpired) && currentPage !== 'billing'
   const isSuspended = !isSuperAdmin && !organisation?.is_active && currentPage !== 'billing'
+  const isExpired = !isSuperAdmin && !isSuspended && (trialExpired || subscriptionExpired) && currentPage !== 'billing'
 
   if (isExpired || isSuspended) {
     return (

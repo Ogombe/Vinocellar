@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { withAuth } from '@/lib/middleware'
+import { withAuth, checkSubscription, subscriptionErrorResponse } from '@/lib/middleware'
 import { todayStr, daysAgo, startOfWeek, startOfMonth, calculateHealthScore } from '@/lib/helpers'
 
 export async function GET(request: NextRequest) {
   const auth = await withAuth(request)
   if (auth.error) return auth.error
+
+  const sub = await checkSubscription(auth.db, auth.orgId, auth.role)
+  if (!sub.active) return subscriptionErrorResponse(sub)
 
   const { searchParams } = new URL(request.url)
   const storeId = searchParams.get('storeId') || auth.storeId
