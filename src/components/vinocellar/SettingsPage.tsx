@@ -167,7 +167,7 @@ export default function SettingsPage() {
     },
     onSuccess: () => {
       // Force a page reload after deletion
-      window.location.href = '/'
+      window.location.href = '/app'
     },
   })
 

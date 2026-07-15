@@ -25,7 +25,7 @@ export default function NotFound() {
         </p>
 
         <Link
-          href="/"
+          href="/app"
           className="inline-flex items-center gap-2 px-6 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium text-sm shadow-sm"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">

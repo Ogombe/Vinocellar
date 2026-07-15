@@ -41,7 +41,7 @@ export default function ErrorPage({
             Try Again
           </button>
           <a
-            href="/"
+            href="/app"
             className="inline-flex items-center gap-2 px-5 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium text-sm bg-white"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">

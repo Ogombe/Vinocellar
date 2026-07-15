@@ -73,7 +73,7 @@ export default function BillingCompletePage() {
               <h1 className="text-xl font-bold text-slate-900 mb-2">Payment Successful!</h1>
               <p className="text-sm text-slate-500 mb-6">{message}</p>
               <Button
-                onClick={() => router.push('/')}
+                onClick={() => router.push('/app')}
                 className="bg-purple-600 hover:bg-purple-700"
               >
                 <ArrowLeft className="h-4 w-4 mr-2" /> Go to Dashboard
@@ -90,7 +90,7 @@ export default function BillingCompletePage() {
                 <Button variant="outline" onClick={() => router.push('/billing/complete')}>
                   Try Again
                 </Button>
-                <Button onClick={() => router.push('/')}>
+                <Button onClick={() => router.push('/app')}>
                   <ArrowLeft className="h-4 w-4 mr-2" /> Go to Dashboard
                 </Button>
               </div>
