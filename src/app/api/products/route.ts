@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
 import { auditLog } from '@/lib/helpers'
 import { v4 as uuidv4 } from 'uuid'
+import { checkPlanLimit } from '@/lib/plan-limits'
 
 export async function GET(request: NextRequest) {
   const auth = await withAuth(request)
@@ -68,6 +69,10 @@ export async function POST(request: NextRequest) {
   const { name, sku, barcode, category, size, openingStock, reorderLevel, costPrice, sellPrice, storeId, supplierId, categoryId } = body
 
   if (!name || !sellPrice) return NextResponse.json({ error: 'Name and sell price required' }, { status: 400 })
+
+  // Check plan limit
+  const limitCheck = await checkPlanLimit(auth.db, auth.orgId, 'products')
+  if (!limitCheck.passed) return NextResponse.json({ error: limitCheck.error }, { status: 403 })
 
   const sid = storeId || auth.storeId
   if (!sid) return NextResponse.json({ error: 'No store selected' }, { status: 400 })

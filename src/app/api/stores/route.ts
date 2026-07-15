@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
 import { auditLog } from '@/lib/helpers'
+import { checkPlanLimit } from '@/lib/plan-limits'
 
 export async function GET(request: NextRequest) {
   const auth = await withAuth(request, true)
@@ -21,6 +22,10 @@ export async function POST(request: NextRequest) {
 
   const { name, location } = await request.json()
   if (!name) return NextResponse.json({ error: 'Name required' }, { status: 400 })
+
+  // Check plan limit
+  const limitCheck = await checkPlanLimit(auth.db, auth.orgId, 'stores')
+  if (!limitCheck.passed) return NextResponse.json({ error: limitCheck.error }, { status: 403 })
 
   const { data: store, error } = await auth.db
     .from('stores')

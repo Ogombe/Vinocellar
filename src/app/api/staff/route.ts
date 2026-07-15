@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/middleware'
 import { auditLog } from '@/lib/helpers'
+import { checkPlanLimit } from '@/lib/plan-limits'
 
 export async function GET(request: NextRequest) {
   const auth = await withAuth(request, true)
@@ -50,6 +51,10 @@ export async function POST(request: NextRequest) {
   if (!name || !pin) {
     return NextResponse.json({ error: 'Name and PIN are required' }, { status: 400 })
   }
+
+  // Check plan limit
+  const limitCheck = await checkPlanLimit(auth.db, auth.orgId, 'staff')
+  if (!limitCheck.passed) return NextResponse.json({ error: limitCheck.error }, { status: 403 })
   if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
     return NextResponse.json({ error: 'PIN must be exactly 4 digits' }, { status: 400 })
   }

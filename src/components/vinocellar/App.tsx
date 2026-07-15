@@ -18,7 +18,9 @@ import ReportsPage from './ReportsPage'
 import SettingsPage from './SettingsPage'
 import SuperAdminPage from './SuperAdminPage'
 import BillingPage from './BillingPage'
-import { Menu, Bell } from 'lucide-react'
+import { Menu, Bell, AlertTriangle, CreditCard } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 
 const PAGE_MAP: Record<string, React.FC> = {
   dashboard: DashboardPage,
@@ -109,6 +111,58 @@ export default function VinoCellarApp() {
   const pageTitle = PAGE_TITLES[currentPage] || 'Dashboard'
   const initials = appUser.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
 
+  // ── Trial / Subscription expiry check ──
+  const isSuperAdmin = appUser.role === 'super_admin'
+  const isTrial = organisation?.plan === 'trial'
+  const isPaid = organisation?.plan !== 'trial' && organisation?.plan !== undefined
+  const trialExpired = isTrial && organisation?.trial_ends_at && new Date(organisation.trial_ends_at) < new Date()
+  const subscriptionExpired = isPaid && organisation?.current_period_end && new Date(organisation.current_period_end) < new Date()
+  const isExpired = !isSuperAdmin && !isSuspended && (trialExpired || subscriptionExpired) && currentPage !== 'billing'
+  const isSuspended = !isSuperAdmin && !organisation?.is_active && currentPage !== 'billing'
+
+  if (isExpired || isSuspended) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md border-0 shadow-lg">
+          <CardContent className="p-8 text-center">
+            <div className="flex h-16 w-16 mx-auto mb-4 items-center justify-center rounded-full bg-red-100">
+              <AlertTriangle className="h-8 w-8 text-red-600" />
+            </div>
+            <h1 className="text-xl font-bold text-slate-900 mb-2">
+              {isSuspended ? 'Account Suspended' : isTrial ? 'Trial Expired' : 'Subscription Expired'}
+            </h1>
+            <p className="text-sm text-slate-500 mb-6">
+              {isSuspended
+                ? 'Your account has been suspended. Please contact support.'
+                : `Your ${isTrial ? 'trial' : 'subscription'} has ended. Upgrade to continue using VinoCellar.`
+              }
+            </p>
+            <Button
+              onClick={() => useAppStore.getState().setCurrentPage('billing')}
+              className="bg-purple-600 hover:bg-purple-700 mb-3"
+            >
+              <CreditCard className="h-4 w-4 mr-2" /> Upgrade Plan
+            </Button>
+            <div>
+              <button
+                onClick={signOut}
+                className="text-sm text-slate-500 hover:text-slate-700 underline"
+              >
+                Sign out
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // ── Trial warning (7 days or less) ──
+  const showTrialWarning = !isSuperAdmin && isTrial && organisation?.trial_ends_at
+  const trialDaysLeft = showTrialWarning
+    ? Math.max(0, Math.ceil((new Date(organisation.trial_ends_at!).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : 99
+
   return (
     <div className="min-h-screen bg-slate-50 flex">
       <Sidebar
@@ -121,6 +175,25 @@ export default function VinoCellarApp() {
       />
 
       <div className="flex-1 flex flex-col min-h-screen lg:ml-64">
+        {/* Trial warning banner */}
+        {showTrialWarning && trialDaysLeft <= 7 && currentPage !== 'billing' && (
+          <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+              <span className="text-amber-800">
+                {trialDaysLeft === 0
+                  ? 'Your trial expires today!'
+                  : `${trialDaysLeft} day${trialDaysLeft !== 1 ? 's' : ''} left in your trial`}
+              </span>
+            </div>
+            <button
+              onClick={() => useAppStore.getState().setCurrentPage('billing')}
+              className="text-sm font-medium text-purple-700 hover:text-purple-800 whitespace-nowrap"
+            >
+              Upgrade now
+            </button>
+          </div>
+        )}
         <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 lg:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
